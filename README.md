@@ -190,7 +190,3 @@ Secrets do Supabase.
 - [ ] Testar de ponta a ponta: IA (exame/horóscopo) e checkout Stripe
 - [ ] Empacotar como app nativo (Capacitor) para Android e iOS
 - [ ] (Comentando o código módulo a módulo, em português)
-
----
-
-*Projeto migrado do Lovable para infraestrutura própria (Supabase da conta pessoal).*

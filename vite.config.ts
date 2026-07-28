@@ -1,21 +1,20 @@
+// Configuração do Vite (empacotador do projeto): servidor de dev, PWA e atalhos de import.
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
-import path from "path";
-import { componentTagger } from "lovable-tagger";
-import { VitePWA } from "vite-plugin-pwa";
+import react from "@vitejs/plugin-react-swc"; // plugin do React usando o compilador SWC (rápido)
+import path from "path";                       // utilidades para montar caminhos de arquivo
+import { VitePWA } from "vite-plugin-pwa";     // transforma o app em PWA (instalável no celular)
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
   server: {
-    host: "::",
-    port: 8080,
+    host: "::",       // aceita conexões de qualquer IP da rede local
+    port: 8080,       // endereço local do dev: http://localhost:8080
     hmr: {
-      overlay: false,
+      overlay: false, // não sobrepõe a tela com a caixa de erro do HMR
     },
   },
   plugins: [
-    react(),
-    mode === "development" && componentTagger(),
+    react(), // habilita React + JSX
     VitePWA({
       registerType: "prompt",
       selfDestroying: false,
@@ -100,8 +99,8 @@ export default defineConfig(({ mode }) => ({
           client_mode: ["focus-existing", "auto"],
         },
         scope_extensions: [
-          { origin: "https://xbhtersrqrfdsoaavpxs.supabase.co" },
-          { origin: "https://vitalisessence.lovable.app" },
+          // Origem da API do Supabase (projeto próprio do app)
+          { origin: "https://ktymjadbggzxvjbefquw.supabase.co" },
         ],
         share_target: {
           action: "/",

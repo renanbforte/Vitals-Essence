@@ -49,7 +49,7 @@ export function LocationAutocomplete({ value, onChange, placeholder, className }
     try {
       const res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&addressdetails=0&accept-language=pt-BR`,
-        { headers: { "User-Agent": "LovableApp/1.0" } }
+        { headers: { "User-Agent": "VitalisEssence/1.0" } }
       );
       const data: LocationResult[] = await res.json();
       setResults(data);

@@ -1,11 +1,10 @@
-import { createLovableConfig } from "lovable-agent-playwright-config/config";
+// Configuração dos testes de ponta a ponta (E2E) com Playwright.
+// Os testes ficam na pasta "e2e/". Ajuste as opções abaixo conforme precisar.
+import { defineConfig } from "@playwright/test";
 
-export default createLovableConfig({
-	// Tests should be placed in the 'e2e' folder (default)
-	// Add your custom playwright configuration overrides here
-	// Example:
-	// timeout: 60000,
-	// use: {
-	//   baseURL: 'http://localhost:3000',
-	// },
+export default defineConfig({
+  testDir: "./e2e",                 // pasta onde ficam os testes E2E
+  use: {
+    baseURL: "http://localhost:8080", // endereço base do app durante os testes
+  },
 });

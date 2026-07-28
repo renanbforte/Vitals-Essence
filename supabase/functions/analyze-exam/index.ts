@@ -162,7 +162,7 @@ Exemplo de resposta:
       ];
     }
 
-    console.log("Calling AI gateway with", isPdf ? "PDF file" : "image");
+    console.log("Chamando a OpenAI com", isPdf ? "arquivo PDF" : "imagem");
 
     // Call AI to analyze the exam
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -189,7 +189,7 @@ Exemplo de resposta:
         });
       }
       if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Payment required, please add funds to your Lovable AI workspace." }), {
+        return new Response(JSON.stringify({ error: "Créditos insuficientes na conta OpenAI." }), {
           status: 402,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
