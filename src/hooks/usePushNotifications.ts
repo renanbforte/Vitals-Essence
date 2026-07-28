@@ -1,8 +1,19 @@
+// ============================================================================
+// usePushNotifications.ts  —  NOTIFICAÇÕES PUSH (LEMBRETES NO CELULAR/NAVEGADOR)
+// ----------------------------------------------------------------------------
+// Cuida das notificações push do app: pede permissão, inscreve o aparelho para
+// receber avisos (medicação, hidratação, treino, etc.), guarda essa inscrição no
+// Supabase e permite ligar/desligar as notificações de cada módulo.
+// ============================================================================
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+// Função técnica auxiliar: converte a chave de segurança (VAPID) do formato texto
+// para o formato de bytes que o navegador exige na hora de se inscrever. Não
+// precisa entender os detalhes; é só uma tradução de formato exigida pelo padrão push.
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -14,8 +25,9 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
-export type NotificationModule = 
-  | 'medicacao' 
+// Lista dos módulos do app que podem enviar notificações.
+export type NotificationModule =
+  | 'medicacao'
   | 'hidratacao' 
   | 'refeicoes' 
   | 'treino' 
@@ -24,6 +36,7 @@ export type NotificationModule =
   | 'tarefas'
   | 'geral';
 
+// Nomes "bonitos" de cada módulo, para exibir na tela em português.
 export const MODULE_LABELS: Record<NotificationModule, string> = {
   medicacao: 'Medicação',
   hidratacao: 'Hidratação',
@@ -35,21 +48,24 @@ export const MODULE_LABELS: Record<NotificationModule, string> = {
   geral: 'Geral',
 };
 
+// Hook das notificações push, usado pela tela de configurações de avisos.
 export function usePushNotifications() {
   const { user } = useAuth();
-  const [permission, setPermission] = useState<NotificationPermission>('default');
-  const [isSubscribed, setIsSubscribed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [preferences, setPreferences] = useState<Record<string, boolean>>({});
-  const vapidKeyRef = useRef<string>('');
+  const [permission, setPermission] = useState<NotificationPermission>('default'); // permitido/negado/ainda não decidido
+  const [isSubscribed, setIsSubscribed] = useState(false);   // este aparelho já está inscrito?
+  const [loading, setLoading] = useState(false);             // executando uma ação agora?
+  const [preferences, setPreferences] = useState<Record<string, boolean>>({}); // quais módulos estão ligados
+  const vapidKeyRef = useRef<string>(''); // guarda a chave de segurança sem causar re-render
 
+  // Ao abrir, lê a permissão de notificação já concedida (ou não) pelo navegador.
   useEffect(() => {
     if ('Notification' in window) {
       setPermission(Notification.permission);
     }
   }, []);
 
-  // Load VAPID key + check subscription
+  // Quando há usuário logado: busca a chave VAPID, confere se já está inscrito
+  // e carrega as preferências de cada módulo.
   useEffect(() => {
     if (!user) return;
     fetchVapidKey();
@@ -57,6 +73,7 @@ export function usePushNotifications() {
     loadPreferences();
   }, [user]);
 
+  // Busca no servidor (edge function) a chave pública VAPID necessária para inscrever o aparelho.
   const fetchVapidKey = async () => {
     try {
       const { data, error } = await supabase.functions.invoke('get-vapid-key');
@@ -68,6 +85,7 @@ export function usePushNotifications() {
     }
   };
 
+  // Pergunta ao navegador se este aparelho já possui uma inscrição push ativa.
   const checkSubscription = async () => {
     if (!('serviceWorker' in navigator) || !user) return;
     try {
@@ -79,13 +97,15 @@ export function usePushNotifications() {
     }
   };
 
+  // Carrega do banco quais módulos o usuário deixou ligados/desligados.
   const loadPreferences = async () => {
     if (!user) return;
     const { data } = await supabase
       .from('notification_preferences')
       .select('module, enabled')
       .eq('user_id', user.id);
-    
+
+    // Transforma a lista do banco em um objeto { modulo: ligado? } fácil de consultar.
     if (data) {
       const prefs: Record<string, boolean> = {};
       data.forEach((p: any) => { prefs[p.module] = p.enabled; });
@@ -93,6 +113,8 @@ export function usePushNotifications() {
     }
   };
 
+  // Ativa as notificações: pede permissão, inscreve o aparelho e salva a inscrição
+  // no banco. Também cria as preferências padrão (todos os módulos ligados).
   const subscribe = useCallback(async () => {
     if (!user || !vapidKeyRef.current) {
       toast.error('Configuração de notificações indisponível');
@@ -100,6 +122,7 @@ export function usePushNotifications() {
     }
     setLoading(true);
     try {
+      // Pede ao usuário a permissão de notificação; se recusar, para por aqui.
       const perm = await Notification.requestPermission();
       setPermission(perm);
       if (perm !== 'granted') {
@@ -108,12 +131,14 @@ export function usePushNotifications() {
         return false;
       }
 
+      // Inscreve o aparelho no serviço de push do navegador usando a chave VAPID.
       const reg = await navigator.serviceWorker.ready;
       const sub = await (reg as any).pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidKeyRef.current),
       });
 
+      // Salva no banco os dados da inscrição (endereço e chaves) deste aparelho.
       const subJson = sub.toJSON();
       const { error } = await supabase.from('push_subscriptions').upsert(
         {
@@ -128,7 +153,7 @@ export function usePushNotifications() {
 
       if (error) throw error;
 
-      // Create default preferences (all enabled)
+      // Cria as preferências iniciais, deixando todos os módulos ligados por padrão.
       const modules: NotificationModule[] = Object.keys(MODULE_LABELS) as NotificationModule[];
       for (const mod of modules) {
         await supabase.from('notification_preferences').upsert(
@@ -150,6 +175,7 @@ export function usePushNotifications() {
     }
   }, [user]);
 
+  // Desativa as notificações: cancela a inscrição no navegador e apaga o registro do banco.
   const unsubscribe = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -173,6 +199,7 @@ export function usePushNotifications() {
     setLoading(false);
   }, [user]);
 
+  // Liga ou desliga as notificações de um módulo específico e grava a escolha no banco.
   const toggleModule = useCallback(async (module: string, enabled: boolean) => {
     if (!user) return;
     const { error } = await supabase.from('notification_preferences').upsert(
@@ -184,6 +211,8 @@ export function usePushNotifications() {
     }
   }, [user]);
 
+  // Entrega para a tela os estados e as ações; "supported" indica se o
+  // navegador/aparelho suporta notificações push.
   return {
     permission,
     isSubscribed,

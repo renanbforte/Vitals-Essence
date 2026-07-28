@@ -1,12 +1,24 @@
+// ============================================================================
+// useUserMealPlans.ts  —  PLANO DE REFEICOES DO USUARIO
+// ----------------------------------------------------------------------------
+// Monta o cardapio diario do usuario (cafe, lanches, almoco, jantar, ceia).
+// Se a pessoa ainda nao personalizou nada, mostra um cardapio padrao pronto;
+// se personalizou, carrega do banco e salva as alteracoes. Cada refeicao tem
+// uma opcao principal e uma alternativa, com ingredientes e informacao nutricional.
+// ============================================================================
+
+// Ferramentas do React para estado/efeitos e conexao com o Supabase e o login
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Um ingrediente da refeicao: o item e a quantidade (ex.: "Ovos", "3 unidades")
 export interface MealIngredient {
   item: string;
   quantity?: string;
 }
 
+// Informacao nutricional de uma refeicao (calorias e macronutrientes)
 export interface MealMacros {
   calories: number;
   protein: number;
@@ -14,6 +26,7 @@ export interface MealMacros {
   fat: number;
 }
 
+// Formato completo de uma refeicao do plano: opcao principal + alternativa
 export interface UserMealPlan {
   id?: string;
   user_id: string;
@@ -28,6 +41,8 @@ export interface UserMealPlan {
   alt_macros: MealMacros;
 }
 
+// Cardapio padrao do app: usado quando o usuario ainda nao criou o seu proprio plano.
+// Cada item aqui e uma refeicao completa (nome, horario, opcao principal e alternativa).
 // Default meals (used when user has no custom plan)
 export const defaultMeals: Omit<UserMealPlan, 'id' | 'user_id'>[] = [
   {
@@ -148,11 +163,14 @@ export const defaultMeals: Omit<UserMealPlan, 'id' | 'user_id'>[] = [
   },
 ];
 
+// Hook que carrega o plano de refeicoes do usuario e permite salva-lo
 export function useUserMealPlans() {
   const { user } = useAuth();
+  // Lista de refeicoes que a tela vai exibir, e se ainda esta carregando
   const [mealPlans, setMealPlans] = useState<UserMealPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Busca no banco o cardapio personalizado do usuario (ordenado pela chave da refeicao)
   const fetchMealPlans = useCallback(async () => {
     if (!user) return;
 
@@ -167,11 +185,11 @@ export function useUserMealPlans() {
       console.error('Error fetching meal plans:', error);
     }
 
-    // If user has no custom plans, use defaults
+    // Se o usuario ainda nao tem cardapio proprio, usa o cardapio padrao pronto
     if (!data || data.length === 0) {
       setMealPlans(defaultMeals.map(meal => ({ ...meal, user_id: user.id })));
     } else {
-      // Parse JSONB fields and merge with defaults for any missing meals
+      // Tem cardapio proprio: organiza os dados vindos do banco no formato usado pela tela
       const userPlans: UserMealPlan[] = data.map(p => ({
         id: p.id,
         user_id: p.user_id,
@@ -186,6 +204,8 @@ export function useUserMealPlans() {
         alt_macros: p.alt_macros as unknown as MealMacros,
       }));
       
+      // Garante que TODAS as refeicoes do dia aparecam: para cada tipo de refeicao,
+      // usa a versao personalizada se existir, senao completa com a padrao.
       const allMealKeys = defaultMeals.map(m => m.meal_key);
       const mergedPlans = allMealKeys.map(key => {
         const userPlan = userPlans.find(p => p.meal_key === key);
@@ -195,17 +215,20 @@ export function useUserMealPlans() {
       });
       setMealPlans(mergedPlans);
     }
-    
+
     setLoading(false);
   }, [user]);
 
+  // Ao abrir/entrar, carrega o cardapio automaticamente
   useEffect(() => {
     fetchMealPlans();
   }, [fetchMealPlans]);
 
+  // Salva (cria ou atualiza) uma refeicao personalizada do usuario no banco
   const saveMealPlan = async (mealPlan: UserMealPlan) => {
     if (!user) return { error: new Error('Not authenticated') };
 
+    // Prepara os dados para gravar; os campos com listas/objetos viram JSON no banco
     const planData = {
       user_id: user.id,
       meal_key: mealPlan.meal_key,
@@ -219,24 +242,27 @@ export function useUserMealPlans() {
       alt_macros: JSON.parse(JSON.stringify(mealPlan.alt_macros)),
     };
 
+    // Ja tem ID: a refeicao existe no banco, entao atualiza o registro existente
     if (mealPlan.id) {
       const { error } = await supabase
         .from('user_meal_plans')
         .update(planData)
         .eq('id', mealPlan.id);
-      
+
       if (!error) await fetchMealPlans();
       return { error };
     } else {
+      // Sem ID: cria a refeicao (ou substitui se ja houver uma do mesmo tipo para o usuario)
       const { error } = await supabase
         .from('user_meal_plans')
         .upsert([planData], { onConflict: 'user_id,meal_key' });
-      
+
       if (!error) await fetchMealPlans();
       return { error };
     }
   };
 
+  // Entrega para a tela: o cardapio, o estado de carregamento e as acoes de salvar/recarregar
   return {
     mealPlans,
     loading,

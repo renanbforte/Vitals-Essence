@@ -1,7 +1,18 @@
+// ============================================================================
+// useGatherings.ts  —  EVENTOS EM GRUPO E DIVISÃO DE DESPESAS ("VAQUINHA")
+// ----------------------------------------------------------------------------
+// Cuida de eventos com amigos (festas, viagens, jantares): cria e lista os
+// eventos, gerencia participantes, despesas e ajustes, e calcula quanto cada um
+// pagou/deve e quem paga quem no fim (as "contas" da rachadinha).
+// ============================================================================
+
+// React Query (busca/cache de dados), o cliente do banco (Supabase) e o login.
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Formato de um evento: título, tipo, data, modo de divisão da conta, moeda,
+// status, e (opcionalmente) totais já calculados para exibição.
 export interface GatheringEvent {
   id: string;
   user_id: string;
@@ -20,6 +31,8 @@ export interface GatheringEvent {
   participant_count?: number;
 }
 
+// Formato de um participante do evento. Pode ser um usuário do app ou alguém
+// "externo" (só nome/telefone, sem conta no app).
 export interface GatheringParticipant {
   id: string;
   event_id: string;
@@ -32,6 +45,8 @@ export interface GatheringParticipant {
   created_at: string;
 }
 
+// Formato de uma despesa lançada no evento (quem lançou, quem pagou, valor,
+// se entra ou não na divisão, e se faz parte de um grupo de despesas).
 export interface GatheringExpense {
   id: string;
   event_id: string;
@@ -52,6 +67,8 @@ export interface GatheringExpense {
   created_at: string;
 }
 
+// Formato de uma entrada da "linha do tempo": histórico de quem fez o quê no
+// evento (ex.: "Fulano adicionou uma despesa").
 export interface GatheringTimelineEntry {
   id: string;
   event_id: string;
@@ -61,6 +78,8 @@ export interface GatheringTimelineEntry {
   created_at: string;
 }
 
+// Formato de um ajuste manual: transfere um valor de dívida de um participante
+// para outro (usado para corrigir/afinar as contas na mão).
 export interface GatheringAdjustment {
   id: string;
   event_id: string;
@@ -71,10 +90,16 @@ export interface GatheringAdjustment {
   created_at: string;
 }
 
+// -----------------------------------------------------------------------------
+// Hook da LISTA de eventos: busca todos os eventos do usuário e permite criar,
+// editar e excluir.
+// -----------------------------------------------------------------------------
 export function useGatheringEvents() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  // Busca a lista de eventos, do mais novo para o mais antigo, e acrescenta os
+  // totais (quanto foi gasto e quantos participantes) de cada um.
   const query = useQuery({
     queryKey: ['gathering-events', user?.id],
     queryFn: async () => {
@@ -84,24 +109,30 @@ export function useGatheringEvents() {
         .order('created_at', { ascending: false });
       if (error) throw error;
 
+      // Pega os IDs dos eventos para buscar os totais de cada um.
       // Enrich with totals
       const ids = (data || []).map((e: any) => e.id);
       if (ids.length === 0) return [];
 
+      // Busca, em paralelo, todas as despesas e todos os participantes desses
+      // eventos (mais rápido do que uma consulta por evento).
       const [expRes, partRes] = await Promise.all([
         supabase.from('gathering_expenses').select('event_id, total_amount').in('event_id', ids),
         supabase.from('gathering_participants').select('event_id').in('event_id', ids),
       ]);
 
+      // Soma o total gasto por evento.
       const costMap: Record<string, number> = {};
       for (const row of (expRes.data || []) as any[]) {
         costMap[row.event_id] = (costMap[row.event_id] || 0) + Number(row.total_amount || 0);
       }
+      // Conta quantos participantes cada evento tem.
       const countMap: Record<string, number> = {};
       for (const row of (partRes.data || []) as any[]) {
         countMap[row.event_id] = (countMap[row.event_id] || 0) + 1;
       }
 
+      // Devolve cada evento já com seu total gasto e número de participantes.
       return (data as any[]).map((e) => ({
         ...e,
         total_spent: costMap[e.id] || 0,
@@ -111,6 +142,7 @@ export function useGatheringEvents() {
     enabled: !!user,
   });
 
+  // Cria um novo evento e já adiciona o próprio criador como participante.
   const createEvent = useMutation({
     mutationFn: async (event: Partial<GatheringEvent>) => {
       const { data, error } = await supabase
@@ -120,6 +152,8 @@ export function useGatheringEvents() {
         .single();
       if (error) throw error;
 
+      // Adiciona automaticamente o criador como participante confirmado,
+      // usando o nome do perfil dele (ou "Eu" se não houver).
       // Auto-add creator as participant
       const profile = await supabase.from('profiles').select('name').eq('user_id', user!.id).single();
       await supabase.from('gathering_participants').insert({
@@ -132,9 +166,11 @@ export function useGatheringEvents() {
 
       return data;
     },
+    // Após criar, marca a lista como desatualizada para recarregar.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gathering-events'] }),
   });
 
+  // Edita os dados de um evento existente.
   const updateEvent = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<GatheringEvent> & { id: string }) => {
       const { error } = await supabase.from('gathering_events').update(updates as any).eq('id', id);
@@ -143,6 +179,7 @@ export function useGatheringEvents() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gathering-events'] }),
   });
 
+  // Exclui um evento.
   const deleteEvent = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('gathering_events').delete().eq('id', id);
@@ -154,6 +191,8 @@ export function useGatheringEvents() {
   return { ...query, createEvent, updateEvent, deleteEvent };
 }
 
+// Liga uma despesa a um participante específico quando ela é dividida só entre
+// algumas pessoas (e não entre todos).
 export interface GatheringExpenseSplit {
   id: string;
   expense_id: string;
@@ -161,10 +200,16 @@ export interface GatheringExpenseSplit {
   created_at: string;
 }
 
+// -----------------------------------------------------------------------------
+// Hook de DETALHE de um evento: carrega tudo de um evento específico (dados,
+// participantes, despesas, divisões, histórico e ajustes) e oferece as ações
+// para editar cada uma dessas partes.
+// -----------------------------------------------------------------------------
 export function useGatheringDetail(eventId: string | undefined) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  // Busca os dados principais do evento.
   const eventQuery = useQuery({
     queryKey: ['gathering-event', eventId],
     queryFn: async () => {
@@ -179,6 +224,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     enabled: !!eventId && !!user,
   });
 
+  // Busca a lista de participantes do evento (na ordem em que entraram).
   const participantsQuery = useQuery({
     queryKey: ['gathering-participants', eventId],
     queryFn: async () => {
@@ -193,6 +239,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     enabled: !!eventId && !!user,
   });
 
+  // Busca todas as despesas do evento (da mais nova para a mais antiga).
   const expensesQuery = useQuery({
     queryKey: ['gathering-expenses', eventId],
     queryFn: async () => {
@@ -207,9 +254,12 @@ export function useGatheringDetail(eventId: string | undefined) {
     enabled: !!eventId && !!user,
   });
 
+  // Busca as "divisões" das despesas (quais despesas foram divididas só entre
+  // algumas pessoas). Depende das despesas já terem sido carregadas.
   const splitsQuery = useQuery({
     queryKey: ['gathering-expense-splits', eventId],
     queryFn: async () => {
+      // Pega os IDs de todas as despesas deste evento.
       // Get all expense ids for this event
       const expenseIds = (expensesQuery.data || []).map(e => e.id);
       if (expenseIds.length === 0) return [] as GatheringExpenseSplit[];
@@ -223,6 +273,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     enabled: !!eventId && !!user && !!expensesQuery.data,
   });
 
+  // Busca o histórico (linha do tempo) de ações do evento.
   const timelineQuery = useQuery({
     queryKey: ['gathering-timeline', eventId],
     queryFn: async () => {
@@ -237,6 +288,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     enabled: !!eventId && !!user,
   });
 
+  // Busca os ajustes manuais de dívida do evento.
   const adjustmentsQuery = useQuery({
     queryKey: ['gathering-adjustments', eventId],
     queryFn: async () => {
@@ -251,6 +303,8 @@ export function useGatheringDetail(eventId: string | undefined) {
     enabled: !!eventId && !!user,
   });
 
+  // Marca TODAS as consultas deste evento como desatualizadas, forçando o
+  // recarregamento após qualquer alteração (usado abaixo em cada ação).
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['gathering-event', eventId] });
     queryClient.invalidateQueries({ queryKey: ['gathering-participants', eventId] });
@@ -261,6 +315,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     queryClient.invalidateQueries({ queryKey: ['gathering-events'] });
   };
 
+  // Adiciona um participante ao evento.
   const addParticipant = useMutation({
     mutationFn: async (p: Partial<GatheringParticipant>) => {
       const { error } = await supabase.from('gathering_participants').insert({ ...p, event_id: eventId } as any);
@@ -269,6 +324,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Remove um participante do evento.
   const removeParticipant = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('gathering_participants').delete().eq('id', id);
@@ -277,8 +333,11 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Adiciona uma despesa. Se ela deve ser dividida só entre algumas pessoas,
+  // também salva essa lista de "quem participa" (splits).
   const addExpense = useMutation({
     mutationFn: async (e: Partial<GatheringExpense> & { splitParticipantIds?: string[] }) => {
+      // Separa a lista de participantes da divisão do resto dos dados da despesa.
       const { splitParticipantIds, ...expenseData } = e;
       const { data, error } = await supabase.from('gathering_expenses').insert({
         ...expenseData,
@@ -287,6 +346,7 @@ export function useGatheringDetail(eventId: string | undefined) {
       } as any).select().single();
       if (error) throw error;
 
+      // Se foram escolhidas pessoas específicas (não todas), salva a divisão.
       // If specific participants selected (not all), save splits
       if (splitParticipantIds && splitParticipantIds.length > 0) {
         const splits = splitParticipantIds.map(pid => ({
@@ -300,10 +360,13 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Redefine quem divide uma despesa: apaga as divisões antigas e grava as novas.
   const updateExpenseSplits = useMutation({
     mutationFn: async ({ expenseId, participantIds }: { expenseId: string; participantIds: string[] | null }) => {
+      // Apaga as divisões atuais dessa despesa.
       // Delete existing splits
       await supabase.from('gathering_expense_splits').delete().eq('expense_id', expenseId);
+      // Vazio/nulo significa "todos dividem" — nesse caso não precisa gravar nada.
       // If null or empty, means "all" — no rows needed
       if (participantIds && participantIds.length > 0) {
         const splits = participantIds.map(pid => ({
@@ -317,6 +380,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Edita os dados de uma despesa.
   const updateExpense = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<GatheringExpense> & { id: string }) => {
       const { error } = await supabase.from('gathering_expenses').update(updates as any).eq('id', id);
@@ -325,6 +389,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Exclui uma despesa.
   const deleteExpense = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('gathering_expenses').delete().eq('id', id);
@@ -333,6 +398,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Cria um ajuste manual (transferência de dívida entre dois participantes).
   const addAdjustment = useMutation({
     mutationFn: async (adj: { from_participant_id: string; to_participant_id: string; amount: number; description?: string }) => {
       const { error } = await supabase.from('gathering_adjustments').insert({
@@ -344,6 +410,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Exclui um ajuste manual.
   const deleteAdjustment = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('gathering_adjustments').delete().eq('id', id);
@@ -352,6 +419,8 @@ export function useGatheringDetail(eventId: string | undefined) {
     onSuccess: invalidateAll,
   });
 
+  // Monta um "mapa" ligando cada despesa aos participantes que a dividem.
+  // Se uma despesa não aparecer aqui, significa que todos dividem.
   // Build a map: expenseId -> participant ids that share it (empty array = all)
   const expenseSplitMap: Record<string, string[]> = {};
   for (const s of (splitsQuery.data || [])) {
@@ -359,6 +428,7 @@ export function useGatheringDetail(eventId: string | undefined) {
     expenseSplitMap[s.expense_id].push(s.participant_id);
   }
 
+  // Entrega os dados carregados e todas as ações para a tela de detalhe.
   return {
     event: eventQuery.data,
     participants: participantsQuery.data || [],
@@ -379,6 +449,11 @@ export function useGatheringDetail(eventId: string | undefined) {
   };
 }
 
+// -----------------------------------------------------------------------------
+// CÁLCULO DA DIVISÃO DA CONTA (o "cérebro" da rachadinha).
+// A partir das despesas, participantes e regras, descobre quanto cada um pagou,
+// quanto deve, e a lista final de quem deve pagar quanto para quem.
+// -----------------------------------------------------------------------------
 // Split calculation
 export function calculateSplit(
   expenses: GatheringExpense[],
@@ -388,12 +463,16 @@ export function calculateSplit(
   expenseSplitMap?: Record<string, string[]>,
   adjustments?: GatheringAdjustment[],
 ) {
+  // Considera só despesas "de topo" (não os itens filhos de um grupo) e apenas
+  // as que entram na divisão, para não contar o mesmo valor duas vezes.
   // Only count top-level expenses (not children of groups) to avoid double-counting
   const topLevel = expenses.filter((e) => !e.parent_expense_id);
   const splittable = topLevel.filter((e) => e.include_in_split);
+  // Total gasto que será dividido e quantas pessoas participam.
   const totalSpent = splittable.reduce((s, e) => s + Number(e.total_amount), 0);
   const numPeople = participants.length || 1;
 
+  // Quanto cada pessoa PAGOU (soma das despesas em que ela foi quem pagou).
   // How much each person paid
   const paidMap: Record<string, number> = {};
   for (const p of participants) paidMap[p.id] = 0;
@@ -403,21 +482,26 @@ export function calculateSplit(
     }
   }
 
+  // Quanto cada pessoa DEVE (a parte dela do consumo).
   // How much each person owes (per-expense granularity)
   const owesMap: Record<string, number> = {};
   for (const p of participants) owesMap[p.id] = 0;
 
   if (splitMode === 'fixed' && fixedAmount) {
+    // Modo "valor fixo": todos devem o mesmo valor pré-combinado.
     // Fixed mode: everyone owes the same fixed amount
     for (const p of participants) owesMap[p.id] = fixedAmount;
   } else {
+    // Modo igual/híbrido: cada despesa é dividida entre quem participa dela.
     // Equal or hybrid: distribute each expense among its assigned participants
     for (const e of splittable) {
       const splitIds = expenseSplitMap?.[e.id];
+      // Sem divisão específica → todos dividem essa despesa.
       // If no specific split → everyone shares it
       const sharingIds = (splitIds && splitIds.length > 0)
         ? splitIds.filter(id => paidMap[id] !== undefined)
         : participants.map(p => p.id);
+      // Divide o valor da despesa igualmente entre quem participa dela.
       const share = Number(e.total_amount) / (sharingIds.length || 1);
       for (const pid of sharingIds) {
         owesMap[pid] = (owesMap[pid] || 0) + share;
@@ -425,6 +509,7 @@ export function calculateSplit(
     }
   }
 
+  // Aplica os ajustes manuais: passa dívida de uma pessoa para outra.
   // Apply manual adjustments: transfer debt from one person to another
   if (adjustments && adjustments.length > 0) {
     for (const adj of adjustments) {
@@ -436,9 +521,12 @@ export function calculateSplit(
     }
   }
 
+  // Valor "justo" por pessoa, apenas para exibir no resumo.
   // Fair share for summary display
   const fairShare = splitMode === 'fixed' && fixedAmount ? fixedAmount : totalSpent / numPeople;
 
+  // Saldo de cada pessoa = quanto pagou menos quanto deve. Positivo = tem a
+  // receber; negativo = tem a pagar.
   // Balance per person
   const balances: { participant: GatheringParticipant; paid: number; owes: number; balance: number }[] = [];
   for (const p of participants) {
@@ -447,16 +535,21 @@ export function calculateSplit(
     balances.push({ participant: p, paid, owes, balance: paid - owes });
   }
 
+  // Acertos finais: monta a lista de "quem paga quem". Separa devedores (saldo
+  // negativo) de credores (saldo positivo); o -0.01/0.01 ignora centavos.
   // Settlements (who pays whom)
   const settlements: { from: GatheringParticipant; to: GatheringParticipant; amount: number }[] = [];
   const debtors = balances.filter((b) => b.balance < -0.01).map((b) => ({ ...b }));
   const creditors = balances.filter((b) => b.balance > 0.01).map((b) => ({ ...b }));
 
+  // Ordena para casar o maior devedor com o maior credor (menos transferências).
   debtors.sort((a, b) => a.balance - b.balance);
   creditors.sort((a, b) => b.balance - a.balance);
 
+  // Percorre devedores e credores casando pagamentos até zerar as contas.
   let di = 0, ci = 0;
   while (di < debtors.length && ci < creditors.length) {
+    // Paga o menor entre "o que o devedor deve" e "o que o credor tem a receber".
     const amount = Math.min(-debtors[di].balance, creditors[ci].balance);
     if (amount > 0.01) {
       settlements.push({
@@ -465,11 +558,13 @@ export function calculateSplit(
         amount: Math.round(amount * 100) / 100,
       });
     }
+    // Abate o valor pago dos dois saldos; quem zerar, passa para o próximo.
     debtors[di].balance += amount;
     creditors[ci].balance -= amount;
     if (Math.abs(debtors[di].balance) < 0.01) di++;
     if (Math.abs(creditors[ci].balance) < 0.01) ci++;
   }
 
+  // Retorna o resumo: total gasto, valor justo por pessoa, saldos e acertos.
   return { totalSpent, fairShare, balances, settlements };
 }

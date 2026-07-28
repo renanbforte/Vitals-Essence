@@ -1,7 +1,18 @@
+// ============================================================================
+// useLiberation.ts  —  DESAFIOS DE LIBERTACAO DE VICIOS
+// ----------------------------------------------------------------------------
+// Hook do modulo em que o usuario cria "desafios" para largar vicios e registra
+// cada vontade (craving) que sentiu, com gatilhos, intensidade e resultado.
+// Usa React Query para buscar/salvar no Supabase e recarregar a tela sozinho.
+// ============================================================================
+
+// React Query cuida de buscar dados (useQuery) e salvar mudancas (useMutation),
+// recarregando a tela automaticamente. Supabase e o banco; useAuth diz quem esta logado.
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Formato de um "desafio" (ex.: parar de fumar) como salvo no banco.
 export interface Challenge {
   id: string;
   user_id: string;
@@ -14,6 +25,7 @@ export interface Challenge {
   updated_at: string;
 }
 
+// Formato de um "craving" (uma vontade/impulso registrado) dentro de um desafio.
 export interface Craving {
   id: string;
   challenge_id: string;
@@ -28,10 +40,12 @@ export interface Craving {
   created_at: string;
 }
 
+// Hook principal do modulo de libertacao: entrega os dados e as acoes para as telas.
 export function useLiberation() {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient(); // usado para forcar recarga apos salvar
 
+  // Busca todos os desafios do usuario, do mais novo para o mais antigo.
   const challengesQuery = useQuery({
     queryKey: ['liberation-challenges', user?.id],
     queryFn: async () => {
@@ -46,6 +60,7 @@ export function useLiberation() {
     enabled: !!user,
   });
 
+  // Busca todos os registros de vontade (cravings) do usuario, do mais novo para o mais antigo.
   const cravingsQuery = useQuery({
     queryKey: ['liberation-cravings', user?.id],
     queryFn: async () => {
@@ -60,8 +75,10 @@ export function useLiberation() {
     enabled: !!user,
   });
 
+  // Cria um novo desafio e, se houver, seus gatilhos (situacoes que despertam o vicio).
   const createChallenge = useMutation({
     mutationFn: async (input: { title: string; intention_level: string; icon: string; vice_strategy_id?: string; triggers: { type: string; value: string }[] }) => {
+      // Primeiro cria o desafio e recupera o registro gerado (para pegar o id).
       const { data, error } = await supabase
         .from('liberation_challenges')
         .insert({ user_id: user!.id, title: input.title, intention_level: input.intention_level, icon: input.icon })
@@ -69,6 +86,7 @@ export function useLiberation() {
         .single();
       if (error) throw error;
 
+      // Se o usuario informou gatilhos, salva todos vinculados a esse desafio.
       if (input.triggers.length > 0) {
         const triggerRows = input.triggers.map(t => ({
           challenge_id: data.id,
@@ -80,9 +98,11 @@ export function useLiberation() {
       }
       return data;
     },
+    // Ao terminar, recarrega a lista de desafios na tela.
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['liberation-challenges'] }),
   });
 
+  // Atualiza campos de um desafio existente (titulo, nivel, icone ou status).
   const updateChallenge = useMutation({
     mutationFn: async (input: { id: string; title?: string; intention_level?: string; icon?: string; status?: string }) => {
       const { id, ...updates } = input;
@@ -92,9 +112,10 @@ export function useLiberation() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['liberation-challenges'] }),
   });
 
+  // Exclui um desafio junto com tudo que depende dele.
   const deleteChallenge = useMutation({
     mutationFn: async (id: string) => {
-      // Delete related data first
+      // Apaga antes os dados ligados (vontades, gatilhos e substituicoes) para nao deixar orfaos.
       await supabase.from('liberation_cravings').delete().eq('challenge_id', id);
       await supabase.from('liberation_triggers').delete().eq('challenge_id', id);
       await supabase.from('liberation_substitutions').delete().eq('challenge_id', id);
@@ -107,6 +128,7 @@ export function useLiberation() {
     },
   });
 
+  // Registra uma vontade sentida: emocoes-gatilho, intensidade, o que fez e se ajudou.
   const recordCraving = useMutation({
     mutationFn: async (input: {
       challenge_id: string;
@@ -125,6 +147,7 @@ export function useLiberation() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['liberation-cravings'] }),
   });
 
+  // Entrega para as telas as listas (ou vazias se ainda carregando) e as acoes.
   return {
     challenges: challengesQuery.data ?? [],
     cravings: cravingsQuery.data ?? [],

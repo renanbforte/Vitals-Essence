@@ -1,7 +1,21 @@
+// ============================================================================
+// SubscriptionContext.tsx  —  CONTROLE DE ASSINATURAS E ACESSO AOS MÓDULOS
+// ----------------------------------------------------------------------------
+// Guarda, em um lugar acessível por todo o app, o que o usuário pagou/testou e
+// a quais módulos ele tem acesso. Fala com o Stripe (pagamentos) e com o
+// Supabase para verificar assinaturas, iniciar checkout, testes e cancelamentos.
+// ============================================================================
+
+// Ferramentas do React para criar o contexto e memorizar dados/funções.
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+// Conexão com o Supabase (banco + funções na nuvem que conversam com o Stripe).
 import { supabase } from '@/integrations/supabase/client';
+// Reaproveita o login: precisamos saber QUEM é o usuário para checar a assinatura.
 import { useAuth } from './AuthContext';
 
+// Tabela que liga cada módulo do app aos seus produtos e preços no Stripe.
+// Guarda IDs (identificadores) de produto e de preço (mensal/anual), nome e valores.
+// É a "lista de preços" oficial usada nas telas de compra.
 // Mapeamento de produtos Stripe — v2 com mensal e anual
 export const STRIPE_PRODUCTS = {
   financeiro: {
@@ -92,6 +106,8 @@ export const FREE_MODULES = ['saude'];
 // Módulos pagos
 export const PAID_MODULES = ['financeiro', 'tarefas', 'viagens', 'lista-compras', 'encontros', 'libertacao', 'feminino', 'astral'];
 
+// Formato da "situação da assinatura" do usuário: o que está ativo, em teste,
+// cancelado, se é pacote/trio/vitalício, quando vence, etc. É o retrato completo.
 interface SubscriptionState {
   loading: boolean;
   subscribed: boolean;
@@ -109,6 +125,8 @@ interface SubscriptionState {
   subscription_end: string | null;
 }
 
+// Além da situação acima, o contexto oferece estas ações/consultas para as telas:
+// checar acesso, ver testes, iniciar compra, abrir portal do cliente e começar teste.
 interface SubscriptionContextType extends SubscriptionState {
   hasModuleAccess: (moduleKey: string) => boolean;
   hasTrial: (moduleKey: string) => boolean;
@@ -119,10 +137,14 @@ interface SubscriptionContextType extends SubscriptionState {
   startTrial: (moduleKey: string) => Promise<boolean>;
 }
 
+// Cria o "recipiente" do contexto onde a situação da assinatura fica guardada.
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
+// Componente que envolve o app e fornece os dados de assinatura para todas as telas.
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
+  // Descobre quem é o usuário logado (necessário para consultar a assinatura dele).
   const { user } = useAuth();
+  // Estado (memória viva) com a situação atual da assinatura; começa tudo "vazio".
   const [state, setState] = useState<SubscriptionState>({
     loading: false,
     subscribed: false,
@@ -140,15 +162,21 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     subscription_end: null,
   });
 
+  // Consulta no servidor a situação real da assinatura do usuário e atualiza o estado.
+  // Chama a função na nuvem "check-subscription", que verifica os pagamentos no Stripe.
   const checkSubscription = useCallback(async () => {
+    // Sem usuário logado: zera tudo (ninguém tem acesso) e para de carregar.
     if (!user) {
       setState(s => ({ ...s, loading: false, subscribed: false, is_package: false, is_trio: false, trio_modules: [], is_lifetime: false, payment_failed: false, modules: [], trial_modules: [], trial_end_dates: {}, canceled_modules: [], canceled_is_package: false }));
       return;
     }
+    // Marca "carregando" enquanto espera a resposta do servidor.
     setState(s => ({ ...s, loading: true }));
     try {
+      // Pede ao servidor a situação da assinatura. Se der erro, cai no catch abaixo.
       const { data, error } = await supabase.functions.invoke('check-subscription');
       if (error) throw error;
+      // Preenche o estado com a resposta; "?? valor" define um padrão caso venha vazio.
       setState({
         loading: false,
         subscribed: data.subscribed ?? false,
@@ -166,17 +194,22 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
         subscription_end: data.subscription_end ?? null,
       });
     } catch (e) {
+      // Se algo falhar, registra o erro no console e apenas para de carregar.
       console.error('check-subscription error:', e);
       setState(s => ({ ...s, loading: false }));
     }
   }, [user]);
 
+  // Verifica a assinatura assim que o app abre e, depois, a cada 60 segundos.
+  // Assim, se o usuário paga ou cancela, o acesso se ajusta sozinho sem recarregar.
   useEffect(() => {
     checkSubscription();
     const interval = setInterval(checkSubscription, 60000);
     return () => clearInterval(interval);
   }, [checkSubscription]);
 
+  // Detecta o retorno do pagamento: se a URL traz "checkout=success", revê a
+  // assinatura (após 2s, dando tempo ao Stripe) e limpa esse parâmetro da URL.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('checkout') === 'success') {
@@ -185,6 +218,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     }
   }, [checkSubscription]);
 
+  // Responde "sim/não" se o usuário pode usar um módulo. É a regra central de acesso.
+  // Libera se: for gratuito, vitalício, pacote completo, trio que inclui o módulo,
+  // módulo comprado avulso ou em período de teste. Caso contrário, bloqueia.
   const hasModuleAccess = useCallback((moduleKey: string) => {
     if (FREE_MODULES.includes(moduleKey)) return true;
     if (state.is_lifetime) return true;
@@ -195,10 +231,13 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return false;
   }, [state.is_lifetime, state.is_package, state.is_trio, state.trio_modules, state.modules, state.trial_modules]);
 
+  // Diz se o módulo está atualmente em período de teste gratuito.
   const hasTrial = useCallback((moduleKey: string) => {
     return state.trial_modules.includes(moduleKey);
   }, [state.trial_modules]);
 
+  // Calcula quantos dias faltam para o teste de um módulo acabar (arredondando p/ cima).
+  // Retorna 0 se não houver teste ou se já tiver expirado.
   const getTrialDaysLeft = useCallback((moduleKey: string): number => {
     const endDate = state.trial_end_dates[moduleKey];
     if (!endDate) return 0;
@@ -206,8 +245,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }, [state.trial_end_dates]);
 
+  // Inicia um teste gratuito de 14 dias para um módulo, gravando na tabela "module_trials".
+  // Depois reconsulta a assinatura para o acesso liberar na hora. Retorna se deu certo.
   const startTrial = useCallback(async (moduleKey: string): Promise<boolean> => {
     if (!user) return false;
+    // Data de término = agora + 14 dias, no formato padrão de datas (ISO).
     const trialEnd = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
     const { error } = await supabase
       .from('module_trials')
@@ -220,6 +262,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return true;
   }, [user, checkSubscription]);
 
+  // Inicia a compra: pede ao servidor ("create-checkout") a página de pagamento do
+  // Stripe para o preço escolhido e a abre em nova aba. No caso do trio, envia os
+  // 3 módulos escolhidos pelo usuário junto do pedido.
   const startCheckout = useCallback(async (priceId: string, trioModules?: string[]) => {
     try {
       const body: Record<string, unknown> = { price_id: priceId };
@@ -234,6 +279,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  // Abre o "portal do cliente" do Stripe (nova aba), onde o usuário gerencia sua
+  // assinatura: trocar cartão, ver faturas, cancelar, etc.
   const openPortal = useCallback(async () => {
     try {
       const { data, error } = await supabase.functions.invoke('customer-portal');
@@ -244,6 +291,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     }
   }, []);
 
+  // Entrega a situação e as ações de assinatura para todos os componentes-filhos.
   return (
     <SubscriptionContext.Provider value={{ ...state, hasModuleAccess, hasTrial, getTrialDaysLeft, checkSubscription, startCheckout, openPortal, startTrial }}>
       {children}
@@ -251,6 +299,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   );
 }
 
+// Atalho que as telas usam para acessar a assinatura (ex.: useSubscription()).
+// Protege contra uso fora do SubscriptionProvider, avisando com um erro claro.
 export function useSubscription() {
   const ctx = useContext(SubscriptionContext);
   if (!ctx) throw new Error('useSubscription must be used within SubscriptionProvider');

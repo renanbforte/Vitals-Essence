@@ -1,11 +1,26 @@
+// ============================================================================
+// useLifePersonal  —  CENTRAL DA VIDA PESSOAL DO USUÁRIO
+// ----------------------------------------------------------------------------
+// Hook que reúne todo o módulo "Vida Pessoal" do app: check-in emocional do dia,
+// rotinas de casa, relacionamentos, experiências/memórias, "despejo mental",
+// diário, ritual semanal e registro de equilíbrio de vida. Busca e grava tudo
+// no Supabase e devolve os dados prontos para as telas mostrarem.
+// ============================================================================
+
+// Ferramentas do React (estados, efeitos) e do date-fns (formatar datas).
 import { useState, useEffect, useCallback } from 'react';
+// Conexão com o banco de dados Supabase (onde tudo é guardado).
 import { supabase } from '@/integrations/supabase/client';
+// Descobre quem é o usuário logado no momento.
 import { useAuth } from '@/contexts/AuthContext';
+// Mostra mensagens rápidas de sucesso na tela (os "toasts").
 import { toast } from 'sonner';
 import { format, startOfWeek } from 'date-fns';
 
+// Opções de "como estou me sentindo hoje" no check-in emocional.
 export type EmotionalState = 'ótimo' | 'bem' | 'neutro' | 'cansado' | 'sobrecarregado';
 
+// Check-in emocional de um dia: como me senti e o que fiz de bom por mim.
 export interface LifeCheckin {
   id: string;
   checkin_date: string;
@@ -16,6 +31,7 @@ export interface LifeCheckin {
   overloaded_mode: boolean;
 }
 
+// Uma tarefa/rotina da casa (ex.: "regar plantas"), com frequência e último dia feito.
 export interface HouseRoutine {
   id: string;
   title: string;
@@ -25,6 +41,8 @@ export interface HouseRoutine {
   shared_with: string | null;
 }
 
+// Uma pessoa importante na vida do usuário (família, amigo, parceiro), com datas
+// especiais e a última vez que teve um "tempo de qualidade" com ela.
 export interface LifeRelationship {
   id: string;
   name: string;
@@ -36,6 +54,7 @@ export interface LifeRelationship {
   importance: number;
 }
 
+// Uma experiência: algo que a pessoa quer viver ("quero_viver") ou uma memória guardada.
 export interface LifeExperience {
   id: string;
   title: string;
@@ -45,6 +64,8 @@ export interface LifeExperience {
   experience_date: string | null;
 }
 
+// "Despejo mental": uma preocupação anotada e o que decidir fazer com ela
+// (deixar pendente, resolver, deixar ir ou concluir que não importa).
 export interface BrainDump {
   id: string;
   content: string;
@@ -52,6 +73,7 @@ export interface BrainDump {
   created_at: string;
 }
 
+// Entrada do diário de um dia (melhor momento, gratidão, o que carregar adiante, etc.).
 export interface LifeDiary {
   id: string;
   diary_date: string;
@@ -62,6 +84,7 @@ export interface LifeDiary {
   carry_forward: string | null;
 }
 
+// Ritual da semana: intenções da pessoa para os próximos 7 dias.
 export interface WeeklyRitual {
   id: string;
   week_start: string;
@@ -70,11 +93,15 @@ export interface WeeklyRitual {
   avoid_repeating: string | null;
 }
 
+// Hook principal do módulo. As telas chamam useLifePersonal() para receber os
+// dados já carregados e as funções de salvar/editar/apagar.
 export function useLifePersonal() {
   const { user } = useAuth();
+  // Data de hoje e início da semana (segunda-feira), no formato do banco (AAAA-MM-DD).
   const today = format(new Date(), 'yyyy-MM-dd');
   const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
 
+  // Cada "estado" abaixo guarda um pedaço dos dados na memória da tela.
   const [checkin, setCheckin] = useState<LifeCheckin | null>(null);
   const [routines, setRoutines] = useState<HouseRoutine[]>([]);
   const [relationships, setRelationships] = useState<LifeRelationship[]>([]);
@@ -85,6 +112,8 @@ export function useLifePersonal() {
   const [balanceLogs, setBalanceLogs] = useState<{ area: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Busca TODOS os dados do módulo de uma vez só quando a tela abre.
+  // Usa Promise.all para fazer as 8 consultas em paralelo (mais rápido).
   const fetchAll = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -97,9 +126,11 @@ export function useLifePersonal() {
       supabase.from('life_brain_dumps').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(30),
       supabase.from('life_diary').select('*').eq('user_id', user.id).eq('diary_date', today).maybeSingle(),
       supabase.from('life_weekly_rituals').select('*').eq('user_id', user.id).eq('week_start', weekStart).maybeSingle(),
+      // Registros de equilíbrio de vida dos últimos 30 dias.
       supabase.from('life_balance_logs').select('area').eq('user_id', user.id).gte('log_date', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]),
     ]);
 
+    // Guarda cada resultado no seu respectivo estado para a tela usar.
     setCheckin(checkinRes.data as LifeCheckin | null);
     setRoutines((routinesRes.data || []) as HouseRoutine[]);
     setRelationships((relsRes.data || []).map(r => ({ ...r, important_dates: (r.important_dates as { label: string; date: string }[] | null) || [] })) as LifeRelationship[]);
@@ -108,7 +139,8 @@ export function useLifePersonal() {
     setDiary(diaryRes.data as LifeDiary | null);
     setWeeklyRitual(ritualRes.data as WeeklyRitual | null);
 
-    // Aggregate balance logs by area
+    // Conta quantas vezes o usuário cuidou de cada área da vida (casa, família,
+    // amigos, lazer, autocuidado, tempo sozinho) para montar o gráfico de equilíbrio.
     const logs = logsRes.data || [];
     const areas = ['casa', 'familia', 'amigos', 'lazer', 'autocuidado', 'tempo_sozinho'];
     const agg = areas.map(area => ({ area, count: logs.filter((l: { area: string }) => l.area === area).length }));
@@ -117,9 +149,10 @@ export function useLifePersonal() {
     setLoading(false);
   }, [user, today, weekStart]);
 
+  // Assim que o hook é usado (e sempre que o usuário muda), carrega tudo.
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Check-in
+  // === CHECK-IN: cria (primeira vez no dia) ou atualiza o check-in de hoje. ===
   const saveCheckin = async (data: Partial<LifeCheckin>) => {
     if (!user) return;
     const payload = { ...data, user_id: user.id, checkin_date: today };
@@ -132,7 +165,8 @@ export function useLifePersonal() {
     }
   };
 
-  // Routines
+  // === ROTINAS DE CASA ===
+  // Cria uma nova rotina de casa e a adiciona na lista da tela.
   const addRoutine = async (data: Omit<HouseRoutine, 'id'>) => {
     if (!user) return;
     const { data: newR } = await supabase.from('house_routines').insert({ ...data, user_id: user.id }).select().single();
@@ -140,18 +174,21 @@ export function useLifePersonal() {
     toast.success('Rotina criada!');
   };
 
+  // Marca a rotina como feita hoje (guarda a data do último "feito").
   const markRoutineDone = async (id: string) => {
     await supabase.from('house_routines').update({ last_done_at: today }).eq('id', id);
     setRoutines(prev => prev.map(r => r.id === id ? { ...r, last_done_at: today } : r));
     toast.success('Feito! ✅');
   };
 
+  // Apaga uma rotina de casa.
   const deleteRoutine = async (id: string) => {
     await supabase.from('house_routines').delete().eq('id', id);
     setRoutines(prev => prev.filter(r => r.id !== id));
   };
 
-  // Relationships
+  // === RELACIONAMENTOS ===
+  // Adiciona uma pessoa importante. important_dates pode vir vazio, então garante uma lista.
   const addRelationship = async (data: Omit<LifeRelationship, 'id'>) => {
     if (!user) return;
     const { data: newR } = await supabase.from('life_relationships').insert({ ...data, user_id: user.id }).select().single();
@@ -159,24 +196,28 @@ export function useLifePersonal() {
     toast.success('Pessoa adicionada!');
   };
 
+  // Registra que hoje houve um "tempo de qualidade" com essa pessoa.
   const markQualityTime = async (id: string) => {
     await supabase.from('life_relationships').update({ last_quality_time: today }).eq('id', id);
     setRelationships(prev => prev.map(r => r.id === id ? { ...r, last_quality_time: today } : r));
     toast.success('Momento registrado! ❤️');
   };
 
+  // Edita os dados de uma pessoa já cadastrada.
   const updateRelationship = async (id: string, data: Partial<Omit<LifeRelationship, 'id'>>) => {
     await supabase.from('life_relationships').update(data).eq('id', id);
     setRelationships(prev => prev.map(r => r.id === id ? { ...r, ...data } : r));
     toast.success('Pessoa atualizada!');
   };
 
+  // Remove uma pessoa da lista de relacionamentos.
   const deleteRelationship = async (id: string) => {
     await supabase.from('life_relationships').delete().eq('id', id);
     setRelationships(prev => prev.filter(r => r.id !== id));
   };
 
-  // Experiences
+  // === EXPERIÊNCIAS E MEMÓRIAS ===
+  // Adiciona uma experiência (a mensagem muda se for memória ou desejo futuro).
   const addExperience = async (data: Omit<LifeExperience, 'id'>) => {
     if (!user) return;
     const { data: newE } = await supabase.from('life_experiences').insert({ ...data, user_id: user.id }).select().single();
@@ -184,29 +225,33 @@ export function useLifePersonal() {
     toast.success(data.type === 'memoria' ? 'Memória guardada! 📸' : 'Adicionado à lista!');
   };
 
+  // Apaga uma experiência/memória.
   const deleteExperience = async (id: string) => {
     await supabase.from('life_experiences').delete().eq('id', id);
     setExperiences(prev => prev.filter(e => e.id !== id));
   };
 
-  // Brain dumps
+  // === DESPEJO MENTAL ===
+  // Anota uma nova preocupação, já marcada como "pendente".
   const addBrainDump = async (content: string) => {
     if (!user) return;
     const { data: newD } = await supabase.from('life_brain_dumps').insert({ content, user_id: user.id, resolution: 'pendente' }).select().single();
     if (newD) setBrainDumps(prev => [newD as BrainDump, ...prev]);
   };
 
+  // Define o que fazer com a preocupação (resolver, deixar ir, etc.).
   const resolveDump = async (id: string, resolution: BrainDump['resolution']) => {
     await supabase.from('life_brain_dumps').update({ resolution }).eq('id', id);
     setBrainDumps(prev => prev.map(d => d.id === id ? { ...d, resolution } : d));
   };
 
+  // Apaga uma anotação do despejo mental.
   const deleteDump = async (id: string) => {
     await supabase.from('life_brain_dumps').delete().eq('id', id);
     setBrainDumps(prev => prev.filter(d => d.id !== id));
   };
 
-  // Diary
+  // === DIÁRIO: cria ou atualiza a entrada do diário de hoje. ===
   const saveDiary = async (data: Partial<LifeDiary>) => {
     if (!user) return;
     const payload = { ...data, user_id: user.id, diary_date: today };
@@ -220,7 +265,7 @@ export function useLifePersonal() {
     toast.success('Salvo no diário ✨');
   };
 
-  // Weekly ritual
+  // === RITUAL SEMANAL: cria ou atualiza as intenções desta semana. ===
   const saveWeeklyRitual = async (data: Partial<WeeklyRitual>) => {
     if (!user) return;
     const payload = { ...data, user_id: user.id, week_start: weekStart };
@@ -234,7 +279,9 @@ export function useLifePersonal() {
     toast.success('Ritual da semana salvo 🌙');
   };
 
-  // Balance log
+  // === EQUILÍBRIO DE VIDA ===
+  // Registra que hoje o usuário cuidou de uma área (casa, lazer, etc.) e soma +1
+  // no contador dessa área para atualizar o gráfico na hora.
   const logBalance = async (area: string) => {
     if (!user) return;
     await supabase.from('life_balance_logs').insert({ user_id: user.id, area, log_date: today });
@@ -242,6 +289,7 @@ export function useLifePersonal() {
     toast.success(`${area} registrado!`);
   };
 
+  // Entrega para as telas todos os dados carregados e as funções de ação.
   return {
     checkin, routines, relationships, experiences, brainDumps, diary, weeklyRitual, balanceLogs, loading,
     saveCheckin, addRoutine, markRoutineDone, deleteRoutine,

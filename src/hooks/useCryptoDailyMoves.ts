@@ -1,7 +1,17 @@
+// ============================================================================
+// useCryptoDailyMoves.ts  —  MOVIMENTOS DIÁRIOS DE CRIPTOMOEDAS
+// ----------------------------------------------------------------------------
+// Hook que busca no Supabase os registros diários de operações em cripto do
+// usuário (posições short/long, preços, lucro/prejuízo). Usado nas telas de
+// acompanhamento de investimentos. Também permite excluir um registro.
+// ============================================================================
+
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
+// Formato de um "movimento diário" de cripto como vem salvo no banco: guarda os
+// dados da operação vendida (short) e comprada (long), preços e resultados.
 export interface CryptoDailyMove {
   id: string;
   date: string;
@@ -33,11 +43,15 @@ export interface CryptoDailyMove {
   created_at: string;
 }
 
+// Hook principal: entrega a lista de movimentos e a ação de excluir.
 export function useCryptoDailyMoves() {
   const { user } = useAuth();
+  // Estados locais: lista de movimentos e indicador de "carregando".
   const [moves, setMoves] = useState<CryptoDailyMove[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Busca no banco os movimentos do usuário, mais recentes primeiro,
+  // limitado a 200 registros. Só roda se houver usuário logado.
   const fetch = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -51,13 +65,16 @@ export function useCryptoDailyMoves() {
     setLoading(false);
   }, [user]);
 
+  // Carrega os dados assim que o hook é montado (e quando fetch mudar).
   useEffect(() => { fetch(); }, [fetch]);
 
+  // Exclui um movimento pelo id (garantindo que pertence ao usuário) e recarrega.
   const deleteMove = async (id: string) => {
     if (!user) return;
     await supabase.from('crypto_daily_moves').delete().eq('id', id).eq('user_id', user.id);
     fetch();
   };
 
+  // Expõe para as telas: os dados, o "carregando", excluir e recarregar.
   return { moves, loading, deleteMove, refetch: fetch };
 }

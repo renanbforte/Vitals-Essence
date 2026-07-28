@@ -1,9 +1,18 @@
+// ============================================================================
+// useFinancialFlow.ts  —  CONTROLE FINANCEIRO (LANÇAMENTOS DO MÊS)
+// ----------------------------------------------------------------------------
+// Hook central das finanças do usuário: busca e grava receitas/despesas do mês
+// no Supabase, cria e mantém lançamentos recorrentes (parcelas), gerencia
+// centros de custo (categorias), anexos de comprovantes e o resumo do mês.
+// ============================================================================
+
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { startOfMonth, endOfMonth, format, addDays, addWeeks, addMonths, addYears, parseISO } from 'date-fns';
 
+// Centro de custo = categoria de gasto/receita (ex.: Moradia, Saúde), com ícone e cor.
 export interface CostCenter {
   id: string;
   name: string;
@@ -11,6 +20,7 @@ export interface CostCenter {
   color: string | null;
 }
 
+// Formato de um lançamento financeiro já salvo (uma receita ou despesa).
 export interface FinancialTransaction {
   id: string;
   type: 'income' | 'expense';
@@ -33,6 +43,7 @@ export interface FinancialTransaction {
   installment_label?: string; // e.g. "2/5"
 }
 
+// Dados que o formulário envia ao criar/editar um lançamento (entrada do usuário).
 export interface TransactionInput {
   type: 'income' | 'expense';
   description: string;
@@ -50,6 +61,7 @@ export interface TransactionInput {
   card_bank?: string | null;
 }
 
+// Categorias padrão criadas automaticamente para um usuário novo (primeiro acesso).
 const DEFAULT_COST_CENTERS = [
   { name: 'Moradia', icon: '🏠', color: '#6366f1' },
   { name: 'Alimentação', icon: '🍽️', color: '#f59e0b' },
@@ -62,21 +74,26 @@ const DEFAULT_COST_CENTERS = [
   { name: 'Outros', icon: '📦', color: '#94a3b8' },
 ];
 
+// Formata um número como moeda brasileira (R$), usado para permitir busca por valor.
 function formatCurrencySearch(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+// Hook principal. Recebe o mês selecionado na tela e devolve dados + ações das finanças.
 export function useFinancialFlow(selectedMonth: Date) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]);
-  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);
-  const [savedBanks, setSavedBanks] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();          // usuário logado (dono dos dados)
+  const { toast } = useToast();        // mensagens de aviso na tela
+  // Estados guardados na memória da tela:
+  const [transactions, setTransactions] = useState<FinancialTransaction[]>([]); // lançamentos do mês
+  const [costCenters, setCostCenters] = useState<CostCenter[]>([]);             // categorias do usuário
+  const [savedBanks, setSavedBanks] = useState<string[]>([]);                   // bancos/cartões já usados (autocomplete)
+  const [loading, setLoading] = useState(true);                                 // se está carregando dados
 
+  // Primeiro e último dia do mês selecionado, usados para filtrar os lançamentos.
   const monthStart = format(startOfMonth(selectedMonth), 'yyyy-MM-dd');
   const monthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
 
+  // Busca as categorias do usuário. Se ele não tiver nenhuma, cria as categorias padrão.
   const fetchCostCenters = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase
@@ -91,7 +108,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
 
     if (data && data.length === 0) {
-      // Seed default cost centers
+      // Usuário sem categorias: grava as categorias padrão de uma vez.
       const inserts = DEFAULT_COST_CENTERS.map(cc => ({
         user_id: user.id,
         name: cc.name,
@@ -110,9 +127,11 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   }, [user]);
 
+  // Busca os lançamentos do mês selecionado e calcula os rótulos de parcela (ex.: "2/5").
   const fetchTransactions = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    // Traz do banco só os lançamentos do usuário dentro do mês, do mais novo ao mais antigo.
     const { data, error } = await supabase
       .from('financial_transactions')
       .select('*')
@@ -124,7 +143,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     if (error) {
       console.error('Error fetching transactions:', error);
     } else if (data) {
-      // Collect parent IDs for recurring transactions to compute installment labels
+      // Junta os IDs "pai" dos lançamentos recorrentes para depois montar o rótulo de parcela.
       const parentIds = new Set<string>();
       data.forEach(t => {
         if (t.is_recurring || t.parent_transaction_id) {
@@ -132,7 +151,7 @@ export function useFinancialFlow(selectedMonth: Date) {
         }
       });
 
-      // Fetch all siblings for each parent to compute "X/Y"
+      // Para cada grupo de parcelas, busca todas as "irmãs" e calcula a posição "X de Y".
       const installmentMap = new Map<string, { index: number; total: number }>();
       if (parentIds.size > 0) {
         for (const pid of parentIds) {
@@ -150,6 +169,7 @@ export function useFinancialFlow(selectedMonth: Date) {
         }
       }
 
+      // Enriquece cada lançamento com sua categoria completa e o rótulo de parcela.
       const enriched = data.map(t => ({
         ...t,
         type: t.type as 'income' | 'expense',
@@ -163,6 +183,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     setLoading(false);
   }, [user, monthStart, monthEnd, costCenters]);
 
+  // Busca a lista de bancos/cartões já digitados antes, para sugerir no formulário.
   const fetchSavedBanks = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
@@ -177,17 +198,20 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   }, [user]);
 
+  // Ao abrir/entrar no usuário: carrega categorias e bancos salvos.
   useEffect(() => {
     fetchCostCenters();
     fetchSavedBanks();
   }, [fetchCostCenters, fetchSavedBanks]);
 
+  // Quando as categorias chegam (ou o mês muda), recarrega os lançamentos.
   useEffect(() => {
     if (costCenters.length > 0 || !loading) {
       fetchTransactions();
     }
   }, [fetchTransactions, costCenters]);
 
+  // Cria um novo lançamento. Se for recorrente, gera automaticamente as parcelas futuras.
   const addTransaction = async (input: TransactionInput): Promise<string | null> => {
     if (!user) return null;
 
@@ -209,7 +233,7 @@ export function useFinancialFlow(selectedMonth: Date) {
       recurrence_mode: input.recurrence_mode || null,
     };
 
-    // Insert the first transaction
+    // Grava o primeiro lançamento (o "pai" da série, se houver recorrência).
     const { data: parentData, error } = await supabase
       .from('financial_transactions')
       .insert(base)
@@ -221,16 +245,17 @@ export function useFinancialFlow(selectedMonth: Date) {
       return null;
     }
 
-    // If recurring, generate future occurrences
+    // Se for recorrente, cria as próximas ocorrências (parcelas) apontando para o pai.
     if (input.is_recurring && parentData) {
       const parentId = parentData.id;
       const futureInserts = [];
       const baseDate = parseISO(input.date);
-      const interval = input.recurrence_interval || 1;
-      const type = input.recurrence_type || 'months';
-      // installments=null means continuous (project 12 months ahead)
+      const interval = input.recurrence_interval || 1;   // de quantos em quantos (ex.: a cada 1 mês)
+      const type = input.recurrence_type || 'months';    // unidade: dias/semanas/meses/anos
+      // Sem número de parcelas definido = recorrência contínua (projeta até 60 ocorrências).
       const totalInstallments = input.installments ? input.installments : 60;
 
+      // Calcula a data de cada parcela futura conforme a unidade e o intervalo.
       for (let i = 1; i < totalInstallments; i++) {
         let nextDate: Date;
         switch (type) {
@@ -256,6 +281,7 @@ export function useFinancialFlow(selectedMonth: Date) {
         });
       }
 
+      // Grava todas as parcelas futuras de uma vez só.
       if (futureInserts.length > 0) {
         await supabase.from('financial_transactions').insert(futureInserts);
       }
@@ -267,10 +293,11 @@ export function useFinancialFlow(selectedMonth: Date) {
     return parentData?.id || null;
   };
 
+  // Atualiza um lançamento. "scope" define se altera só ele ('single') ou ele e os seguintes ('from_date').
   const updateTransaction = async (id: string, input: Partial<TransactionInput>, scope: 'single' | 'from_date' = 'single', fromDate?: string) => {
     if (!user) return;
 
-    // Strip non-DB fields and undefined values before sending to Supabase
+    // Remove campos que não existem no banco e valores vazios antes de enviar ao Supabase.
     const { installments: _inst, ...rest } = input;
     const dbInput: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(rest)) {
@@ -282,22 +309,22 @@ export function useFinancialFlow(selectedMonth: Date) {
     console.log('[updateTransaction] scope:', scope, 'id:', id, 'dbInput:', JSON.stringify(dbInput));
 
     if (scope === 'single') {
-      // Fetch authoritative state from DB to avoid stale-state bugs
+      // Lê o estado atual direto do banco (fonte da verdade) para evitar erros com dados desatualizados na tela.
       const { data: dbTxn } = await supabase
         .from('financial_transactions')
         .select('id, is_recurring, parent_transaction_id, recurrence_mode')
         .eq('id', id)
         .maybeSingle();
 
-      const wasRecurring = dbTxn?.is_recurring || !!dbTxn?.parent_transaction_id;
-      const nowRecurring = input.is_recurring === true;
+      const wasRecurring = dbTxn?.is_recurring || !!dbTxn?.parent_transaction_id; // já era recorrente?
+      const nowRecurring = input.is_recurring === true;                          // vai passar a ser recorrente?
 
-      // Detect recurrence mode change (e.g. installments -> continuous)
+      // Detecta mudança no tipo de recorrência (ex.: de parcelado para contínuo).
       const oldMode = dbTxn?.recurrence_mode || 'installments';
       const newMode = input.recurrence_mode || oldMode;
       const modeChanged = wasRecurring && nowRecurring && oldMode !== newMode;
 
-      // Check DB for existing children
+      // Verifica no banco se já existem parcelas "filhas" desse lançamento.
       const parentId = dbTxn?.parent_transaction_id || id;
       let hasChildrenInDb = false;
       if (nowRecurring) {
@@ -309,16 +336,17 @@ export function useFinancialFlow(selectedMonth: Date) {
         hasChildrenInDb = (count || 0) > 0;
       }
 
+      // Só gera parcelas se virou recorrente agora (e ainda não tinha filhas) ou se o modo mudou.
       const shouldGenerateInstallments = nowRecurring && (!wasRecurring && !hasChildrenInDb || modeChanged);
 
-      // If mode changed, delete old children first so we can regenerate
+      // Se o modo mudou, apaga as parcelas antigas primeiro para poder recriá-las.
       if (modeChanged && hasChildrenInDb) {
         await supabase
           .from('financial_transactions')
           .delete()
           .eq('parent_transaction_id', parentId)
           .eq('user_id', user.id);
-        // If this transaction is a child, also update the parent
+        // Se o lançamento clicado é uma parcela filha, atualiza também o lançamento pai.
         if (dbTxn?.parent_transaction_id) {
           await supabase
             .from('financial_transactions')
@@ -328,6 +356,7 @@ export function useFinancialFlow(selectedMonth: Date) {
         }
       }
 
+      // Salva a alteração no próprio lançamento clicado.
       const { data: updateData, error } = await supabase
         .from('financial_transactions')
         .update(dbInput)
@@ -336,10 +365,10 @@ export function useFinancialFlow(selectedMonth: Date) {
         .select();
       console.log('[updateTransaction] single result:', JSON.stringify(updateData), 'error:', error);
 
-      // Generate new installments when recurrence is enabled or mode changed
+      // Gera novas parcelas quando a recorrência foi ligada agora ou o modo mudou.
       if (!error && shouldGenerateInstallments) {
         const existingTxn = transactions.find(t => t.id === id);
-        // For mode change, use the root parent as the anchor
+        // Na mudança de modo, usa o lançamento pai como âncora (ponto de partida) das novas parcelas.
         const anchorId = modeChanged ? parentId : id;
         const baseDate = parseISO(input.date || existingTxn?.date || format(new Date(), 'yyyy-MM-dd'));
         const interval = input.recurrence_interval || 1;
@@ -381,6 +410,7 @@ export function useFinancialFlow(selectedMonth: Date) {
         return;
       }
     } else if (scope === 'from_date' && fromDate) {
+      // Edição em lote: altera o lançamento clicado e todas as parcelas a partir daquela data.
       const { date: newDate, installments: _inst2, ...rawBulk } = input;
       const bulkInput: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(rawBulk)) {
@@ -389,7 +419,7 @@ export function useFinancialFlow(selectedMonth: Date) {
         }
       }
 
-      // Update the clicked transaction itself WITH the date change
+      // Atualiza o próprio lançamento clicado, incluindo a mudança de data.
       const { error: selfError } = await supabase
         .from('financial_transactions')
         .update(dbInput)
@@ -400,7 +430,7 @@ export function useFinancialFlow(selectedMonth: Date) {
         return;
       }
 
-      // Fetch and update siblings
+      // Busca as parcelas "irmãs" (mesma série) para atualizá-las também.
       const { data: txn } = await supabase
         .from('financial_transactions')
         .select('id, parent_transaction_id')
@@ -409,6 +439,8 @@ export function useFinancialFlow(selectedMonth: Date) {
 
       if (txn) {
         const parentId = txn.parent_transaction_id || txn.id;
+
+        // Pega as irmãs da mesma série, a partir da data escolhida (menos a que já foi atualizada acima).
 
         const { data: siblings } = await supabase
           .from('financial_transactions')
@@ -420,11 +452,13 @@ export function useFinancialFlow(selectedMonth: Date) {
           .order('date');
 
         if (siblings && siblings.length > 0) {
+          // Se a data mudou, calcula em quantos dias todas as parcelas seguintes devem ser deslocadas.
           const hasDateChange = newDate && newDate !== fromDate;
           const dayOffset = hasDateChange
             ? Math.round((parseISO(newDate).getTime() - parseISO(fromDate).getTime()) / (1000 * 60 * 60 * 24))
             : 0;
 
+          // Aplica as mesmas alterações a cada irmã, deslocando a data quando necessário.
           for (const sibling of siblings) {
             const updatePayload: Record<string, unknown> = { ...bulkInput };
             if (dayOffset !== 0) {
@@ -446,7 +480,9 @@ export function useFinancialFlow(selectedMonth: Date) {
     fetchTransactions();
   };
 
-  // Attachment helpers
+  // ---- Anexos (comprovantes) ligados a um lançamento ----
+
+  // Envia um arquivo para o armazenamento e registra o anexo no banco.
   const uploadAttachment = async (transactionId: string, file: File) => {
     if (!user) return null;
     const filePath = `${user.id}/${transactionId}/${Date.now()}_${file.name}`;
@@ -471,6 +507,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     return filePath;
   };
 
+  // Lista os anexos de um lançamento.
   const fetchAttachments = async (transactionId: string) => {
     if (!user) return [];
     const { data } = await supabase
@@ -482,22 +519,25 @@ export function useFinancialFlow(selectedMonth: Date) {
     return data || [];
   };
 
+  // Remove um anexo tanto do armazenamento quanto do banco.
   const deleteAttachment = async (attachmentId: string, filePath: string) => {
     if (!user) return;
     await supabase.storage.from('transaction-attachments').remove([filePath]);
     await supabase.from('transaction_attachments').delete().eq('id', attachmentId).eq('user_id', user.id);
   };
 
+  // Gera um link temporário (1 hora) para visualizar/baixar o anexo com segurança.
   const getAttachmentUrl = async (filePath: string) => {
     const { data } = await supabase.storage.from('transaction-attachments').createSignedUrl(filePath, 3600);
     return data?.signedUrl || null;
   };
 
+  // Exclui um lançamento. Com deleteRelated=true, apaga também toda a série de parcelas.
   const deleteTransaction = async (id: string, deleteRelated = false) => {
     if (!user) return;
 
     if (deleteRelated) {
-      // Find the transaction to determine the parent chain
+      // Descobre a qual série (pai) o lançamento pertence para apagar tudo.
       const { data: txn } = await supabase
         .from('financial_transactions')
         .select('id, parent_transaction_id')
@@ -506,13 +546,13 @@ export function useFinancialFlow(selectedMonth: Date) {
 
       if (txn) {
         const parentId = txn.parent_transaction_id || txn.id;
-        // Delete all children of the parent
+        // Apaga todas as parcelas filhas.
         await supabase
           .from('financial_transactions')
           .delete()
           .eq('parent_transaction_id', parentId)
           .eq('user_id', user.id);
-        // Delete the parent itself
+        // Apaga o lançamento pai.
         await supabase
           .from('financial_transactions')
           .delete()
@@ -531,6 +571,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     fetchTransactions();
   };
 
+  // Marca/desmarca um lançamento como pago. Atualiza a tela na hora, sem recarregar tudo.
   const togglePaid = async (id: string, currentPaid: boolean) => {
     if (!user) return;
     const { error } = await supabase
@@ -543,6 +584,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   };
 
+  // Cria uma nova categoria (centro de custo) para o usuário.
   const addCostCenter = async (name: string, icon?: string, color?: string) => {
     if (!user) return;
     const { error } = await supabase.from('cost_centers').insert({
@@ -556,6 +598,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   };
 
+  // Edita uma categoria existente (nome, ícone ou cor).
   const updateCostCenter = async (id: string, updates: { name?: string; icon?: string; color?: string }) => {
     if (!user) return;
     const { error } = await supabase
@@ -568,6 +611,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   };
 
+  // Exclui uma categoria do usuário.
   const deleteCostCenter = async (id: string) => {
     if (!user) return;
     const { error } = await supabase
@@ -580,12 +624,14 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   };
 
+  // Resumo do mês: soma das receitas, soma das despesas e o saldo (recalculado quando os lançamentos mudam).
   const summary = useMemo(() => {
     const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
     const expense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
     return { income, expense, balance: income - expense };
   }, [transactions]);
 
+  // Busca ampla de lançamentos (fora do mês atual), com filtros de texto, categoria e período de datas.
   const searchAllTransactions = useCallback(async (query?: string, costCenterId?: string, dateFrom?: string, dateTo?: string): Promise<FinancialTransaction[]> => {
     if (!user) return [];
     let q = supabase
@@ -594,6 +640,7 @@ export function useFinancialFlow(selectedMonth: Date) {
       .eq('user_id', user.id)
       .order('date', { ascending: true });
 
+    // Aplica os filtros opcionais informados pelo usuário.
     if (dateFrom) q = q.gte('date', dateFrom);
     if (dateTo) q = q.lte('date', dateTo);
     if (costCenterId && costCenterId !== 'all') q = q.eq('cost_center_id', costCenterId);
@@ -607,6 +654,7 @@ export function useFinancialFlow(selectedMonth: Date) {
       cost_center: costCenters.find(cc => cc.id === t.cost_center_id),
     }));
 
+    // Filtro por texto: casa com a descrição ou com o valor formatado (ex.: "R$ 50,00").
     if (query && query.trim()) {
       const lq = query.toLowerCase();
       results = results.filter(t =>
@@ -618,6 +666,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     return results;
   }, [user, costCenters]);
 
+  // Entrega para a tela os dados e todas as ações disponíveis das finanças.
   return {
     transactions,
     costCenters,

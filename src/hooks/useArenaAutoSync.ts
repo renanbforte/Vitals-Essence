@@ -1,3 +1,11 @@
+// ============================================================================
+// useArenaAutoSync  —  SINCRONIZA O PROGRESSO DIÁRIO COM A ARENA (AUTOMÁTICO)
+// ----------------------------------------------------------------------------
+// Hook que, sempre que o usuário mexe no acompanhamento do dia (treino, refeições,
+// água), calcula a pontuação e envia sozinho para todos os grupos de desafio
+// (Arena) dos quais ele participa. Roda em segundo plano, sem check-in manual.
+// ============================================================================
+
 import { useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,18 +18,22 @@ import type { DailyTracking } from '@/hooks/useDailyTracking';
  */
 export function useArenaAutoSync(tracking: DailyTracking | null, selectedDate: Date) {
   const { user } = useAuth();
+  // Guarda uma "impressão digital" do último estado sincronizado, para não
+  // reenviar dados iguais repetidas vezes (evita trabalho e escrita à toa).
   const lastSyncedRef = useRef<string>('');
 
   useEffect(() => {
+    // Sem dados de acompanhamento ou sem usuário logado, não faz nada.
     if (!tracking || !user) return;
 
+    // Só sincroniza quando a data escolhida na tela é HOJE (ignora dias passados).
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const sel = new Date(selectedDate);
     sel.setHours(0, 0, 0, 0);
     if (sel.getTime() !== today.getTime()) return; // only sync today
 
-    // Build a fingerprint of the current state
+    // Monta um resumo (fingerprint) do estado atual: água, refeições e treino.
     const meals = [
       tracking.breakfast_completed,
       tracking.morning_snack_completed,
@@ -34,29 +46,34 @@ export function useArenaAutoSync(tracking: DailyTracking | null, selectedDate: D
     const waterMl = tracking.water_ml || 0;
     const workoutDone = tracking.workout_completed || false;
 
+    // Se o estado atual é igual ao último já sincronizado, encerra sem reenviar.
     const fingerprint = `${waterMl}-${completedMeals}-${workoutDone}`;
     if (fingerprint === lastSyncedRef.current) return;
     lastSyncedRef.current = fingerprint;
 
-    // Compute scores
+    // Calcula as três pontuações (0 a 100): hidratação (meta de 3000ml),
+    // nutrição (6 refeições) e treino (100 se feito, 0 se não).
     const hydrationScore = Math.min(100, Math.round((waterMl / 3000) * 100));
     const nutritionScore = Math.round((completedMeals / 6) * 100);
     const workoutScore = workoutDone ? 100 : 0;
     const dateStr = sel.toISOString().split('T')[0];
 
+    // Função que efetivamente envia as pontuações para os grupos da Arena.
     const syncToArena = async () => {
-      // Get all groups the user is in
+      // Busca os grupos em que o usuário entrou como membro (convite aceito).
       const { data: memberships } = await supabase
         .from('arena_members')
         .select('group_id')
         .eq('user_id', user.id)
         .eq('status', 'accepted');
 
+      // Busca também os grupos criados pelo próprio usuário.
       const { data: ownGroups } = await supabase
         .from('arena_groups')
         .select('id, pillar_hydration, pillar_nutrition, pillar_workout')
         .eq('creator_id', user.id);
 
+      // Junta os IDs dos grupos (próprios + de membro) sem repetir nenhum.
       const memberGroupIds = (memberships || []).map(m => m.group_id);
       const allGroupIds = [
         ...(ownGroups || []).map(g => g.id),
@@ -65,7 +82,8 @@ export function useArenaAutoSync(tracking: DailyTracking | null, selectedDate: D
 
       if (allGroupIds.length === 0) return;
 
-      // Fetch group configs
+      // Busca a configuração de cada grupo: quais "pilares" ele acompanha
+      // (hidratação, nutrição, treino). Cada grupo pode cobrar pilares diferentes.
       const { data: groups } = await supabase
         .from('arena_groups')
         .select('id, pillar_hydration, pillar_nutrition, pillar_workout')
@@ -73,15 +91,17 @@ export function useArenaAutoSync(tracking: DailyTracking | null, selectedDate: D
 
       if (!groups) return;
 
+      // Para cada grupo, calcula a pontuação considerando só os pilares ativos.
       for (const group of groups) {
         const hScore = group.pillar_hydration ? hydrationScore : 0;
         const nScore = group.pillar_nutrition ? nutritionScore : 0;
         const wScore = group.pillar_workout ? workoutScore : 0;
 
+        // A pontuação total é a média apenas dos pilares que o grupo exige.
         const activePillars = [group.pillar_hydration, group.pillar_nutrition, group.pillar_workout].filter(Boolean).length;
         const total = activePillars > 0 ? Math.round((hScore + nScore + wScore) / activePillars) : 0;
 
-        // Get current streak
+        // Pega a última pontuação registrada para calcular a sequência (streak).
         const { data: prevScores } = await supabase
           .from('arena_daily_scores')
           .select('current_streak, date')
@@ -90,6 +110,8 @@ export function useArenaAutoSync(tracking: DailyTracking | null, selectedDate: D
           .order('date', { ascending: false })
           .limit(1);
 
+        // Regra da sequência: se o último registro foi ontem e houve pontuação,
+        // soma +1; se já é do mesmo dia, mantém; caso contrário, recomeça em 1.
         let streak = 1;
         if (prevScores && prevScores.length > 0) {
           const prevDate = new Date(prevScores[0].date);
@@ -102,6 +124,7 @@ export function useArenaAutoSync(tracking: DailyTracking | null, selectedDate: D
           }
         }
 
+        // Grava (cria ou atualiza) a pontuação do dia daquele usuário no grupo.
         await supabase
           .from('arena_daily_scores')
           .upsert({
@@ -117,6 +140,8 @@ export function useArenaAutoSync(tracking: DailyTracking | null, selectedDate: D
       }
     };
 
+    // Dispara a sincronização; se der erro, apenas registra no console.
     syncToArena().catch(console.error);
+    // O efeito roda novamente sempre que o acompanhamento, a data ou o usuário mudam.
   }, [tracking, selectedDate, user]);
 }

@@ -1,7 +1,18 @@
+// ============================================================================
+// useUserWorkoutPlans  —  PLANO DE TREINOS SEMANAL DO USUÁRIO
+// ----------------------------------------------------------------------------
+// Este hook busca, cria, edita e apaga os treinos que o usuário montou para a
+// semana (guardados no Supabase). Se a pessoa ainda não montou nada, mostra um
+// plano padrão pronto. Usado nas telas de treino do app.
+// ============================================================================
+
+// Ferramentas do React (estado, efeitos) e a conexão com o banco Supabase.
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+// Descobre quem é o usuário logado no momento.
 import { useAuth } from '@/contexts/AuthContext';
 
+// Formato (molde) de um treino: descreve os campos que cada treino tem.
 export interface UserWorkoutPlan {
   id?: string;
   user_id: string;
@@ -15,6 +26,8 @@ export interface UserWorkoutPlan {
   order_index: number;
 }
 
+// Lista de treinos padrão (sugestão de semana), mostrada quando o usuário ainda
+// não criou o próprio plano. Cada item traz dia da semana, tipo, nome, etc.
 // Default workouts (used when user has no custom plan)
 export const defaultWorkouts: Omit<UserWorkoutPlan, 'id' | 'user_id'>[] = [
   {
@@ -92,11 +105,15 @@ export const defaultWorkouts: Omit<UserWorkoutPlan, 'id' | 'user_id'>[] = [
   },
 ];
 
+// Hook principal: entrega os dados e as ações de treino para as telas do app.
 export function useUserWorkoutPlans() {
   const { user } = useAuth();
+  // Guarda a lista de treinos que aparece na tela.
   const [workoutPlans, setWorkoutPlans] = useState<UserWorkoutPlan[]>([]);
+  // Indica se ainda está carregando (para mostrar "aguarde" na tela).
   const [loading, setLoading] = useState(true);
 
+  // Busca no banco os treinos do usuário logado, em ordem definida.
   const fetchWorkoutPlans = useCallback(async () => {
     if (!user) return;
 
@@ -111,10 +128,12 @@ export function useUserWorkoutPlans() {
       console.error('Error fetching workout plans:', error);
     }
 
+    // Se o usuário não tem plano próprio, mostra os treinos padrão.
     // If user has no custom plans, use defaults
     if (!data || data.length === 0) {
       setWorkoutPlans(defaultWorkouts.map(w => ({ ...w, user_id: user.id })));
     } else {
+      // Caso tenha, converte cada registro do banco para o formato da tela.
       const userPlans: UserWorkoutPlan[] = data.map(p => ({
         id: p.id,
         user_id: p.user_id,
@@ -133,13 +152,16 @@ export function useUserWorkoutPlans() {
     setLoading(false);
   }, [user]);
 
+  // Assim que o hook é usado (ou o usuário muda), busca os treinos automaticamente.
   useEffect(() => {
     fetchWorkoutPlans();
   }, [fetchWorkoutPlans]);
 
+  // Salva um treino: se já tem id, atualiza o existente; senão, cria um novo.
   const saveWorkoutPlan = async (workoutPlan: UserWorkoutPlan) => {
     if (!user) return { error: new Error('Not authenticated') };
 
+    // Monta o pacote de dados que será gravado no banco.
     const planData = {
       user_id: user.id,
       day_of_week: workoutPlan.day_of_week,
@@ -153,23 +175,26 @@ export function useUserWorkoutPlans() {
     };
 
     if (workoutPlan.id) {
+      // Já existe: atualiza o treino que tem esse id.
       const { error } = await supabase
         .from('user_workout_plans')
         .update(planData)
         .eq('id', workoutPlan.id);
-      
+
       if (!error) await fetchWorkoutPlans();
       return { error };
     } else {
+      // Novo: insere o treino no banco.
       const { error } = await supabase
         .from('user_workout_plans')
         .insert([planData]);
-      
+
       if (!error) await fetchWorkoutPlans();
       return { error };
     }
   };
 
+  // Apaga um treino específico (pelo id) e recarrega a lista.
   const deleteWorkoutPlan = async (workoutId: string) => {
     if (!user) return { error: new Error('Not authenticated') };
 
@@ -182,11 +207,13 @@ export function useUserWorkoutPlans() {
     return { error };
   };
 
+  // Adiciona um treino novo ao final da lista (calcula a próxima posição).
   const addWorkoutPlan = async (workoutPlan: Omit<UserWorkoutPlan, 'id' | 'user_id'>) => {
     if (!user) return { error: new Error('Not authenticated') };
 
+    // Descobre a maior posição atual para colocar o novo treino logo depois.
     const maxOrder = workoutPlans.reduce((max, p) => Math.max(max, p.order_index), -1);
-    
+
     const planData = {
       user_id: user.id,
       ...workoutPlan,
@@ -201,16 +228,19 @@ export function useUserWorkoutPlans() {
     return { error };
   };
 
+  // Filtra os treinos de um dia da semana (usado na visão diária).
   // Get all workouts for a specific day of week (for daily view)
   const getWorkoutsForDay = (dayOfWeek: number): UserWorkoutPlan[] => {
     return workoutPlans.filter(w => w.day_of_week === dayOfWeek);
   };
 
+  // Soma quantas vezes por semana o usuário treina no total.
   // Get total weekly frequency
   const getTotalWeeklyWorkouts = (): number => {
     return workoutPlans.reduce((sum, w) => sum + (w.weekly_frequency || 1), 0);
   };
 
+  // Entrega para as telas os dados e todas as ações disponíveis.
   return {
     workoutPlans,
     loading,

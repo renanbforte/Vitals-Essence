@@ -1,9 +1,18 @@
+// ============================================================================
+// useShoppingData.ts  —  MÓDULO DE COMPRAS (MERCADO E HISTÓRICO DE PREÇOS)
+// ----------------------------------------------------------------------------
+// Reúne vários hooks do módulo de compras: lugares (mercados), produtos, histórico
+// de preços, modelos de lista (templates) e sessões de compra em andamento. Usa o
+// React Query para buscar/gravar no Supabase e manter a tela sempre atualizada.
+// ============================================================================
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
-// Types
+// --- Formatos (tipos) dos dados usados no módulo de compras ---
+// Lugar de compra (ex.: um mercado ou feira).
 export interface ShoppingPlace {
   id: string;
   user_id: string;
@@ -13,6 +22,7 @@ export interface ShoppingPlace {
   active: boolean;
 }
 
+// Produto (nome em MAIÚSCULAS, segmento/categoria e unidade padrão).
 export interface ShoppingProduct {
   id: string;
   user_id: string;
@@ -22,6 +32,7 @@ export interface ShoppingProduct {
   active: boolean;
 }
 
+// Registro histórico de um preço pago por um produto, em um lugar e data.
 export interface PriceHistory {
   id: string;
   product_id: string;
@@ -33,6 +44,7 @@ export interface PriceHistory {
   observation: string | null;
 }
 
+// Modelo de lista de compras reutilizável (ex.: "Lista base do mercado").
 export interface ShoppingTemplate {
   id: string;
   user_id: string;
@@ -40,6 +52,7 @@ export interface ShoppingTemplate {
   created_at: string;
 }
 
+// Item que compõe um modelo de lista, com ordem e quantidade sugerida.
 export interface TemplateItem {
   id: string;
   template_id: string;
@@ -48,6 +61,8 @@ export interface TemplateItem {
   suggested_quantity: number;
 }
 
+// Sessão de compra: uma "ida ao mercado" em andamento, com status e
+// possibilidade de compartilhamento com outras pessoas.
 export interface ShoppingSession {
   id: string;
   user_id: string;
@@ -58,6 +73,7 @@ export interface ShoppingSession {
   created_at: string;
 }
 
+// Item dentro de uma sessão de compra (com preço, quantidade e se já está no carrinho).
 export interface SessionItem {
   id: string;
   session_id: string;
@@ -71,6 +87,7 @@ export interface SessionItem {
   order_index: number;
 }
 
+// Categorias (segmentos) fixas usadas para organizar os produtos na lista.
 export const SEGMENTS = [
   'MERCEARIA',
   'PADARIA E LATICÍNIOS',
@@ -82,6 +99,8 @@ export const SEGMENTS = [
   'HIGIENE PESSOAL',
 ] as const;
 
+// Lista pronta de produtos comuns, já separados por categoria. Serve para
+// preencher automaticamente a lista base do usuário na primeira vez (ver seedDefaults).
 const DEFAULT_PRODUCTS: { name: string; segment: string }[] = [
   // MERCEARIA
   { name: 'ARROZ', segment: 'MERCEARIA' },
@@ -159,11 +178,14 @@ const DEFAULT_PRODUCTS: { name: string; segment: string }[] = [
   { name: 'LÂMINA DE BARBEAR', segment: 'HIGIENE PESSOAL' },
 ];
 
+// Hook dos LUGARES de compra (mercados). Lista os lugares ativos e permite
+// criar, atualizar e "remover" (na verdade, apenas marca como inativo).
 export function useShoppingPlaces() {
   const { user } = useAuth();
-  const qc = useQueryClient();
+  const qc = useQueryClient(); // controla o cache do React Query
   const { toast } = useToast();
 
+  // Busca os lugares ativos do usuário, em ordem alfabética.
   const query = useQuery({
     queryKey: ['shopping-places', user?.id],
     queryFn: async () => {
@@ -176,9 +198,10 @@ export function useShoppingPlaces() {
       if (error) throw error;
       return data as ShoppingPlace[];
     },
-    enabled: !!user,
+    enabled: !!user, // só busca se houver usuário logado
   });
 
+  // Cria um novo lugar; ao terminar, atualiza a lista e avisa na tela.
   const create = useMutation({
     mutationFn: async (place: { name: string; place_type?: string; address?: string }) => {
       const { data, error } = await supabase
@@ -195,6 +218,7 @@ export function useShoppingPlaces() {
     },
   });
 
+  // Atualiza os dados de um lugar existente.
   const update = useMutation({
     mutationFn: async (place: { id: string; name?: string; place_type?: string; address?: string }) => {
       const { id, ...rest } = place;
@@ -207,6 +231,7 @@ export function useShoppingPlaces() {
     },
   });
 
+  // "Remove" o lugar apenas marcando-o como inativo (não apaga do banco, preservando o histórico).
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('shopping_places').update({ active: false }).eq('id', id);
@@ -218,11 +243,14 @@ export function useShoppingPlaces() {
   return { places: query.data || [], isLoading: query.isLoading, create, update, remove };
 }
 
+// Hook dos PRODUTOS. Lista os produtos ativos, cria novos, remove (inativa) e
+// tem o "seedDefaults" que preenche a lista base com produtos comuns.
 export function useShoppingProducts() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
 
+  // Busca os produtos ativos, ordenados por categoria e depois por nome.
   const query = useQuery({
     queryKey: ['shopping-products', user?.id],
     queryFn: async () => {
@@ -239,6 +267,7 @@ export function useShoppingProducts() {
     enabled: !!user,
   });
 
+  // Cria um produto novo, garantindo que o nome fique em MAIÚSCULAS.
   const create = useMutation({
     mutationFn: async (product: { name_caps: string; segment: string; default_unit?: string }) => {
       const { data, error } = await supabase
@@ -254,6 +283,8 @@ export function useShoppingProducts() {
     },
   });
 
+  // Preenche a lista inicial: insere todos os produtos padrão e cria um template
+  // "LISTA BASE – MERCADO" já com todos esses produtos como itens.
   const seedDefaults = useMutation({
     mutationFn: async () => {
       const rows = DEFAULT_PRODUCTS.map(p => ({
@@ -268,7 +299,7 @@ export function useShoppingProducts() {
         .select();
       if (error) throw error;
 
-      // Create default template with all products
+      // Cria o template padrão que agrupará todos os produtos recém-inseridos.
       const { data: template, error: tErr } = await supabase
         .from('shopping_templates')
         .insert({ name: 'LISTA BASE – MERCADO', user_id: user!.id })
@@ -276,6 +307,7 @@ export function useShoppingProducts() {
         .single();
       if (tErr) throw tErr;
 
+      // Liga cada produto criado ao template, na ordem em que foram inseridos.
       if (insertedProducts && template) {
         const templateItems = insertedProducts.map((p: any, idx: number) => ({
           template_id: template.id,
@@ -295,6 +327,7 @@ export function useShoppingProducts() {
     },
   });
 
+  // "Remove" um produto marcando-o como inativo (preserva o histórico de preços).
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('shopping_products').update({ active: false }).eq('id', id);
@@ -306,6 +339,8 @@ export function useShoppingProducts() {
   return { products: query.data || [], isLoading: query.isLoading, create, seedDefaults, remove };
 }
 
+// Hook do HISTÓRICO DE PREÇOS de um produto: retorna as últimas 50 compras,
+// da mais recente para a mais antiga.
 export function usePriceHistory(productId?: string) {
   const { user } = useAuth();
 
@@ -326,6 +361,9 @@ export function usePriceHistory(productId?: string) {
   });
 }
 
+// Hook dos MELHORES PREÇOS: para uma lista de produtos, calcula o menor preço já
+// pago (bestEver) e, se um lugar for informado, o melhor e o mais recente preço
+// naquele lugar (bestAtPlace/lastAtPlace). Ajuda a saber onde compensa comprar.
 export function useBestPrices(productIds: string[], placeId?: string | null) {
   const { user } = useAuth();
 
@@ -334,6 +372,7 @@ export function useBestPrices(productIds: string[], placeId?: string | null) {
     queryFn: async () => {
       if (productIds.length === 0) return {};
 
+      // Traz todo o histórico desses produtos, do preço mais barato ao mais caro.
       const { data, error } = await supabase
         .from('shopping_price_history')
         .select('*')
@@ -342,18 +381,19 @@ export function useBestPrices(productIds: string[], placeId?: string | null) {
         .order('unit_price', { ascending: true });
       if (error) throw error;
 
+      // Percorre o histórico montando, por produto, os "melhores preços" de interesse.
       const result: Record<string, { bestEver?: PriceHistory; bestAtPlace?: PriceHistory; lastAtPlace?: PriceHistory }> = {};
 
       for (const row of (data || []) as PriceHistory[]) {
         if (!result[row.product_id]) result[row.product_id] = {};
         const entry = result[row.product_id];
 
-        // Best ever
+        // Menor preço já pago em qualquer lugar.
         if (!entry.bestEver || row.unit_price < entry.bestEver.unit_price) {
           entry.bestEver = row;
         }
 
-        // Best/last at specific place
+        // Considerando apenas o lugar escolhido: guarda o mais barato e o mais recente.
         if (placeId && row.place_id === placeId) {
           if (!entry.bestAtPlace || row.unit_price < entry.bestAtPlace.unit_price) {
             entry.bestAtPlace = row;
@@ -370,6 +410,8 @@ export function useBestPrices(productIds: string[], placeId?: string | null) {
   });
 }
 
+// Hook dos MODELOS DE LISTA (templates). Lista, cria e apaga modelos que servem
+// de base para montar novas sessões de compra rapidamente.
 export function useShoppingTemplates() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -416,6 +458,8 @@ export function useShoppingTemplates() {
   return { templates: query.data || [], isLoading: query.isLoading, create, remove };
 }
 
+// Hook dos ITENS de um modelo de lista: lista os itens do template e permite
+// adicionar ou remover produtos daquele modelo.
 export function useTemplateItems(templateId?: string) {
   const qc = useQueryClient();
 
@@ -452,6 +496,8 @@ export function useTemplateItems(templateId?: string) {
   return { items: query.data || [], isLoading: query.isLoading, addItem, removeItem };
 }
 
+// Hook das SESSÕES DE COMPRA (as "idas ao mercado"). Lista, cria (podendo partir
+// de um template), atualiza, apaga e finaliza a compra salvando os preços no histórico.
 export function useShoppingSessions() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -470,6 +516,7 @@ export function useShoppingSessions() {
     enabled: !!user,
   });
 
+  // Cria uma nova sessão de compra. Se veio de um template, copia os itens do modelo.
   const create = useMutation({
     mutationFn: async (input: { title: string; place_id?: string; templateId?: string }) => {
       const { data: session, error } = await supabase
@@ -479,7 +526,7 @@ export function useShoppingSessions() {
         .single();
       if (error) throw error;
 
-      // If from template, copy items
+      // Se a sessão foi criada a partir de um modelo, copia os itens dele para a sessão.
       if (input.templateId) {
         const { data: templateItems } = await supabase
           .from('shopping_template_items')
@@ -506,6 +553,7 @@ export function useShoppingSessions() {
     },
   });
 
+  // Atualiza dados da sessão (título, lugar, status, compartilhamento).
   const updateSession = useMutation({
     mutationFn: async ({ id, ...updates }: { id: string; place_id?: string | null; status?: string; shared_with?: string[]; title?: string }) => {
       const { error } = await supabase.from('shopping_sessions').update(updates).eq('id', id);
@@ -514,6 +562,7 @@ export function useShoppingSessions() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shopping-sessions'] }),
   });
 
+  // Apaga a sessão de compra definitivamente.
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('shopping_sessions').delete().eq('id', id);
@@ -522,9 +571,11 @@ export function useShoppingSessions() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['shopping-sessions'] }),
   });
 
+  // Finaliza a compra: exige um lugar selecionado, registra no histórico de preços
+  // tudo que estava no carrinho e marca a sessão como "FINALIZADA".
   const finalize = useMutation({
     mutationFn: async (sessionId: string) => {
-      // Get session with place
+      // Busca a sessão; sem um lugar definido, não é possível salvar o histórico de preços.
       const { data: session } = await supabase
         .from('shopping_sessions')
         .select('*')
@@ -532,13 +583,14 @@ export function useShoppingSessions() {
         .single();
       if (!session || !session.place_id) throw new Error('Selecione um lugar antes de finalizar');
 
-      // Get items in cart
+      // Pega apenas os itens que foram colocados no carrinho.
       const { data: items } = await supabase
         .from('shopping_session_items')
         .select('*')
         .eq('session_id', sessionId)
         .eq('in_cart', true);
 
+      // Para cada item comprado, cria uma linha no histórico de preços (com a data de hoje).
       if (items && items.length > 0) {
         const historyRows = items.map((item: any) => ({
           user_id: user!.id,
@@ -552,7 +604,7 @@ export function useShoppingSessions() {
         await supabase.from('shopping_price_history').insert(historyRows);
       }
 
-      // Update status
+      // Marca a sessão como concluída.
       await supabase.from('shopping_sessions').update({ status: 'FINALIZADA' }).eq('id', sessionId);
     },
     onSuccess: () => {
@@ -565,6 +617,8 @@ export function useShoppingSessions() {
   return { sessions: query.data || [], isLoading: query.isLoading, create, updateSession, remove, finalize };
 }
 
+// Hook dos ITENS de uma sessão de compra: lista os itens do carrinho/lista e
+// permite adicionar, atualizar (preço, quantidade, marcar no carrinho) e remover.
 export function useSessionItems(sessionId?: string) {
   const qc = useQueryClient();
 

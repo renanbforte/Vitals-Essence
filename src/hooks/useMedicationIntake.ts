@@ -1,8 +1,17 @@
+// ============================================================================
+// useMedicationIntake  —  CONTROLE DE "TOMEI MEU REMÉDIO"
+// ----------------------------------------------------------------------------
+// Hook que controla, para o dia selecionado, quais doses de remédio o usuário
+// já marcou como tomadas. Cada dose é um remédio em um horário; o hook permite
+// marcar/desmarcar e saber se determinada dose já foi tomada.
+// ============================================================================
+
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 
+// Registro de uma dose: qual remédio, em qual horário, em qual dia e se foi tomada.
 export interface MedicationIntake {
   id: string;
   user_id: string;
@@ -13,13 +22,16 @@ export interface MedicationIntake {
   completed_at: string | null;
 }
 
+// Recebe a data selecionada e devolve o controle de doses daquele dia.
 export function useMedicationIntake(selectedDate: Date) {
   const { user } = useAuth();
-  const [intakeLogs, setIntakeLogs] = useState<MedicationIntake[]>([]);
+  const [intakeLogs, setIntakeLogs] = useState<MedicationIntake[]>([]); // doses registradas no dia
   const [loading, setLoading] = useState(true);
 
+  // Data escolhida no formato do banco (AAAA-MM-DD).
   const dateString = format(selectedDate, 'yyyy-MM-dd');
 
+  // Busca no banco os registros de doses deste usuário para o dia selecionado.
   const fetchIntakeLogs = useCallback(async () => {
     if (!user) return;
 
@@ -36,20 +48,23 @@ export function useMedicationIntake(selectedDate: Date) {
     setLoading(false);
   }, [user, dateString]);
 
+  // Recarrega os registros sempre que a data (ou o usuário) muda.
   useEffect(() => {
     fetchIntakeLogs();
   }, [fetchIntakeLogs]);
 
+  // Marca ou desmarca uma dose (remédio + horário). É o coração do hook:
+  // se ainda não existe registro, cria como "tomada"; se já existe, inverte o estado.
   const toggleIntake = useCallback(async (medicationId: string, scheduleTime: string) => {
     if (!user) return { error: new Error('User not authenticated') };
 
-    // Check if entry exists
+    // Procura se já existe registro para esse remédio nesse horário.
     const existingEntry = intakeLogs.find(
       log => log.medication_id === medicationId && log.schedule_time === scheduleTime
     );
 
     if (existingEntry) {
-      // Toggle the completed status
+      // Já existe: inverte entre tomada/não tomada e guarda a hora se foi tomada.
       const newCompleted = !existingEntry.completed;
       const { error } = await supabase
         .from('medication_intake_log')
@@ -72,7 +87,7 @@ export function useMedicationIntake(selectedDate: Date) {
 
       return { error };
     } else {
-      // Create new entry as completed
+      // Não existe ainda: cria o registro já marcado como tomado agora.
       const { data, error } = await supabase
         .from('medication_intake_log')
         .insert({
@@ -94,6 +109,7 @@ export function useMedicationIntake(selectedDate: Date) {
     }
   }, [user, dateString, intakeLogs]);
 
+  // Responde à tela: essa dose específica já foi tomada? (usado para marcar o "check").
   const isCompleted = useCallback((medicationId: string, scheduleTime: string): boolean => {
     const entry = intakeLogs.find(
       log => log.medication_id === medicationId && log.schedule_time === scheduleTime
@@ -101,6 +117,7 @@ export function useMedicationIntake(selectedDate: Date) {
     return entry?.completed ?? false;
   }, [intakeLogs]);
 
+  // Entrega os dados e as funções para a tela usar.
   return {
     intakeLogs,
     loading,

@@ -1,8 +1,20 @@
+// ============================================================================
+// useTasks.ts  —  GERENCIADOR DE TAREFAS DO USUARIO
+// ----------------------------------------------------------------------------
+// Busca, cria, atualiza e apaga as tarefas do usuario no Supabase. Alem disso,
+// calcula a PRIORIDADE (cor) e o GRUPO (agora/hoje/semana/depois) de cada
+// tarefa e monta um resumo do dia usado no card do Hub (tela inicial).
+// ============================================================================
+
+// Ferramentas do React (estados, efeitos, memorizacao de calculos), conexao
+// com o banco Supabase, dados do usuario logado e utilitarios de data/hora.
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format, isThisWeek, addMinutes, differenceInMinutes } from 'date-fns';
 
+// Molde (formato) de uma Tarefa: descreve todos os campos que uma tarefa tem
+// no banco de dados (titulo, datas, horarios, status, energia exigida, etc).
 export interface Task {
   id: string;
   user_id: string;
@@ -32,9 +44,12 @@ export interface Task {
   updated_at: string;
 }
 
+// As quatro cores possiveis de prioridade e os quatro grupos de tempo.
 export type TaskPriority = 'green' | 'yellow' | 'orange' | 'red';
 export type TaskGroup = 'agora' | 'hoje' | 'semana' | 'depois';
 
+// Calcula a COR de prioridade de uma tarefa (verde=tranquilo ... vermelho=urgente).
+// Usa a data/horario da tarefa comparados com o momento atual para decidir a cor.
 export function calculatePriority(task: Task): TaskPriority {
   if (task.status === 'feita') return 'green';
   
@@ -68,6 +83,8 @@ export function calculatePriority(task: Task): TaskPriority {
   return 'green';
 }
 
+// Decide em qual GRUPO de tempo a tarefa aparece na tela:
+// agora (proxima 1h), hoje, esta semana ou depois.
 export function getTaskGroup(task: Task): TaskGroup {
   if (task.status === 'feita') return 'hoje';
   
@@ -92,13 +109,19 @@ export function getTaskGroup(task: Task): TaskGroup {
   return 'depois';
 }
 
+// Peso de cada cor para ordenar: vermelho (0) vem primeiro, verde (3) por ultimo.
 const priorityWeight: Record<TaskPriority, number> = { red: 0, orange: 1, yellow: 2, green: 3 };
 
+// Hook principal: entrega a lista de tarefas e todas as acoes (criar, atualizar,
+// concluir, adiar, apagar) para as telas que precisam mexer com tarefas.
 export function useTasks() {
   const { user } = useAuth();
+  // Lista de tarefas em memoria e indicador de "carregando".
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Busca no Supabase as tarefas do usuario que ainda NAO foram feitas,
+  // ordenadas por data e horario de inicio.
   const fetchTasks = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -116,8 +139,11 @@ export function useTasks() {
     setLoading(false);
   }, [user]);
 
+  // Ao abrir a tela (ou trocar de usuario), busca as tarefas automaticamente.
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
+  // Reorganiza as tarefas em grupos (agora/hoje/semana/depois) e ordena cada
+  // grupo por prioridade. So recalcula quando a lista de tarefas muda.
   const groupedTasks = useMemo(() => {
     const groups: Record<TaskGroup, Task[]> = { agora: [], hoje: [], semana: [], depois: [] };
     
@@ -141,6 +167,8 @@ export function useTasks() {
     return groups;
   }, [tasks]);
 
+  // Cria uma nova tarefa no banco (ja associada ao usuario logado) e a adiciona
+  // na lista em memoria para aparecer na tela na hora.
   const addTask = async (taskData: Partial<Task>) => {
     if (!user) return { error: new Error('No user') };
     const { data, error } = await supabase
@@ -155,6 +183,8 @@ export function useTasks() {
     return { error, data: data as unknown as Task | null };
   };
 
+  // Atualiza campos de uma tarefa. Se ela foi marcada como "feita", some da
+  // lista (que so mostra pendentes); caso contrario, apenas atualiza na tela.
   const updateTask = async (id: string, updates: Partial<Task>) => {
     const { error } = await supabase
       .from('tasks')
@@ -171,10 +201,13 @@ export function useTasks() {
     return { error };
   };
 
+  // Conclui uma tarefa: marca como "feita" e guarda a data/hora da conclusao.
   const completeTask = async (id: string) => {
     return updateTask(id, { status: 'feita', completed_at: new Date().toISOString() });
   };
 
+  // Adia a tarefa para amanha e soma +1 no contador de adiamentos (quanto mais
+  // adiada, mais a prioridade sobe, para nao ser esquecida).
   const postponeTask = async (id: string) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
@@ -186,6 +219,7 @@ export function useTasks() {
     });
   };
 
+  // Apaga a tarefa do banco de forma permanente e a remove da lista na tela.
   const deleteTask = async (id: string) => {
     const { error } = await supabase.from('tasks').delete().eq('id', id);
     if (!error) setTasks(prev => prev.filter(t => t.id !== id));
@@ -193,6 +227,8 @@ export function useTasks() {
   };
 
   // Stats for the Hub card
+  // Resumo do dia para o card do Hub: quantas tarefas ha para agora/hoje,
+  // quantas sao criticas (vermelhas/laranjas) e as 3 principais.
   const todayStats = useMemo(() => {
     const todayTasks = [...groupedTasks.agora, ...groupedTasks.hoje];
     const total = todayTasks.length;
@@ -204,6 +240,7 @@ export function useTasks() {
     return { total, critical, topTasks };
   }, [groupedTasks]);
 
+  // Entrega para as telas tudo que elas precisam: dados e acoes de tarefas.
   return {
     tasks,
     loading,
