@@ -1,3 +1,10 @@
+// ============================================================================
+// CARTÃO DE HIDRATAÇÃO
+// Cartão que mostra quanto de água o usuário já bebeu no dia através de uma
+// garrafa animada que enche conforme o consumo. Permite adicionar/remover água,
+// editar o total manualmente e acompanhar os horários programados de beber água.
+// ============================================================================
+
 import { Droplets, Plus, Pencil, Minus, Clock, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +28,8 @@ interface WaterCardProps {
   totalScheduledMl?: number;
 }
 
+// Escolhe uma palavra de comemoração fixa para o dia (mesma palavra o dia todo)
+// usada quando o usuário ultrapassa a meta de água
 function getOverflowWord(date: Date) {
   const words = ["EXCELENTE", "HIDRATADO", "SEM SEDE", "H2OOOOOOO"];
   // Deterministic per day
@@ -28,7 +37,11 @@ function getOverflowWord(date: Date) {
   return words[dayHash % words.length];
 }
 
+// Desenha a garrafa de água animada em SVG: nível da água, ondas, bolhas,
+// tampa que "voa" quando transborda e os rótulos com litros bebidos / meta.
+// Recebe a porcentagem preenchida, os ml bebidos e a meta em ml.
 function WaterBottle({ percentage, waterMl, goalMl }: { percentage: number; waterMl: number; goalMl: number }) {
+  // Altura de preenchimento limitada a 100% e cálculos de posição/rótulos da água
   const fillHeight = Math.min(percentage, 100);
   const isOverflowing = percentage >= 100;
   const liters = (waterMl / 1000).toFixed(1);
@@ -209,27 +222,35 @@ function WaterBottle({ percentage, waterMl, goalMl }: { percentage: number; wate
   );
 }
 
-export function WaterCard({ 
+export function WaterCard({
   waterMl, onAddWater, onSetWater, schedule = [], completedScheduleIds = [],
   onToggleScheduleEntry, totalScheduledMl = 3000,
 }: WaterCardProps) {
+  // Calcula a porcentagem da meta atingida (limitada a 100%) e se já transbordou
   const rawPercentage = (waterMl / totalScheduledMl) * 100;
   const percentage = Math.min(rawPercentage, 100);
   const isOverflowing = rawPercentage >= 100;
+  // Controla se o diálogo de edição manual está aberto
   const [editOpen, setEditOpen] = useState(false);
+  // Guarda o valor (em litros) digitado no campo de edição manual
   const [editValue, setEditValue] = useState('');
+  // Controla se a lista de horários programados está expandida
   const [scheduleOpen, setScheduleOpen] = useState(false);
 
+  // Abre o diálogo de edição já preenchendo com o valor atual em litros
   const handleEditOpen = () => { setEditValue((waterMl / 1000).toFixed(1)); setEditOpen(true); };
+  // Salva o valor editado manualmente, convertendo litros para ml e limitando entre 0 e 5000ml
   const handleSave = () => {
     const mlValue = Math.max(0, Math.min(parseFloat(editValue) * 1000, 5000));
     if (!isNaN(mlValue) && onSetWater) onSetWater(mlValue);
     setEditOpen(false);
   };
+  // Remove uma quantidade de água do total (sem deixar ficar negativo)
   const handleRemoveWater = (amount: number) => {
     if (onSetWater) onSetWater(Math.max(0, waterMl - amount));
   };
 
+  // Contadores usados no resumo dos horários (concluídos / total) e a meta em litros
   const completedCount = completedScheduleIds.length;
   const totalCount = schedule.length;
   const goalLiters = (totalScheduledMl / 1000).toFixed(1);
@@ -397,6 +418,7 @@ export function WaterCard({
 
       {/* Body with controls */}
       <div className="bg-card p-4 space-y-3">
+        {/* Botões de ação: remover 250ml e adicionar 250ml, 500ml ou 1L de água */}
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => handleRemoveWater(250)} disabled={waterMl === 0}
             className="rounded-xl border-border hover:border-primary/30 hover:bg-primary/5 disabled:opacity-30">
@@ -411,6 +433,8 @@ export function WaterCard({
           ))}
         </div>
 
+        {/* Seção recolhível com os horários programados de beber água do dia. */}
+        {/* Cada item pode ser marcado/desmarcado como concluído ao ser tocado. */}
         {schedule.length > 0 && (
           <Collapsible open={scheduleOpen} onOpenChange={setScheduleOpen}>
             <CollapsibleTrigger asChild>

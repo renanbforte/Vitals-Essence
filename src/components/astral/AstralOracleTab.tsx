@@ -1,3 +1,10 @@
+// ============================================================================
+// ABA "ORÁCULOS" (Tarot)
+// Tela de leituras de tarot. Oferece dois modos: a "Carta do Dia" (embaralha
+// as 78 cartas, o usuário escolhe uma e recebe a mensagem, salva por dia) e a
+// "Tiragem de 5 Cartas" (delegada a outro componente). Também restaura a carta
+// já tirada hoje quando o usuário volta à tela.
+// ============================================================================
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles } from 'lucide-react';
@@ -31,6 +38,7 @@ import tarot21 from '@/assets/tarot/tarot-21-world.png';
 
 import { MINOR_ARCANA } from '@/lib/tarotMinorArcana';
 
+// Liga o número de cada Arcano Maior (0 a 21) à sua imagem correspondente
 const MAJOR_CARD_IMAGES: Record<number, string> = {
   0: tarot00, 1: tarot01, 2: tarot02, 3: tarot03, 4: tarot04,
   5: tarot05, 6: tarot06, 7: tarot07, 8: tarot08, 9: tarot09,
@@ -39,6 +47,8 @@ const MAJOR_CARD_IMAGES: Record<number, string> = {
   20: tarot20, 21: tarot21,
 };
 
+// Os 22 Arcanos Maiores: nome, palavras-chave e os significados da carta
+// na posição normal (upright) e invertida (reversed)
 const MAJOR_ARCANA = [
   { number: 0, name: 'O Louco', keywords: 'Liberdade, novos começos, aventura',
     upright: 'Um novo capítulo se abre. Dê o salto de fé — o universo sustenta seus passos.', reversed: 'Impulsividade e falta de direção. Pause antes de agir.' },
@@ -86,7 +96,8 @@ const MAJOR_ARCANA = [
     upright: 'Você chegou a um ponto de completude. Celebre sua jornada e prepare-se para o próximo ciclo.', reversed: 'Algo ainda precisa ser completado. Não desista antes do fim.' },
 ];
 
-// Unified card type for the full 78-card deck
+// Molde único de carta usado para o baralho completo de 78 cartas
+// (junta Arcanos Maiores e Menores num formato só)
 interface DrawnCard {
   name: string;
   keywords: string;
@@ -99,6 +110,7 @@ interface DrawnCard {
   elementLabel?: string;
 }
 
+// Monta o baralho completo (22 Maiores + 56 Menores) no formato padronizado
 function buildFullDeck(): DrawnCard[] {
   const majorCards: DrawnCard[] = MAJOR_ARCANA.map(c => ({
     name: c.name,
@@ -126,15 +138,23 @@ function buildFullDeck(): DrawnCard[] {
   return [...majorCards, ...minorCards];
 }
 
+// Baralho completo montado uma vez só (fica pronto para os sorteios)
 const FULL_DECK = buildFullDeck();
 
 export default function AstralOracleTab({ onModeChange, resetRef }: { onModeChange?: (inSubView: boolean) => void; resetRef?: React.MutableRefObject<(() => void) | null> }) {
+  // Funções e dados de leitura do tarot: salvar, a leitura de hoje e o "carregando"
   const { saveReading, todayReading, isTodayLoading } = useTarotReadings();
+  // Carta sorteada no momento
   const [drawnCard, setDrawnCard] = useState<DrawnCard | null>(null);
+  // Se a carta saiu invertida (muda o significado exibido)
   const [isReversed, setIsReversed] = useState(false);
+  // Fase da animação da leitura diária (parado, embaralhando, escolhendo, virando, revelado)
   const [phase, setPhase] = useState<'idle' | 'shuffling' | 'picking' | 'flipping' | 'revealed'>('idle');
+  // Modo da tela: menu de escolha, carta do dia ou tiragem de 5 cartas
   const [mode, setMode] = useState<'menu' | 'daily' | 'spread'>('menu');
 
+  // Avisa a tela-pai quando entramos/saímos de um submodo e registra a função
+  // de "voltar" (para o botão de voltar externo saber como fechar o submodo)
   useEffect(() => {
     onModeChange?.(mode !== 'menu');
     if (resetRef) {
@@ -142,6 +162,8 @@ export default function AstralOracleTab({ onModeChange, resetRef }: { onModeChan
     }
   }, [mode, onModeChange, resetRef]);
 
+  // Quando já existe uma leitura salva hoje, reconstrói a carta a partir dela
+  // e mostra direto o resultado (evita nova leitura no mesmo dia)
   useEffect(() => {
     if (todayReading) {
       // Reconstruct card from saved reading
@@ -174,11 +196,14 @@ export default function AstralOracleTab({ onModeChange, resetRef }: { onModeChan
     }
   }, [todayReading]);
 
+  // Inicia a leitura diária: começa a embaralhar e depois libera a escolha
   const startReading = () => {
     setPhase('shuffling');
     setTimeout(() => setPhase('picking'), 1800);
   };
 
+  // Ao escolher uma carta: sorteia uma aleatória do baralho, decide se vem
+  // invertida, revela com animação e salva a leitura do dia no banco
   const pickCard = async (_index: number) => {
     setPhase('flipping');
     const card = FULL_DECK[Math.floor(Math.random() * FULL_DECK.length)];
@@ -199,6 +224,7 @@ export default function AstralOracleTab({ onModeChange, resetRef }: { onModeChan
     }, 1200);
   };
 
+  // Enquanto verifica se já há leitura hoje, mostra uma carta pulsando
   if (isTodayLoading && mode !== 'spread') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4">
@@ -215,12 +241,12 @@ export default function AstralOracleTab({ onModeChange, resetRef }: { onModeChan
     );
   }
 
-  // SPREAD MODE
+  // MODO TIRAGEM DE 5 CARTAS — delega para o componente próprio
   if (mode === 'spread') {
     return <TarotFiveCardSpread onBack={() => setMode('menu')} />;
   }
 
-  // MENU MODE — show both options
+  // MODO MENU — mostra as duas opções de leitura (carta do dia e tiragem)
   if (mode === 'menu') {
     return (
       <div className="flex-1 overflow-y-auto pb-6 px-4">
@@ -303,7 +329,8 @@ export default function AstralOracleTab({ onModeChange, resetRef }: { onModeChan
     );
   }
 
-  // DAILY MODE — existing flow
+  // MODO CARTA DO DIA — fluxo com as fases de animação (idle → embaralhar →
+  // escolher → virar → revelar). O bloco visível depende da fase atual
   return (
     <div className="flex-1 overflow-y-auto pb-6 px-4">
       <AnimatePresence mode="wait">

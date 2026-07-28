@@ -1,3 +1,9 @@
+// ============================================================================
+// NotificationSettings — Cartão de configurações de notificações push.
+// Deixa o usuário ativar/desativar os avisos no celular (medicação, água,
+// refeições etc.) e escolher, item por item, quais módulos podem notificar.
+// Se o navegador não suportar notificações, mostra um aviso e nada mais.
+// ============================================================================
 import { Bell, BellOff, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -5,6 +11,8 @@ import { Switch } from '@/components/ui/switch';
 import { usePushNotifications, MODULE_LABELS, NotificationModule } from '@/hooks/usePushNotifications';
 
 export function NotificationSettings() {
+  // Busca o "cérebro" das notificações: se o usuário já ativou, se está
+  // carregando, as preferências por módulo e as ações de ligar/desligar.
   const {
     isSubscribed,
     loading,
@@ -15,6 +23,7 @@ export function NotificationSettings() {
     supported,
   } = usePushNotifications();
 
+  // Caso o navegador não aceite notificações push, mostra apenas um aviso.
   if (!supported) {
     return (
       <div className="rounded-2xl bg-card/80 backdrop-blur-xl border border-border/40 p-5 shadow-lg">
@@ -29,6 +38,7 @@ export function NotificationSettings() {
     );
   }
 
+  // Cartão principal, com uma leve animação de entrada (surge deslizando).
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -41,6 +51,8 @@ export function NotificationSettings() {
         <h2 className="font-bold text-foreground">Notificações Push</h2>
       </div>
 
+      {/* Se ainda NÃO ativou: mostra o convite e o botão "Ativar Notificações". */}
+      {/* Se JÁ ativou: mostra a lista de módulos e o botão de desativar. */}
       {!isSubscribed ? (
         <div className="space-y-3">
           <p className="text-muted-foreground text-sm">
@@ -65,6 +77,7 @@ export function NotificationSettings() {
             Escolha quais módulos podem enviar notificações.
           </p>
 
+          {/* Uma linha com interruptor (liga/desliga) para cada módulo disponível. */}
           <div className="space-y-3">
             {(Object.keys(MODULE_LABELS) as NotificationModule[]).map((mod) => (
               <div

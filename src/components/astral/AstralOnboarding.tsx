@@ -1,3 +1,9 @@
+// ============================================================================
+// ONBOARDING ASTRAL (primeira configuração do mapa)
+// Assistente de 4 passos que pergunta nome, data, hora e cidade de nascimento
+// do usuário e, ao final, salva o perfil e exibe uma animação de "revelação"
+// do mapa astral. É mostrado uma única vez, antes de a pessoa usar a seção.
+// ============================================================================
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -9,6 +15,7 @@ interface AstralOnboardingProps {
   onComplete: () => void;
 }
 
+// Os 4 passos do assistente, com título e subtítulo poéticos de cada tela
 const steps = [
   { id: 1, title: 'Qual é o seu nome, viajante?', subtitle: 'Como as estrelas devem te chamar' },
   { id: 2, title: 'Quando sua alma chegou a este plano?', subtitle: 'Data do seu nascimento' },
@@ -17,9 +24,13 @@ const steps = [
 ];
 
 export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) {
+  // Função que salva o perfil astral e sinal de "salvando em andamento"
   const { saveProfile, isSaving } = useAstral();
+  // Passo atual do assistente (0 a 3)
   const [step, setStep] = useState(0);
+  // Controla a tela final de animação enquanto o mapa é gerado
   const [showReveal, setShowReveal] = useState(false);
+  // Dados digitados pelo usuário ao longo dos passos
   const [form, setForm] = useState({
     name: '',
     birth_date: '',
@@ -27,12 +38,14 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
     birth_city: '',
   });
 
+  // Verifica se o passo atual pode avançar (nome e data são obrigatórios)
   const isStepValid = () => {
     if (step === 0) return form.name.trim().length > 0;
     if (step === 1) return form.birth_date.length > 0;
     return true; // steps 2 and 3 are optional
   };
 
+  // Avança para o próximo passo; no último passo, envia os dados
   const handleNext = () => {
     if (step < steps.length - 1) {
       setStep(s => s + 1);
@@ -41,6 +54,8 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
     }
   };
 
+  // Salva o perfil astral no banco e, após a animação, encerra o onboarding.
+  // Se der erro ao salvar, volta do modo de revelação para o formulário
   const handleSubmit = async () => {
     setShowReveal(true);
     try {
@@ -55,6 +70,7 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
     }
   };
 
+  // Tela final: animação de "tecendo o cosmos" enquanto o mapa é preparado
   if (showReveal) {
     return (
       <motion.div
@@ -91,7 +107,9 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
     );
   }
 
+  // Dados do passo que está sendo exibido no momento
   const currentStep = steps[step];
+  // Layout do formulário: barra de progresso + o campo do passo atual + botão
   return (
     <div className="flex-1 flex flex-col px-6 py-8">
       {/* Progress */}
@@ -124,6 +142,7 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
           </div>
 
           <div className="space-y-4">
+            {/* Passo 1: campo de nome */}
             {step === 0 && (
               <div>
                 <Input
@@ -137,6 +156,7 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
               </div>
             )}
 
+            {/* Passo 2: data de nascimento (não permite datas futuras) */}
             {step === 1 && (
               <div>
                 <Input
@@ -149,6 +169,7 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
               </div>
             )}
 
+            {/* Passo 3: hora do nascimento (opcional; refina o Ascendente) */}
             {step === 2 && (
               <div className="space-y-3">
                 <Input
@@ -170,6 +191,7 @@ export default function AstralOnboarding({ onComplete }: AstralOnboardingProps) 
               </div>
             )}
 
+            {/* Passo 4: cidade de nascimento (opcional; calcula as casas) */}
             {step === 3 && (
               <div className="space-y-3">
                 <Input

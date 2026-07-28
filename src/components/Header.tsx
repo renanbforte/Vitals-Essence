@@ -1,3 +1,9 @@
+// ============================================================================
+// COMPONENTE: Header (Cabeçalho do topo da tela)
+// Barra fixa no topo das páginas do app. Mostra o logo (ou um botão de voltar),
+// o título da tela, uma saudação com o primeiro nome do usuário, o atalho para a
+// página de Amigos e o botão de Sair (encerrar sessão).
+// ============================================================================
 import { LogOut, Users, ArrowLeft } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -10,16 +16,23 @@ interface HeaderProps {
   gradientClass?: string;
 }
 
+// Recebe (opcionalmente): o título a exibir, se deve mostrar o botão de voltar e
+// a classe do gradiente de fundo. Todos têm valores padrão caso não sejam passados.
 export function Header({ title = 'Operação Nutrição', showBack = false, gradientClass = 'gradient-hub' }: HeaderProps) {
+  // Dados do usuário logado (perfil) e a função para sair (encerrar a sessão)
   const { profile, signOut } = useAuth();
+  // Permite navegar entre telas via código (ex.: voltar para a página inicial)
   const navigate = useNavigate();
+  // Informa qual é a página atual (usado para esconder o botão "Amigos" quando já estamos nela)
   const location = useLocation();
 
   return (
     <header className={`${gradientClass} sticky top-0 z-50 shadow-lg`}>
       <div className="container mx-auto px-4 py-3">
         <div className="flex items-center justify-between">
+          {/* Lado esquerdo: botão de voltar OU logo, seguido do título e da saudação */}
           <div className="flex items-center gap-3">
+            {/* Se showBack for verdadeiro mostra a seta de voltar; senão, mostra o logo */}
             {showBack ? (
               <Button
                 variant="ghost"
@@ -48,7 +61,9 @@ export function Header({ title = 'Operação Nutrição', showBack = false, grad
             </div>
           </div>
           
+          {/* Lado direito: atalho para "Amigos" e o botão de "Sair" */}
           <div className="flex items-center gap-1">
+            {/* Só mostra o atalho de Amigos quando NÃO estamos já na página de amigos */}
             {location.pathname !== '/friends' && (
               <Button
                 variant="ghost"

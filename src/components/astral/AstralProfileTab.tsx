@@ -1,3 +1,9 @@
+// ============================================================================
+// ABA "PERFIL" ASTRAL + DIÁRIO CÓSMICO
+// Mostra um cartão com o mapa astral do usuário (signo solar, lua, ascendente,
+// data e cidade de nascimento) e um "Diário Cósmico" onde ele escreve como se
+// sente, marca o humor e vê as últimas anotações salvas.
+// ============================================================================
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Send, Smile, Meh, Frown } from 'lucide-react';
@@ -9,22 +15,30 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import journalImg from '@/assets/astral-journal.png';
 
+// Opções de humor do diário, cada uma com rótulo, ícone e cores próprias
 const MOODS = [
   { id: 'great', label: 'Ótimo', icon: Smile, color: 'text-emerald-400', bg: 'rgba(52,211,153,0.15)', border: 'rgba(52,211,153,0.3)' },
   { id: 'okay', label: 'Ok', icon: Meh, color: 'text-amber-400', bg: 'rgba(251,191,36,0.15)', border: 'rgba(251,191,36,0.3)' },
   { id: 'low', label: 'Baixo', icon: Frown, color: 'text-rose-400', bg: 'rgba(244,63,94,0.15)', border: 'rgba(244,63,94,0.3)' },
 ];
 
+// Emoji correspondente a cada humor, usado ao listar as entradas antigas
 const MOOD_EMOJI: Record<string, string> = { great: '😊', okay: '😐', low: '😔' };
 
 export default function AstralProfileTab() {
+  // Mapa astral do usuário
   const { profile } = useAstral();
+  // Entradas do diário, função de salvar e sinal de "salvando"
   const { entries, saveEntry, isSaving } = useCosmicJournal();
+  // Texto que está sendo escrito na nova entrada
   const [content, setContent] = useState('');
+  // Humor selecionado para a nova entrada (ou nenhum)
   const [mood, setMood] = useState<string | null>(null);
 
+  // Signo solar do usuário
   const sunSign = profile?.sun_sign as ZodiacSign | undefined;
 
+  // Salva a nova entrada do diário (ignora se estiver vazia) e limpa o formulário
   const handleSave = async () => {
     if (!content.trim()) return;
     await saveEntry({ content, mood: mood || undefined });
@@ -32,6 +46,7 @@ export default function AstralProfileTab() {
     setMood(null);
   };
 
+  // Layout: cartão do perfil astral (se houver) + o Diário Cósmico embaixo
   return (
     <div className="flex-1 overflow-y-auto pb-6 px-4 space-y-4">
 

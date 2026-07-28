@@ -1,3 +1,10 @@
+// ============================================================================
+// CARTAO "MEDICAMENTOS DO DIA"
+// Lista os medicamentos do usuario para a data selecionada e permite marcar cada
+// horario como "tomado". Tem um formulario (janela) para cadastrar/editar um
+// medicamento: nome, dosagem, horarios, dias da semana, composicao e observacoes.
+// Cada medicamento aparece em um item expansivel (componente MedicationItem).
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { Pill, Plus, Edit2, Trash2, Clock, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,6 +25,7 @@ interface DailyMedicationsCardProps {
   selectedDate: Date;
 }
 
+// Lista dos dias da semana usada nos botoes de selecao (letra curta + nome completo).
 const DAYS_OF_WEEK = [
   { key: 0, label: 'D', fullLabel: 'Domingo' },
   { key: 1, label: 'S', fullLabel: 'Segunda' },
@@ -31,14 +39,19 @@ const DAYS_OF_WEEK = [
 export function DailyMedicationsCard({ 
   selectedDate,
 }: DailyMedicationsCardProps) {
+  // Hook que traz do banco a lista de medicamentos e as acoes de criar/editar/apagar.
   const { medications, loading, fetchMedications, addMedication, updateMedication, deleteMedication } = useUserMedications();
+  // Hook que controla, para a data escolhida, se cada horario ja foi marcado como tomado.
   const { toggleIntake, isCompleted, loading: intakeLoading } = useMedicationIntake(selectedDate);
-  
+
+  // Controla se a janela de cadastro/edicao esta aberta.
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Guarda o medicamento em edicao (null = cadastro de um novo).
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
+  // Guarda qual medicamento esta com os detalhes expandidos na lista.
   const [expandedMedication, setExpandedMedication] = useState<string | null>(null);
-  
-  // Form state
+
+  // Campos do formulario (janela de cadastro/edicao):
   const [name, setName] = useState('');
   const [dosage, setDosage] = useState('');
   const [compositionItems, setCompositionItems] = useState<{ name: string; dose: string }[]>([]);
@@ -46,10 +59,12 @@ export function DailyMedicationsCard({
   const [notes, setNotes] = useState('');
   const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
 
+  // Ao abrir o cartao, busca os medicamentos cadastrados do usuario.
   useEffect(() => {
     fetchMedications();
   }, [fetchMedications]);
 
+  // Limpa todos os campos do formulario (volta ao estado inicial).
   const resetForm = () => {
     setName('');
     setDosage('');
@@ -60,6 +75,7 @@ export function DailyMedicationsCard({
     setEditingMedication(null);
   };
 
+  // Le a composicao salva (texto/JSON) e transforma numa lista de ingredientes com dose.
   // Parse composition string to items
   const parseComposition = (comp: string | null): { name: string; dose: string }[] => {
     if (!comp) return [];
@@ -80,6 +96,7 @@ export function DailyMedicationsCard({
     return [];
   };
 
+  // Faz o caminho inverso: transforma a lista de ingredientes em texto (JSON) para salvar.
   // Convert items to JSON string for storage
   const compositionToString = (items: { name: string; dose: string }[]): string => {
     const validItems = items.filter(i => i.name.trim());
@@ -87,6 +104,7 @@ export function DailyMedicationsCard({
     return JSON.stringify(validItems);
   };
 
+  // Abre a janela ja preenchida com os dados do medicamento escolhido, para edicao.
   const openEditDialog = (medication: Medication) => {
     setEditingMedication(medication);
     setName(medication.name);
@@ -98,6 +116,7 @@ export function DailyMedicationsCard({
     setDialogOpen(true);
   };
 
+  // Salva o formulario: cria um novo medicamento ou atualiza o que esta em edicao.
   const handleSubmit = async () => {
     if (!name.trim()) {
       toast.error('Nome do medicamento é obrigatório');
@@ -137,6 +156,7 @@ export function DailyMedicationsCard({
     }
   };
 
+  // Remove um medicamento pelo seu identificador.
   const handleDelete = async (id: string) => {
     const { error } = await deleteMedication(id);
     if (error) {
@@ -146,22 +166,26 @@ export function DailyMedicationsCard({
     }
   };
 
+  // Adiciona um novo campo de horario vazio no formulario.
   const addTimeSlot = () => {
     setScheduleTimes([...scheduleTimes, '']);
   };
 
+  // Remove um campo de horario (mantendo sempre pelo menos um).
   const removeTimeSlot = (index: number) => {
     if (scheduleTimes.length > 1) {
       setScheduleTimes(scheduleTimes.filter((_, i) => i !== index));
     }
   };
 
+  // Atualiza o valor de um horario especifico do formulario.
   const updateTimeSlot = (index: number, value: string) => {
     const newTimes = [...scheduleTimes];
     newTimes[index] = value;
     setScheduleTimes(newTimes);
   };
 
+  // Marca/desmarca um dia da semana (mantendo sempre pelo menos um dia selecionado).
   const toggleDay = (day: number) => {
     if (selectedDays.includes(day)) {
       if (selectedDays.length > 1) {
@@ -172,25 +196,33 @@ export function DailyMedicationsCard({
     }
   };
 
+  // Adiciona um novo ingrediente vazio na composicao.
   const addCompositionItem = () => {
     setCompositionItems([...compositionItems, { name: '', dose: '' }]);
   };
 
+  // Remove um ingrediente da composicao.
   const removeCompositionItem = (index: number) => {
     setCompositionItems(compositionItems.filter((_, i) => i !== index));
   };
 
+  // Atualiza o nome ou a dose de um ingrediente da composicao.
   const updateCompositionItem = (index: number, field: 'name' | 'dose', value: string) => {
     const newItems = [...compositionItems];
     newItems[index] = { ...newItems[index], [field]: value };
     setCompositionItems(newItems);
   };
 
+  // Indica se a data selecionada e o dia de hoje.
   const isToday = format(new Date(), 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+  // Indica se a data selecionada esta no futuro.
   const isFuture = selectedDate > new Date();
 
+  // So exibe os medicamentos marcados como ativos.
   const activeMedications = medications.filter(m => m.active);
 
+  // Monta o cartao: cabecalho com titulo/data e botao (+) que abre a janela de
+  // cadastro, e o corpo que mostra a lista de medicamentos ou mensagens de estado.
   return (
     <div className="rounded-3xl overflow-hidden shadow-xl">
       {/* Header */}
@@ -283,6 +315,7 @@ export function DailyMedicationsCard({
 
       {/* Body */}
       <div className="bg-card p-4">
+        {/* Escolhe o que mostrar: aviso de data futura, "Carregando...", vazio ou a lista. */}
         {isFuture ? (
           <div className="bg-muted/50 rounded-xl p-4 text-center">
             <p className="text-muted-foreground text-sm">Visualização de datas futuras</p>
@@ -328,7 +361,11 @@ interface MedicationItemProps {
   isCompleted: (medicationId: string, scheduleTime: string) => boolean;
 }
 
+// Item de um unico medicamento na lista: mostra o nome/dosagem, os horarios que
+// podem ser marcados como "tomado" e, ao expandir, a composicao, observacoes e
+// os botoes de editar/remover.
 function MedicationItem({ medication, expanded, onToggleExpand, onEdit, onDelete, onToggleIntake, isCompleted }: MedicationItemProps) {
+  // Le a composicao salva e transforma numa lista de ingredientes (ou texto puro).
   const compositionItems = (() => {
     if (!medication.composition) return [];
     try {
@@ -338,11 +375,13 @@ function MedicationItem({ medication, expanded, onToggleExpand, onEdit, onDelete
     return [];
   })();
 
+  // Horarios cadastrados e verificacoes de progresso (todos tomados / algum tomado).
   const scheduleTimes = medication.schedule_times || [];
   const hasSchedules = scheduleTimes.length > 0;
   const allCompleted = hasSchedules && scheduleTimes.every(time => isCompleted(medication.id, time));
   const someCompleted = hasSchedules && scheduleTimes.some(time => isCompleted(medication.id, time));
 
+  // Marca/desmarca um horario como tomado ao clicar (sem expandir o item).
   const handleToggleTime = async (time: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const { error } = await onToggleIntake(medication.id, time);

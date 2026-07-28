@@ -1,3 +1,9 @@
+// ============================================================================
+// EditExamDialog — Janela (diálogo) para EDITAR um exame já enviado.
+// Permite ao usuário mudar o mês/ano do exame, marcar um ou mais tipos de
+// exame (sangue, hormônios, imagem etc.) e, quando for exame de imagem,
+// descrever o que foi feito. Ao salvar, envia as alterações para quem chamou.
+// ============================================================================
 import { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -20,6 +26,8 @@ interface EditExamDialogProps {
   onSave: (id: string, data: { exam_date: string; exam_type: string; image_description: string | null }) => Promise<boolean>;
 }
 
+// Lista fixa de todos os tipos de exame que o usuário pode marcar.
+// 'value' é o código guardado no sistema; 'label' é o texto exibido na tela.
 const examTypeOptions = [
   { value: 'bioquimica', label: 'Bioquímica Sanguínea' },
   { value: 'hemograma', label: 'Hemograma' },
@@ -37,6 +45,9 @@ const examTypeOptions = [
   { value: 'imagem', label: 'Exames de Imagem' },
 ];
 
+// Converte o tipo de exame guardado (que pode vir como uma lista em texto)
+// de volta para uma lista de códigos. Se não conseguir ler, tenta usar o
+// próprio texto como um único tipo; se estiver vazio, devolve lista vazia.
 const parseExamTypes = (examType: string | null): string[] => {
   if (!examType) return [];
   try {
@@ -47,12 +58,19 @@ const parseExamTypes = (examType: string | null): string[] => {
 };
 
 export function EditExamDialog({ open, onOpenChange, exam, onSave }: EditExamDialogProps) {
+  // Tipos de exame marcados no momento (lista de códigos).
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  // Mês do exame (0 = Janeiro, 11 = Dezembro).
   const [examMonth, setExamMonth] = useState(0);
+  // Ano do exame (começa no ano atual).
   const [examYear, setExamYear] = useState(new Date().getFullYear());
+  // Texto de descrição usado somente quando o exame é de imagem.
   const [imageDescription, setImageDescription] = useState('');
+  // Indica se está salvando (para mostrar o carregando e travar o botão).
   const [saving, setSaving] = useState(false);
 
+  // Quando um exame é aberto para edição, preenche os campos da tela com os
+  // dados atuais desse exame (tipos marcados, mês, ano e descrição de imagem).
   useEffect(() => {
     if (exam) {
       setSelectedTypes(parseExamTypes(exam.exam_type));
@@ -63,12 +81,16 @@ export function EditExamDialog({ open, onOpenChange, exam, onSave }: EditExamDia
     }
   }, [exam]);
 
+  // Marca ou desmarca um tipo de exame na lista de selecionados.
   const toggleExamType = (value: string) => {
     setSelectedTypes(prev =>
       prev.includes(value) ? prev.filter(t => t !== value) : [...prev, value]
     );
   };
 
+  // Salva as alterações: monta a data a partir do mês/ano escolhidos, envia
+  // os tipos marcados e a descrição (só se for exame de imagem). Fecha a
+  // janela se der certo.
   const handleSave = async () => {
     if (!exam) return;
     setSaving(true);
@@ -83,8 +105,11 @@ export function EditExamDialog({ open, onOpenChange, exam, onSave }: EditExamDia
     if (success) onOpenChange(false);
   };
 
+  // Só mostra o campo de descrição de imagem quando "Exames de Imagem" está marcado.
   const showImageDescription = selectedTypes.includes('imagem');
 
+  // Monta a janela: cabeçalho, seletores de data, lista de tipos de exame,
+  // campo opcional de descrição de imagem e botões de Cancelar/Salvar.
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
@@ -96,6 +121,7 @@ export function EditExamDialog({ open, onOpenChange, exam, onSave }: EditExamDia
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground truncate">{exam.file_name}</p>
 
+            {/* Seletores de Mês e Ano do exame */}
             <div className="space-y-2">
               <Label>Data do Exame (Mês/Ano)</Label>
               <div className="flex gap-2">
@@ -120,6 +146,7 @@ export function EditExamDialog({ open, onOpenChange, exam, onSave }: EditExamDia
               </div>
             </div>
 
+            {/* Lista de tipos de exame com caixas de seleção (pode marcar vários) */}
             <div className="space-y-2">
               <Label>Tipo de Exame</Label>
               <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto p-1">

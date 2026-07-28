@@ -1,3 +1,9 @@
+// ============================================================================
+// Cartões de Resumo (SummaryCards)
+// Mostra três cartões rápidos com o resumo do dia: água consumida (em litros),
+// refeições concluídas (de 6) e o peso atual. Usa animação suave de entrada.
+// ============================================================================
+
 import { Droplets, Apple, Scale } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { DailyTracking } from '@/hooks/useDailyTracking';
@@ -8,19 +14,23 @@ interface SummaryCardsProps {
   latestWeight: WeightEntry | null;
 }
 
+// Define a animação de entrada de cada cartão (surge de baixo com efeito de mola)
 const cardVariants = {
   hidden: { opacity: 0, y: 16 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 300, damping: 24 } },
 };
 
 export function SummaryCards({ tracking, latestWeight }: SummaryCardsProps) {
+  // Converte a água do dia de mililitros para litros (com 1 casa decimal)
   const waterLiters = ((tracking?.water_ml || 0) / 1000).toFixed(1);
+  // Conta quantas das 6 refeições do dia foram marcadas como concluídas
   const mealsCompleted = [
     tracking?.breakfast_completed, tracking?.morning_snack_completed,
     tracking?.lunch_completed, tracking?.afternoon_snack_completed,
     tracking?.dinner_completed, tracking?.night_snack_completed,
   ].filter(Boolean).length;
 
+  // Lista dos três cartões com seus dados: ícone, título, valor e estilos de cor
   const items = [
     {
       icon: Droplets,
@@ -51,6 +61,7 @@ export function SummaryCards({ tracking, latestWeight }: SummaryCardsProps) {
     },
   ];
 
+  // Estrutura visual: percorre a lista e desenha um cartão animado para cada item
   return (
     <div className="grid grid-cols-3 gap-3">
       {items.map((item) => (

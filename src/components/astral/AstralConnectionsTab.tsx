@@ -1,3 +1,9 @@
+// ============================================================================
+// ABA "SINASTRIA CÓSMICA" (Conexões Astrais)
+// Esta tela compara o mapa astral do usuário com o de outra pessoa (um amigo
+// da lista ou um signo escolhido à mão) e mostra o quanto os dois combinam,
+// com uma nota de compatibilidade, análise planeta a planeta e dicas.
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Input } from '@/components/ui/input';
@@ -8,11 +14,14 @@ import { calculateCompatibility, SIGN_SYMBOLS, SIGN_COLORS, SIGN_ELEMENTS } from
 import type { ZodiacSign } from '@/lib/astralCalculations';
 import synastryImg from '@/assets/astral-synastry.png';
 
+// Lista dos 12 signos do zodíaco, na ordem tradicional
 const SIGNS_LIST: ZodiacSign[] = [
   'Áries', 'Touro', 'Gêmeos', 'Câncer', 'Leão', 'Virgem',
   'Libra', 'Escorpião', 'Sagitário', 'Capricórnio', 'Aquário', 'Peixes'
 ];
 
+// Molde dos dados astrais de um amigo: nome, signo solar, lua, ascendente e
+// a lista de posições dos planetas (quando a pessoa já preencheu o mapa)
 interface FriendAstral {
   userId: string;
   name: string;
@@ -34,6 +43,9 @@ const PLANET_ASPECTS: Record<string, { label: string; area: string }> = {
   'Saturno': { label: 'Saturno', area: 'Compromisso & Estrutura' },
 };
 
+// Calcula a compatibilidade entre dois signos de um mesmo planeta.
+// Retorna uma nota de 0 a 100 e um texto explicando a relação entre eles
+// (mesmo signo, mesmo elemento, elementos que se complementam, oposição etc.)
 function calcPlanetCompat(sign1: string, sign2: string): { score: number; desc: string } {
   const z1 = sign1 as ZodiacSign;
   const z2 = sign2 as ZodiacSign;
@@ -56,20 +68,32 @@ function calcPlanetCompat(sign1: string, sign2: string): { score: number; desc: 
 }
 
 export default function AstralConnectionsTab() {
+  // Usuário logado (para buscar a lista de amigos dele)
   const { user } = useAuth();
+  // Mapa astral do próprio usuário e as posições dos seus planetas
   const { profile, planetPlacements } = useAstral();
+  // Signo do amigo escolhido para a comparação
   const [friendSign, setFriendSign] = useState<ZodiacSign | null>(null);
+  // Nome do amigo exibido no resultado
   const [friendName, setFriendName] = useState('');
+  // Controla se mostramos a tela de resultado ou a tela de escolha
   const [showResult, setShowResult] = useState(false);
+  // Lista de todos os amigos (com dados astrais quando disponíveis)
   const [friendsWithAstral, setFriendsWithAstral] = useState<FriendAstral[]>([]);
+  // Amigo atualmente selecionado na lista
   const [selectedFriend, setSelectedFriend] = useState<FriendAstral | null>(null);
+  // Indica se ainda estamos carregando a lista de amigos
   const [loadingFriends, setLoadingFriends] = useState(true);
+  // Texto digitado no campo de busca por nome
   const [searchQuery, setSearchQuery] = useState('');
+  // Controla se a lista suspensa de amigos está aberta
   const [showFriendsList, setShowFriendsList] = useState(false);
 
+  // Signo solar do próprio usuário
   const userSign = profile?.sun_sign as ZodiacSign | undefined;
 
-  // Fetch ALL friends, enriching with astral data when available
+  // Ao abrir a aba, busca TODOS os amigos aceitos e enriquece com os dados
+  // astrais (signo, lua, planetas) daqueles que já preencheram o mapa
   useEffect(() => {
     if (!user) return;
     async function fetchFriendsAstral() {
@@ -129,8 +153,11 @@ export default function AstralConnectionsTab() {
     fetchFriendsAstral();
   }, [user]);
 
+  // Resultado geral de compatibilidade entre o signo do usuário e o do amigo
   const compatibility = userSign && friendSign ? calculateCompatibility(userSign, friendSign) : null;
 
+  // Ao clicar num amigo da lista: se ele já tem mapa, já mostra o resultado;
+  // caso contrário apenas preenche o nome e aguarda a escolha manual do signo
   const handleSelectFriend = (friend: FriendAstral) => {
     setSelectedFriend(friend);
     if (friend.sunSign) {
@@ -144,7 +171,9 @@ export default function AstralConnectionsTab() {
     }
   };
 
+  // Botão "Revelar Sinastria": mostra o resultado se houver um signo escolhido
   const handleCheck = () => { if (friendSign) setShowResult(true); };
+  // Limpa tudo e volta para a tela inicial de escolha (nova consulta)
   const reset = () => {
     setShowResult(false);
     setFriendSign(null);
@@ -152,13 +181,15 @@ export default function AstralConnectionsTab() {
     setSelectedFriend(null);
   };
 
-  // === RESULT VIEW ===
+  // === TELA DE RESULTADO ===
+  // Mostrada depois que o usuário revela a sinastria
   if (showResult && compatibility && userSign && friendSign) {
+    // Nota final arredondada e cores conforme a faixa (verde/amarelo/vermelho)
     const score = Math.round(compatibility.score);
     const scoreColor = score >= 75 ? '#34d399' : score >= 50 ? '#fbbf24' : '#f87171';
     const scoreGlow = score >= 75 ? 'rgba(52,211,153,0.4)' : score >= 50 ? 'rgba(251,191,36,0.4)' : 'rgba(248,113,113,0.4)';
 
-    // Build per-planet compatibility if friend has placements
+    // Monta a comparação planeta a planeta (só quando o amigo tem mapa completo)
     const planetComparisons = selectedFriend?.planets?.length
       ? Object.keys(PLANET_ASPECTS).map(planet => {
           const myPlacement = planetPlacements.find(p => p.planet === planet);
@@ -175,6 +206,8 @@ export default function AstralConnectionsTab() {
         }).filter(Boolean)
       : [];
 
+    // Layout da tela de resultado: cartão da nota, sinastria por planeta,
+    // pontos de harmonia, desafios e o botão de nova consulta
     return (
       <div className="flex-1 overflow-y-auto pb-6 px-4 space-y-4">
         {/* Card de resultado */}
@@ -382,7 +415,8 @@ export default function AstralConnectionsTab() {
     );
   }
 
-  // === INPUT VIEW ===
+  // === TELA DE ESCOLHA ===
+  // Onde o usuário seleciona um amigo ou escolhe um signo manualmente
   return (
     <div className="flex-1 overflow-y-auto pb-6 px-4 space-y-5">
       {/* Hero */}

@@ -1,3 +1,11 @@
+// ============================================================================
+// CARTÃO DE TREINO DO DIA
+// Mostra os treinos programados para o dia selecionado, uma silhueta do corpo
+// que "acende" os músculos trabalhados, estimativa de calorias, upload de foto,
+// rastreamento por GPS (corrida/pedal) e a visão geral dos treinos da semana.
+// Permite marcar treinos como concluídos, adicionar/editar atividades e anotações.
+// ============================================================================
+
 import { useState } from 'react';
 import bodySilhouette from '@/assets/body-silhouette.png';
 import { Dumbbell, Check, Waves, Trophy, PersonStanding, Pencil, Calendar, Clock, Plus, Flame } from 'lucide-react';
@@ -29,6 +37,7 @@ interface WorkoutCardProps {
   uploadingWorkoutPhoto?: boolean;
 }
 
+// Tabela de calorias aproximadas gastas por tipo de treino (para 60 min de sessão)
 // Approximate calories burned per workout type (for 60 min session)
 const workoutCalorieEstimates: Record<string, number> = {
   gym_upper: 350,
@@ -48,6 +57,7 @@ const workoutCalorieEstimates: Record<string, number> = {
   rest: 0,
 };
 
+// Ícone visual correspondente a cada tipo de treino
 const workoutIcons: Record<string, React.ReactNode> = {
   swimming: <Waves className="w-5 h-5" />,
   gym_upper: <Dumbbell className="w-5 h-5" />,
@@ -66,6 +76,7 @@ const workoutIcons: Record<string, React.ReactNode> = {
   other: <Dumbbell className="w-5 h-5" />,
 };
 
+// Relaciona cada tipo de treino aos grupos musculares que ele ativa
 // Map workout types to activated muscle groups
 type MuscleGroup = 'shoulders' | 'chest' | 'back' | 'biceps' | 'triceps' | 'core' | 'glutes' | 'quads' | 'hamstrings' | 'calves';
 
@@ -92,6 +103,8 @@ const workoutMuscleMap: Record<string, MuscleGroup[]> = {
 // Figure body: head y≈30, shoulders y≈54, chest y≈60, navel y≈100, hips y≈112,
 // crotch y≈130, knees y≈180, ankles y≈232. Center x=60, torso ~48-72.
 
+// Desenhos (paths SVG) de cada grupo muscular sobre a silhueta do corpo, com o
+// nome em português usado para exibição. São as "manchas" que acendem no boneco.
 const muscleGroupPaths: Record<MuscleGroup, { paths: string[]; label: string }> = {
   shoulders: {
     paths: [
@@ -179,7 +192,10 @@ const muscleGroupPaths: Record<MuscleGroup, { paths: string[]; label: string }> 
   },
 };
 
+// Desenha a silhueta do corpo e ilumina os músculos ativados pelos treinos do dia.
+// Só acende os músculos quando o treino está marcado como concluído (isCompleted).
 function BodyActivation({ isCompleted, workoutTypes }: { isCompleted: boolean; workoutTypes: string[] }) {
+  // Monta o conjunto de músculos ativados a partir dos treinos concluídos do dia
   const activatedMuscles = new Set<MuscleGroup>();
   if (isCompleted) {
     workoutTypes.forEach(type => {
@@ -188,6 +204,7 @@ function BodyActivation({ isCompleted, workoutTypes }: { isCompleted: boolean; w
     });
   }
 
+  // Define se é dia de descanso e conta quantas regiões foram ativadas do total
   const isRestDay = workoutTypes.length === 0 || (workoutTypes.length === 1 && workoutTypes[0] === 'rest');
   const activatedCount = activatedMuscles.size;
   const totalGroups = Object.keys(muscleGroupPaths).length;
@@ -289,17 +306,27 @@ export function WorkoutCard({
   onSaveWorkoutPlan, onDeleteWorkoutPlan, onAddWorkoutPlan,
   workoutPhoto, onUploadWorkoutPhoto, onDeleteWorkoutPhoto, uploadingWorkoutPhoto
 }: WorkoutCardProps) {
+  // Texto das anotações do treino (inicia com o que já estava salvo no dia)
   const [notes, setNotes] = useState(tracking?.workout_notes || '');
+  // Guarda qual treino está com os detalhes expandidos (ou nenhum)
   const [showDetails, setShowDetails] = useState<string | null>(null);
+  // Treino selecionado para edição no diálogo (ou nenhum)
   const [editingWorkout, setEditingWorkout] = useState<UserWorkoutPlan | null>(null);
+  // Controla se a lista de todos os treinos da semana está aberta
   const [showAllActivities, setShowAllActivities] = useState(false);
+  // Indica se o campo de calorias está no modo de edição manual
   const [editingCalories, setEditingCalories] = useState(false);
+  // Tipo de atividade escolhido para o rastreamento por GPS (corrida ou pedal)
   const [gpsWorkoutType, setGpsWorkoutType] = useState<'running' | 'cycling'>('running');
+  // Controla se a seção de rastreamento por GPS está visível
   const [showGPS, setShowGPS] = useState(false);
 
+  // Busca no banco as rotas de GPS salvas para a data selecionada
   const { routes, saveRoute, deleteRoute, fetchRoutes } = useWorkoutRoutes(selectedDate);
+  // Valor de calorias digitado manualmente pelo usuário (sobrepõe a estimativa)
   const [customCalories, setCustomCalories] = useState<string>('');
 
+  // Descobre os treinos do dia selecionado e o estado (concluído, futuro, total semanal)
   const dayOfWeek = getDay(selectedDate);
   const todaysWorkouts = workoutPlans.filter(w => w.day_of_week === dayOfWeek);
   const isCompleted = tracking?.workout_completed || false;
@@ -308,6 +335,7 @@ export function WorkoutCard({
   const isFuture = selectedDay > today;
   const totalWeeklyWorkouts = workoutPlans.reduce((sum, w) => sum + (w.weekly_frequency || 1), 0);
 
+  // Calcula as calorias estimadas somando cada treino do dia, ajustando pela duração
   // Calculate estimated calories
   const estimatedCalories = todaysWorkouts.reduce((sum, w) => {
     const base = workoutCalorieEstimates[w.workout_type] || 300;
@@ -315,9 +343,11 @@ export function WorkoutCard({
     const durationMin = w.duration ? parseInt(w.duration) : 60;
     return sum + Math.round(base * (durationMin / 60));
   }, 0);
-  
+
+  // Calorias exibidas: usa o valor manual se houver, senão a estimativa calculada
   const displayCalories = customCalories ? parseInt(customCalories) : estimatedCalories;
 
+  // Marca/desmarca os treinos do dia como concluídos (bloqueia datas futuras)
   const handleToggleComplete = () => {
     if (isFuture) { toast.error('Não é possível marcar treinos em datas futuras'); return; }
     if (todaysWorkouts.length === 0) return;
@@ -326,12 +356,14 @@ export function WorkoutCard({
     if (newCompleted) toast.success('Treino(s) concluído(s)! 💪');
   };
 
+  // Salva as anotações escritas para os treinos do dia
   const handleSaveNotes = () => {
     if (todaysWorkouts.length === 0) return;
     onUpdateWorkout(isCompleted, todaysWorkouts.map(w => w.workout_type).join(', '), notes);
     toast.success('Anotações salvas!');
   };
 
+  // Adiciona uma nova atividade em branco para o dia indicado (ou para o dia atual)
   const handleAddNewActivity = (forDay?: number) => {
     if (!onAddWorkoutPlan) return;
     const targetDay = forDay !== undefined ? forDay : dayOfWeek;
@@ -341,6 +373,7 @@ export function WorkoutCard({
     }).then(({ error }) => { if (!error) toast.success('Atividade adicionada!'); });
   };
 
+  // Abre ou fecha os detalhes de um treino específico ao ser clicado
   const toggleDetails = (workoutId: string) => setShowDetails(prev => prev === workoutId ? null : workoutId);
 
   return (
@@ -431,6 +464,8 @@ export function WorkoutCard({
           <span className="text-xs font-bold text-foreground ml-auto">{totalWeeklyWorkouts} treinos</span>
         </div>
 
+        {/* Se houver treinos para hoje, lista cada um em um cartão; */}
+        {/* caso contrário, mostra um aviso com botão para adicionar atividade. */}
         {todaysWorkouts.length > 0 ? (
           <>
           {todaysWorkouts.map((workout) => (
@@ -593,6 +628,7 @@ export function WorkoutCard({
         )}
 
         {/* View All Activities */}
+        {/* Botão que expande a grade com os treinos de todos os dias da semana */}
         <div className="pt-3 border-t border-border/50">
           <button onClick={() => setShowAllActivities(!showAllActivities)} className="text-xs text-primary font-semibold hover:underline w-full text-center">
             {showAllActivities ? 'Ocultar atividades da semana' : 'Ver todas as atividades da semana'}

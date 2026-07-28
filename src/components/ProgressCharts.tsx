@@ -1,3 +1,10 @@
+// ============================================================================
+// Gráficos de Progresso (ProgressCharts)
+// Exibe quatro gráficos do acompanhamento diário do usuário: hidratação (água),
+// refeições completadas, treinos realizados e evolução do peso. Recebe os dados
+// já registrados e os transforma em barras e linhas fáceis de visualizar.
+// ============================================================================
+
 import { Droplets, Apple, Dumbbell, Scale } from 'lucide-react';
 import {
   LineChart,
@@ -22,14 +29,14 @@ interface ProgressChartsProps {
 }
 
 export function ProgressCharts({ weights, trackingHistory, targetWeight }: ProgressChartsProps) {
-  // Prepare water data
+  // Monta os dados de água: para cada dia, converte mililitros em litros (meta de 3L)
   const waterData = trackingHistory.map(t => ({
     date: format(parseISO(t.date), 'dd/MM', { locale: ptBR }),
     litros: (t.water_ml / 1000).toFixed(1),
     meta: 3,
   }));
 
-  // Prepare meals data
+  // Monta os dados de refeições: conta quantas das 6 refeições do dia foram concluídas
   const mealsData = trackingHistory.map(t => {
     const completed = [
       t.breakfast_completed,
@@ -45,23 +52,25 @@ export function ProgressCharts({ weights, trackingHistory, targetWeight }: Progr
     };
   });
 
-  // Prepare workout data
+  // Monta os dados de treino: 1 quando o treino do dia foi feito, 0 quando não
   const workoutData = trackingHistory.map(t => ({
     date: format(parseISO(t.date), 'dd/MM', { locale: ptBR }),
     feito: t.workout_completed ? 1 : 0,
   }));
 
-  // Prepare weight data
+  // Monta os dados de peso: converte cada registro em número para o gráfico de linha
   const weightData = weights.map(w => ({
     date: format(parseISO(w.date), 'dd/MM', { locale: ptBR }),
     peso: Number(w.weight_kg),
   }));
 
+  // Classe de estilo reutilizada por todos os cartões de gráfico
   const chartCardClass = "bg-card rounded-2xl p-5 shadow-lg border";
 
+  // Estrutura visual: grade com os quatro cartões de gráfico
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Water Chart */}
+      {/* Cartão do gráfico de Hidratação (litros de água por dia, meta 3L) */}
       <div className={chartCardClass}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl gradient-water flex items-center justify-center">
@@ -99,7 +108,7 @@ export function ProgressCharts({ weights, trackingHistory, targetWeight }: Progr
         )}
       </div>
 
-      {/* Meals Chart */}
+      {/* Cartão do gráfico de Refeições (quantas das 6 refeições foram feitas por dia) */}
       <div className={chartCardClass}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl gradient-meals flex items-center justify-center">
@@ -137,7 +146,7 @@ export function ProgressCharts({ weights, trackingHistory, targetWeight }: Progr
         )}
       </div>
 
-      {/* Workout Chart */}
+      {/* Cartão do gráfico de Treinos (mostra em quais dias o treino foi realizado) */}
       <div className={chartCardClass}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
@@ -175,7 +184,7 @@ export function ProgressCharts({ weights, trackingHistory, targetWeight }: Progr
         )}
       </div>
 
-      {/* Weight Chart */}
+      {/* Cartão do gráfico de Peso (evolução do peso ao longo do tempo, com a meta) */}
       <div className={chartCardClass}>
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl gradient-weight flex items-center justify-center">

@@ -1,3 +1,11 @@
+// ============================================================================
+// TarotFiveCardSpread — Tiragem de Tarot com 5 cartas.
+// O usuário embaralha o baralho e escolhe 5 cartas, cada uma para uma posição
+// (Situação, Desafio, Conselho, O que Ajuda, Tendência). As cartas são salvas
+// no banco e reveladas com sua interpretação. A tiragem só pode ser refeita a
+// cada 7 dias; enquanto isso, mostra a última tiragem e um cronômetro regressivo.
+// ============================================================================
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, Lock } from 'lucide-react';
@@ -34,6 +42,7 @@ import tarot19 from '@/assets/tarot/tarot-19-sun.png';
 import tarot20 from '@/assets/tarot/tarot-20-judgement.png';
 import tarot21 from '@/assets/tarot/tarot-21-world.png';
 
+// Mapeia o número de cada Arcano Maior (0 a 21) à sua imagem.
 const MAJOR_CARD_IMAGES: Record<number, string> = {
   0: tarot00, 1: tarot01, 2: tarot02, 3: tarot03, 4: tarot04,
   5: tarot05, 6: tarot06, 7: tarot07, 8: tarot08, 9: tarot09,
@@ -42,6 +51,8 @@ const MAJOR_CARD_IMAGES: Record<number, string> = {
   20: tarot20, 21: tarot21,
 };
 
+// Catálogo dos 22 Arcanos Maiores: nome, palavras-chave e os significados
+// para a carta na posição normal (upright) e invertida (reversed).
 const MAJOR_ARCANA = [
   { number: 0, name: 'O Louco', keywords: 'Liberdade, novos começos', upright: 'Um novo capítulo se abre. Dê o salto de fé.', reversed: 'Impulsividade e falta de direção.' },
   { number: 1, name: 'O Mago', keywords: 'Vontade, manifestação', upright: 'Você tem todos os recursos para criar sua realidade.', reversed: 'Dons mal utilizados.' },
@@ -67,6 +78,7 @@ const MAJOR_ARCANA = [
   { number: 21, name: 'O Mundo', keywords: 'Conclusão, conquista', upright: 'Celebre sua jornada.', reversed: 'Algo ainda precisa ser completado.' },
 ];
 
+// Formato de uma carta já sorteada na tiragem (dados da carta + se saiu invertida).
 interface SpreadCard {
   name: string;
   keywords: string;
@@ -80,6 +92,7 @@ interface SpreadCard {
   isReversed: boolean;
 }
 
+// As 5 posições da tiragem, em ordem: cada uma tem rótulo, ícone e o que representa.
 const POSITIONS = [
   { label: 'Situação Atual', image: spreadSituacao, desc: 'Onde você está agora' },
   { label: 'Desafio', image: spreadDesafio, desc: 'O que se opõe a você' },
@@ -88,6 +101,7 @@ const POSITIONS = [
   { label: 'Tendência', image: spreadTendencia, desc: 'Para onde o caminho aponta' },
 ];
 
+// Monta o baralho completo unindo Arcanos Maiores e Menores num só formato.
 function buildDeck() {
   const major = MAJOR_ARCANA.map(c => ({
     name: c.name, keywords: c.keywords, upright: c.upright, reversed: c.reversed,
@@ -102,8 +116,10 @@ function buildDeck() {
   return [...major, ...minor];
 }
 
+// Baralho pronto, criado uma única vez.
 const DECK = buildDeck();
 
+// Devolve uma cópia embaralhada do baralho (algoritmo Fisher-Yates).
 function shuffleDeck() {
   const arr = [...DECK];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -118,17 +134,25 @@ interface Props {
 }
 
 export default function TarotFiveCardSpread({ onBack }: Props) {
+  // Leituras salvas do usuário e função para gravar uma nova leitura no banco.
   const { readings, saveReading } = useTarotReadings();
+  // Fase atual da tela: verificando, bloqueada, inicial, embaralhando, escolhendo ou revelada.
   const [phase, setPhase] = useState<'checking' | 'locked' | 'idle' | 'shuffling' | 'picking' | 'revealed'>('checking');
+  // Baralho embaralhado da tiragem em andamento.
   const [shuffled, setShuffled] = useState<typeof DECK>([]);
+  // Cartas já sorteadas nesta tiragem.
   const [drawnCards, setDrawnCards] = useState<SpreadCard[]>([]);
+  // Índice da posição atual sendo escolhida (0 a 4).
   const [pickIndex, setPickIndex] = useState(0);
-  
+
+  // Data/hora em que a próxima tiragem ficará disponível de novo.
   const [unlockDate, setUnlockDate] = useState<Date | null>(null);
+  // Tempo restante até liberar a próxima tiragem (dias/horas/min/seg).
   const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  // Tiragem já salva (mostrada quando ainda está no período de espera de 7 dias).
   const [savedSpread, setSavedSpread] = useState<SpreadCard[] | null>(null);
 
-  // Live countdown timer
+  // Cronômetro ao vivo: recalcula o tempo restante a cada segundo até a liberação.
   useEffect(() => {
     if (!unlockDate) return;
     const tick = () => {
@@ -150,11 +174,16 @@ export default function TarotFiveCardSpread({ onBack }: Props) {
     return () => clearInterval(interval);
   }, [unlockDate]);
 
+  // Ao carregar: verifica se já existe uma tiragem recente (dos últimos 7 dias).
+  // Se houver, reconstrói e mostra a tiragem salva ou bloqueia com o cronômetro;
+  // caso contrário, libera para o usuário fazer uma nova.
   // Check cooldown and existing spread — only on initial load
   useEffect(() => {
+    // Não reinicia a fase se o usuário estiver no meio de uma tiragem.
     // Don't reset phase if user is mid-flow
     if (phase === 'shuffling' || phase === 'picking' || phase === 'revealed') return;
 
+    // Filtra só as leituras que pertencem a tiragens de 5 cartas.
     const fiveCardReadings = readings.filter(r => r.reading_type?.startsWith('FIVE_CARD_'));
     if (fiveCardReadings.length >= 5) {
       // Group by date to find complete spreads (all 5 positions)
@@ -173,6 +202,8 @@ export default function TarotFiveCardSpread({ onBack }: Props) {
         })
         .sort(([a], [b]) => b.localeCompare(a));
 
+      // Achou uma tiragem completa recente: calcula quando ela foi feita e a
+      // data de liberação (7 dias depois).
       if (completeDates.length > 0) {
         const [, spreadReadings] = completeDates[0];
         const latestReading = spreadReadings.reduce((a, b) =>
@@ -190,6 +221,7 @@ export default function TarotFiveCardSpread({ onBack }: Props) {
             return posA - posB;
           });
 
+          // Reconstrói cada carta salva buscando seus dados completos no baralho.
           const reconstructed: SpreadCard[] = sorted.slice(0, 5).map(r => {
             let card;
             if (r.arcana === 'minor') {
@@ -226,10 +258,12 @@ export default function TarotFiveCardSpread({ onBack }: Props) {
         }
       }
     }
+    // Nenhuma tiragem recente encontrada: libera para fazer uma nova.
     setPhase('idle');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readings]);
 
+  // Inicia uma nova tiragem: embaralha o baralho e passa à fase de escolha.
   const startReading = () => {
     setPhase('shuffling');
     setShuffled(shuffleDeck());
@@ -238,6 +272,8 @@ export default function TarotFiveCardSpread({ onBack }: Props) {
     setTimeout(() => setPhase('picking'), 2000);
   };
 
+  // Registra a carta escolhida para a posição atual, sorteia se sai invertida,
+  // salva no banco e avança para a próxima posição (ou revela ao completar 5).
   const pickCard = async (visualIndex: number) => {
     if (pickIndex >= 5) return;
     const card = shuffled[visualIndex + pickIndex * 7]; // offset to avoid repeats
@@ -264,6 +300,8 @@ export default function TarotFiveCardSpread({ onBack }: Props) {
     }
   };
 
+  // Devolve as cores (fundo, texto, borda) conforme o elemento da carta menor
+  // (água, terra, ar, fogo); usa roxo como padrão para os Arcanos Maiores.
   const elementColor = (cardId: string) => {
     if (cardId.startsWith('water')) return { bg: 'rgba(59,130,246,0.12)', text: '#60a5fa', border: 'rgba(59,130,246,0.2)' };
     if (cardId.startsWith('earth')) return { bg: 'rgba(34,197,94,0.12)', text: '#4ade80', border: 'rgba(34,197,94,0.2)' };

@@ -1,3 +1,11 @@
+// ============================================================================
+// SELETOR DE ALIMENTOS (FoodSelector)
+// Componente usado ao montar uma refeição: o usuário adiciona alimentos (por
+// busca no banco de alimentos ou cadastrando um item personalizado), ajusta a
+// quantidade e a unidade de cada um, e o componente calcula automaticamente os
+// valores nutricionais (calorias, proteína, carboidrato e gordura) do total.
+// ============================================================================
+
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Plus, ChevronDown, Trash2, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -16,24 +24,33 @@ import {
 } from '@/lib/foodDatabase';
 import type { MealIngredient } from '@/hooks/useUserMealPlans';
 
+// Um alimento escolhido na refeição: o item, a unidade de medida e a quantidade
 export interface SelectedFood {
   food: FoodItem;
   unit: FoodUnit;
   quantity: number;
 }
 
+// Informações que este componente recebe:
+// - ingredients: os ingredientes já existentes na refeição
+// - onChange: função chamada sempre que a lista muda, devolvendo os ingredientes
+//   atualizados e o total nutricional recalculado
 interface FoodSelectorProps {
   ingredients: MealIngredient[];
   onChange: (ingredients: MealIngredient[], macros: { calories: number; protein: number; carbs: number; fat: number }) => void;
 }
 
 export function FoodSelector({ ingredients, onChange }: FoodSelectorProps) {
+  // Lista de alimentos selecionados; começa convertendo os ingredientes recebidos
   const [selectedFoods, setSelectedFoods] = useState<SelectedFood[]>(() =>
     ingredientsToSelectedFoods(ingredients)
   );
+  // Controla se a janela de busca de alimentos está aberta
   const [searchOpen, setSearchOpen] = useState(false);
+  // Controla se a janela de cadastro de alimento personalizado está aberta
   const [customOpen, setCustomOpen] = useState(false);
 
+  // Atualiza a lista interna e avisa o componente pai, recalculando o total nutricional
   // Sync changes upward
   const emitChange = (foods: SelectedFood[]) => {
     setSelectedFoods(foods);
@@ -61,6 +78,7 @@ export function FoodSelector({ ingredients, onChange }: FoodSelectorProps) {
     });
   };
 
+  // Adiciona um novo alimento à refeição (quantidade 1 e primeira unidade disponível)
   const addFood = (food: FoodItem) => {
     const newFood: SelectedFood = {
       food,
@@ -71,16 +89,19 @@ export function FoodSelector({ ingredients, onChange }: FoodSelectorProps) {
     setSearchOpen(false);
   };
 
+  // Altera um alimento já na lista (por exemplo, muda a quantidade ou a unidade)
   const updateFood = (index: number, updates: Partial<SelectedFood>) => {
     const newFoods = [...selectedFoods];
     newFoods[index] = { ...newFoods[index], ...updates };
     emitChange(newFoods);
   };
 
+  // Remove um alimento da lista pela sua posição
   const removeFood = (index: number) => {
     emitChange(selectedFoods.filter((_, i) => i !== index));
   };
 
+  // Monta a interface: cabeçalho com botões, lista de alimentos e o total da refeição
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -97,10 +118,13 @@ export function FoodSelector({ ingredients, onChange }: FoodSelectorProps) {
         </div>
       </div>
 
+      {/* Lista dos alimentos já adicionados à refeição */}
       {/* Selected foods list */}
       <div className="space-y-2">
         {selectedFoods.map((sf, idx) => {
+          // Calcula os valores nutricionais deste alimento conforme quantidade e unidade
           const macros = calculateMacros(sf.food, sf.unit, sf.quantity);
+          // Monta o cartão de um alimento: nome, campo de quantidade, unidade e nutrientes
           return (
             <div key={idx} className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
               <div className="flex items-center justify-between">
@@ -150,10 +174,12 @@ export function FoodSelector({ ingredients, onChange }: FoodSelectorProps) {
         })}
       </div>
 
+      {/* Bloco de resumo com o total nutricional da refeição (só aparece se houver alimentos) */}
       {selectedFoods.length > 0 && (
         <div className="rounded-xl bg-primary/10 border border-primary/20 p-3">
           <p className="text-xs font-semibold text-primary mb-1">Total da refeição</p>
           <div className="flex gap-3 text-xs">
+            {/* Soma os nutrientes de todos os alimentos e exibe o total da refeição */}
             {(() => {
               const total = selectedFoods.reduce(
                 (acc, f) => {
@@ -175,19 +201,27 @@ export function FoodSelector({ ingredients, onChange }: FoodSelectorProps) {
         </div>
       )}
 
+      {/* Janelas (diálogos) de busca de alimentos e de cadastro de alimento personalizado */}
       <FoodSearchDialog open={searchOpen} onOpenChange={setSearchOpen} onSelect={addFood} />
       <CustomFoodDialog open={customOpen} onOpenChange={setCustomOpen} onAdd={addFood} />
     </div>
   );
 }
 
-// === Search Dialog ===
+// === Janela de busca de alimentos ===
+// Diálogo com campo de busca e filtros por categoria para encontrar um alimento
+// no banco de dados e adicioná-lo à refeição.
 function FoodSearchDialog({ open, onOpenChange, onSelect }: { open: boolean; onOpenChange: (o: boolean) => void; onSelect: (f: FoodItem) => void }) {
+  // Texto digitado na busca
   const [query, setQuery] = useState('');
+  // Categoria selecionada para filtrar (vazio = todas)
   const [category, setCategory] = useState<string>('');
+  // Referência ao campo de busca, para focá-lo ao abrir a janela
   const inputRef = useRef<HTMLInputElement>(null);
+  // Lista de categorias disponíveis (calculada uma única vez)
   const categories = useMemo(() => getFoodCategories(), []);
 
+  // Ao abrir a janela, limpa a busca e os filtros e foca o campo de digitação
   useEffect(() => {
     if (open) {
       setQuery('');
@@ -196,6 +230,7 @@ function FoodSearchDialog({ open, onOpenChange, onSelect }: { open: boolean; onO
     }
   }, [open]);
 
+  // Resultados da busca, recalculados quando o texto ou a categoria mudam
   const results = useMemo(() => searchFoods(query, category || undefined), [query, category]);
 
   return (
@@ -240,6 +275,7 @@ function FoodSearchDialog({ open, onOpenChange, onSelect }: { open: boolean; onO
             ))}
           </div>
         </div>
+        {/* Lista de resultados da busca; se nada for encontrado, mostra um aviso */}
         <div className="flex-1 overflow-y-auto px-4 pb-4">
           {results.length === 0 ? (
             <p className="text-center text-sm text-muted-foreground py-8">Nenhum alimento encontrado</p>
@@ -271,14 +307,18 @@ function FoodSearchDialog({ open, onOpenChange, onSelect }: { open: boolean; onO
   );
 }
 
-// === Custom Food Dialog ===
+// === Janela de cadastro de alimento personalizado ===
+// Diálogo onde o usuário informa nome e valores nutricionais (por 100g) de um
+// alimento que não existe no banco, criando um item personalizado para a refeição.
 function CustomFoodDialog({ open, onOpenChange, onAdd }: { open: boolean; onOpenChange: (o: boolean) => void; onAdd: (f: FoodItem) => void }) {
+  // Campos preenchidos pelo usuário: nome e valores nutricionais por 100g
   const [name, setName] = useState('');
   const [kcal, setKcal] = useState('');
   const [protein, setProtein] = useState('');
   const [carbs, setCarbs] = useState('');
   const [fat, setFat] = useState('');
 
+  // Cria o alimento personalizado com os valores informados, adiciona-o e limpa o formulário
   const handleAdd = () => {
     if (!name.trim()) return;
     const custom: FoodItem = {
@@ -342,14 +382,18 @@ function CustomFoodDialog({ open, onOpenChange, onAdd }: { open: boolean; onOpen
   );
 }
 
+// Busca aproximada: tenta descobrir qual alimento do banco corresponde a um nome
+// de ingrediente escrito livremente (ex.: "frango grelhado" -> peito de frango).
 // Fuzzy match: find the best food from the database for a given ingredient name
 function findBestMatch(name: string): FoodItem | null {
   const lower = name.toLowerCase().trim();
-  
+
+  // 1. Correspondência exata: o nome bate exatamente com um alimento do banco
   // 1. Exact match
   const exact = foodDatabase.find(f => f.name.toLowerCase() === lower);
   if (exact) return exact;
 
+  // 2. Tabela de apelidos: liga nomes comuns de ingredientes ao código do alimento
   // 2. Map of common ingredient names to food IDs
   const aliasMap: Record<string, string> = {
     'ovos': 'ovo_inteiro',
@@ -454,10 +498,12 @@ function findBestMatch(name: string): FoodItem | null {
     if (found) return found;
   }
 
+  // 3. Correspondência parcial: um nome contém o outro (total ou em parte)
   // 3. Partial match: food name contains ingredient or vice versa
   const partial = foodDatabase.find(f => f.name.toLowerCase().includes(lower) || lower.includes(f.name.toLowerCase()));
   if (partial) return partial;
 
+  // 4. Correspondência por palavras: escolhe o alimento que combina com mais palavras do nome
   // 4. Word-based match
   const words = lower.split(/\s+/).filter(w => w.length > 2);
   if (words.length > 0) {
@@ -477,11 +523,14 @@ function findBestMatch(name: string): FoodItem | null {
   return null;
 }
 
+// Converte os ingredientes salvos da refeição em alimentos selecionados, tentando
+// casar cada ingrediente com um item do banco e interpretando quantidade e unidade.
 // Try to match existing ingredients to food database
 function ingredientsToSelectedFoods(ingredients: MealIngredient[]): SelectedFood[] {
   return ingredients.map(ing => {
     const match = findBestMatch(ing.item);
     if (match) {
+      // Tenta extrair o número da quantidade e a unidade do texto (ex.: "2 unidades")
       // Try to parse quantity
       const qtyMatch = ing.quantity?.match(/^([\d.,]+)\s*(.*)$/);
       let quantity = 1;
@@ -494,6 +543,7 @@ function ingredientsToSelectedFoods(ingredients: MealIngredient[]): SelectedFood
       }
       return { food: match, unit, quantity };
     }
+    // Sem correspondência no banco: cria um item genérico (sem valores nutricionais)
     // No match - create a generic entry
     const genericFood: FoodItem = {
       id: `generic_${ing.item}`,

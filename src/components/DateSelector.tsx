@@ -1,3 +1,9 @@
+// ============================================================================
+// SELETOR DE DATA
+// Barra que mostra a data escolhida e permite trocar de dia: setas de avancar/
+// voltar, um calendario em pop-up e um botao "Hoje". Nao deixa escolher datas
+// futuras. Ao mudar a data, avisa a tela (via onDateChange) para recarregar.
+// ============================================================================
 import { format, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -14,20 +20,27 @@ interface DateSelectorProps {
 }
 
 export function DateSelector({ selectedDate, onDateChange }: DateSelectorProps) {
+  // Data de hoje e verificacao se a data selecionada e hoje.
   const today = new Date();
   const isSelectedToday = isToday(selectedDate);
+  // Controla se o calendario em pop-up esta aberto.
   const [calendarOpen, setCalendarOpen] = useState(false);
 
+  // Volta um dia.
   const goToPreviousDay = () => onDateChange(subDays(selectedDate, 1));
+  // Avanca um dia, sem passar de hoje.
   const goToNextDay = () => {
     const nextDay = addDays(selectedDate, 1);
     if (nextDay <= today) onDateChange(nextDay);
   };
+  // Pula direto para o dia de hoje.
   const goToToday = () => onDateChange(today);
+  // Ao escolher uma data no calendario, aceita apenas datas ate hoje e fecha o pop-up.
   const handleDateSelect = (date: Date | undefined) => {
     if (date && date <= today) { onDateChange(date); setCalendarOpen(false); }
   };
 
+  // Monta a barra: botao com a data (abre o calendario) e os controles de navegacao.
   return (
     <div className="rounded-2xl bg-card border border-border p-3 shadow-sm flex items-center justify-between gap-2">
       <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>

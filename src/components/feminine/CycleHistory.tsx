@@ -1,3 +1,9 @@
+// ============================================================================
+// CycleHistory (Histórico de Ciclos)
+// Lista os ciclos menstruais já registrados pela usuária, mostrando data de
+// início, duração do ciclo e do período, e destacando ciclos "atípicos" (muito
+// diferentes da média). Permite excluir um ciclo da lista.
+// ============================================================================
 import { format, differenceInDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Trash2, AlertTriangle } from 'lucide-react';
@@ -12,9 +18,12 @@ interface Props {
   onDeleteCycle: (id: string) => Promise<void>;
 }
 
+// Componente principal. Recebe a lista de ciclos, as configurações e a função para excluir um ciclo.
 export function CycleHistory({ cycles, settings, onDeleteCycle }: Props) {
+  // Duração média do ciclo (padrão 28 dias), usada para comparar e detectar ciclos atípicos.
   const avgLength = settings?.average_cycle_length || 28;
 
+  // Exclui um ciclo e mostra um aviso de confirmação na tela.
   const handleDelete = async (id: string) => {
     await onDeleteCycle(id);
     toast.success('Ciclo removido');
@@ -38,6 +47,7 @@ export function CycleHistory({ cycles, settings, onDeleteCycle }: Props) {
       </p>
 
       {cycles.map((cycle, i) => {
+        // Calcula o quanto este ciclo se afastou da duração média (em dias).
         const deviation = cycle.cycle_length
           ? Math.abs(cycle.cycle_length - avgLength)
           : 0;

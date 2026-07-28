@@ -1,3 +1,10 @@
+// ============================================================================
+// CARTÃO DE EVOLUÇÃO DE PESO
+// Mostra um cartão onde o usuário registra seu peso atual e acompanha a
+// evolução em um gráfico de linha ao longo do tempo. Também lista o histórico
+// recente dos últimos registros e exibe a meta de peso definida.
+// ============================================================================
+
 import { useState } from 'react';
 import { TrendingDown, Plus, Scale } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,9 +22,12 @@ interface WeightCardProps {
 }
 
 export function WeightCard({ weights, onAddWeight, targetWeight = 80 }: WeightCardProps) {
+  // Guarda o valor de peso que o usuário está digitando no campo
   const [newWeight, setNewWeight] = useState('');
+  // Indica se está salvando (para desabilitar o botão enquanto grava)
   const [loading, setLoading] = useState(false);
 
+  // Valida e registra o novo peso quando o formulário é enviado
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -39,6 +49,8 @@ export function WeightCard({ weights, onAddWeight, targetWeight = 80 }: WeightCa
     }
   };
 
+  // Prepara os dados dos registros de peso no formato que o gráfico entende
+  // (data curta dd/MM + valor do peso)
   const chartData = weights.map((w) => ({
     date: format(parseISO(w.date), 'dd/MM', { locale: ptBR }),
     peso: Number(w.weight_kg),
@@ -46,6 +58,7 @@ export function WeightCard({ weights, onAddWeight, targetWeight = 80 }: WeightCa
 
   return (
     <div className="gradient-weight rounded-2xl p-6 text-white shadow-xl animate-fade-in">
+      {/* Cabeçalho: ícone, título e a meta de peso do usuário */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
@@ -58,6 +71,7 @@ export function WeightCard({ weights, onAddWeight, targetWeight = 80 }: WeightCa
         </div>
       </div>
 
+      {/* Formulário para digitar e registrar um novo peso */}
       <form onSubmit={handleSubmit} className="flex gap-2 mb-6">
         <Input
           type="number"
@@ -79,6 +93,8 @@ export function WeightCard({ weights, onAddWeight, targetWeight = 80 }: WeightCa
         </Button>
       </form>
 
+      {/* Se já houver pesos registrados, mostra o gráfico de linha da evolução; */}
+      {/* caso contrário, mostra uma mensagem convidando a registrar o primeiro peso */}
       {chartData.length > 0 ? (
         <div className="h-48 bg-white/10 rounded-xl p-2">
           <ResponsiveContainer width="100%" height="100%">
@@ -126,6 +142,7 @@ export function WeightCard({ weights, onAddWeight, targetWeight = 80 }: WeightCa
         </div>
       )}
 
+      {/* Lista dos 5 registros de peso mais recentes (do mais novo para o mais antigo) */}
       {weights.length > 0 && (
         <div className="mt-4">
           <p className="text-sm text-white/70 mb-2">Histórico Recente</p>

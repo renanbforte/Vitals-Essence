@@ -1,3 +1,11 @@
+// ============================================================================
+// AstralTodayTab — Aba "Hoje" da seção Astral.
+// Mostra o horóscopo do dia do usuário (baseado no signo solar), quatro áreas
+// de foco (Amor, Carreira, Bem-estar, Criatividade) que abrem um painel com o
+// texto, uma afirmação do dia e a fase atual da lua. Se ainda não houver
+// horóscopo, ele é gerado automaticamente ao abrir a aba.
+// ============================================================================
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
@@ -11,6 +19,8 @@ import careerImg from '@/assets/astral-focus-career.png';
 import wellnessImg from '@/assets/astral-focus-wellness.png';
 import creativityImg from '@/assets/astral-focus-creativity.png';
 
+// Configuração das 4 áreas de foco: cada uma tem rótulo, imagem de fundo e
+// cores (gradiente, borda e brilho) usadas para montar os cards visuais.
 const focusAreas = [
   {
     key: 'love',
@@ -47,20 +57,27 @@ const focusAreas = [
 ];
 
 export default function AstralTodayTab() {
+  // Dados do perfil astral do usuário (signos, etc).
   const { profile } = useAstral();
+  // Horóscopo do dia e funções/estados para carregar ou gerar esse horóscopo.
   const { horoscope, isLoading, generateHoroscope, isGenerating } = useDailyHoroscope();
+  // Guarda qual área de foco está aberta no painel (ou null se nenhuma).
   const [activeArea, setActiveArea] = useState<string | null>(null);
+  // Calcula a fase da lua de hoje (emoji, nome e texto).
   const moonPhase = getMoonPhase();
 
+  // Ao abrir a aba: se o usuário tem signo mas ainda não há horóscopo, gera um.
   useEffect(() => {
     if (profile?.sun_sign && !horoscope && !isLoading) {
       generateHoroscope(profile.sun_sign);
     }
   }, [profile, horoscope, isLoading]);
 
+  // Signo solar do usuário e o símbolo correspondente (ou uma estrela padrão).
   const sunSign = profile?.sun_sign as ZodiacSign | undefined;
   const signSymbol = sunSign ? SIGN_SYMBOLS[sunSign] : '✨';
 
+  // Retorna o texto do horóscopo para a área de foco escolhida (amor, etc).
   const getAreaText = (key: string) => {
     if (!horoscope) return 'Gerando sua leitura cósmica...';
     const map: Record<string, string> = {
@@ -72,6 +89,7 @@ export default function AstralTodayTab() {
     return map[key] || '';
   };
 
+  // Enquanto carrega ou gera o horóscopo, mostra uma tela de "carregando".
   if (isLoading || isGenerating) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4">

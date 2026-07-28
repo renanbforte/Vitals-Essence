@@ -1,12 +1,22 @@
+// ============================================================================
+// PaymentFailedBanner — Aviso de tela cheia quando o pagamento falha.
+// Se a assinatura estiver com pagamento pendente, cobre o app inteiro e
+// bloqueia o uso, oferecendo botões para regularizar o pagamento ou para
+// reverificar ("Já paguei"). Some sozinho quando o pagamento é confirmado.
+// ============================================================================
 import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 
 export function PaymentFailedBanner() {
+  // Busca do contexto de assinatura: se o pagamento falhou, a ação de abrir o
+  // portal de pagamento, a de reverificar a assinatura e o estado "carregando".
   const { payment_failed, openPortal, checkSubscription, loading } = useSubscription();
 
+  // Se não há falha de pagamento, não mostra nada (o app segue normal).
   if (!payment_failed) return null;
 
+  // Sobreposição que cobre toda a tela, centralizando o cartão de aviso.
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-background/95 backdrop-blur-sm">
       <div className="max-w-md w-full mx-4 rounded-2xl border border-destructive/40 bg-card p-8 shadow-2xl text-center">
@@ -20,6 +30,7 @@ export function PaymentFailedBanner() {
         </p>
 
         <div className="flex flex-col gap-3">
+          {/* Botão que abre o portal externo para o usuário quitar o pagamento. */}
           <Button
             className="w-full gap-2"
             onClick={openPortal}
@@ -27,6 +38,7 @@ export function PaymentFailedBanner() {
             <ExternalLink className="w-4 h-4" />
             Regularizar pagamento
           </Button>
+          {/* Botão "Já paguei": reverifica o status; gira o ícone enquanto checa. */}
           <Button
             variant="outline"
             className="w-full gap-2"

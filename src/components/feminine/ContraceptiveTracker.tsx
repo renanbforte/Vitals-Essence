@@ -1,3 +1,10 @@
+// ============================================================================
+// ContraceptiveTracker (Rastreador de Anticoncepcional)
+// Mostra os métodos anticoncepcionais cadastrados pela usuária (pílula, injeção
+// etc.), avisa quando o método está perto de vencer, indica a fase da cartela e
+// permite registrar a dose tomada no dia. Também abre um diálogo para adicionar
+// um novo método.
+// ============================================================================
 import { useState } from 'react';
 import { format, parseISO, differenceInDays, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -18,17 +25,26 @@ import {
 import { ContraceptiveMethodDialog } from './ContraceptiveMethodDialog';
 import { toast } from 'sonner';
 
+// Rótulos e cores usados para mostrar a fase da cartela de pílula:
+// "ativa" (tomando os comprimidos) ou "intervalo" (pausa entre cartelas).
 const PHASE_LABEL = {
   active: { label: 'Fase ativa', color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/30' },
   break: { label: 'Intervalo / descanso', color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30' },
 };
 
+// Cartão de um único método anticoncepcional: mostra nome, avisos de validade,
+// fase da cartela / próxima injeção e os botões para registrar a dose do dia.
 function StatusCard({ status, onLog }: { status: ContraceptiveStatus; onLog: (id: string, taken: boolean) => void }) {
+  // Dados já calculados do método (validade, fase da pílula, registro de hoje etc.).
   const { method, daysUntilRenewal, isExpiringSoon, nextInjectionDate, currentPillPhase, pillDayInCycle, todayLog } = status;
+  // Controla se o cartão está expandido (mostrando o histórico dos últimos 7 dias).
   const [expanded, setExpanded] = useState(false);
+  // Controla se o campo de horário para registrar a dose está visível.
   const [showTimeInput, setShowTimeInput] = useState(false);
+  // Guarda o horário digitado pela usuária ao registrar a dose.
   const [timeValue, setTimeValue] = useState('');
 
+  // Indica se este método exige acompanhamento diário (ex.: pílula tomada todo dia).
   const needsDaily = METHOD_NEEDS_DAILY.includes(method.method_type);
 
   return (
@@ -212,10 +228,14 @@ function StatusCard({ status, onLog }: { status: ContraceptiveStatus; onLog: (id
   );
 }
 
+// Componente principal: lista todos os métodos ativos da usuária e o botão de adicionar.
 export function ContraceptiveTracker() {
+  // Busca no banco (Supabase) os métodos e seus status, além das funções para registrar/recarregar.
   const { statuses, loading, logToday, refetch } = useContraceptive();
+  // Controla se o diálogo de adicionar um novo método está aberto.
   const [showAddDialog, setShowAddDialog] = useState(false);
 
+  // Registra a dose do dia para um método e mostra um aviso de confirmação na tela.
   const handleLog = async (methodId: string, taken: boolean) => {
     await logToday(methodId, { taken, taken_at: null });
     toast.success(taken ? 'Registrado! ✓' : 'Marcado como não tomada');

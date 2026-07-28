@@ -1,3 +1,10 @@
+// ============================================================================
+// PerformanceCalendar — Calendário de desempenho do usuário.
+// Mostra a "sequência" (dias seguidos cumprindo metas) com um fogo animado que
+// fica mais intenso conforme a sequência cresce, e um calendário mensal onde
+// cada dia é colorido de acordo com a nota de desempenho (refeições, água e
+// treino). Também traz navegação de mês e uma legenda de cores.
+// ============================================================================
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -20,8 +27,11 @@ interface PerformanceCalendarProps {
   trackingHistory: DailyTracking[];
 }
 
+// Iniciais dos dias da semana (Domingo a Sábado) para o cabeçalho do calendário.
 const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
+// Calcula a nota do dia (0 a 100) combinando três metas:
+// 40% pelas refeições cumpridas, 30% pela água bebida, 30% pelo treino feito.
 function getDayScore(t: DailyTracking): number {
   let score = 0;
   const meals = [
@@ -38,6 +48,8 @@ function getDayScore(t: DailyTracking): number {
   return Math.round(score);
 }
 
+// Escolhe a cor de fundo do dia conforme a nota: quanto maior a nota,
+// mais forte fica o roxo (0% cinza, 100% roxo cheio).
 function getScoreColor(score: number): string {
   if (score === 0) return 'bg-muted/60';
   if (score < 30) return 'bg-[hsl(262_83%_58%/0.15)]';
@@ -46,21 +58,28 @@ function getScoreColor(score: number): string {
   return 'bg-primary';
 }
 
+// Escolhe a cor do número do dia para dar contraste com o fundo:
+// texto claro em fundos escuros (notas altas) e texto normal nos demais.
 function getScoreTextColor(score: number): string {
   if (score >= 80) return 'text-primary-foreground';
   if (score >= 60) return 'text-primary-foreground';
   return 'text-foreground';
 }
 
+// Calcula a "sequência": quantos dias seguidos (a partir de hoje, voltando no
+// tempo) o usuário teve nota mínima de 30. Para de contar no primeiro dia que
+// falhou. Detalhe: se hoje ainda não tem dados, começa a checar por ontem.
 function computeStreak(trackingHistory: DailyTracking[]): number {
   if (!trackingHistory.length) return 0;
   const today = new Date();
   let streak = 0;
   let checkDate = today;
 
+  // Organiza o histórico por data para consultar cada dia rapidamente.
   const trackingMap = new Map<string, DailyTracking>();
   trackingHistory.forEach(t => trackingMap.set(t.date, t));
 
+  // Volta dia a dia (até 1 ano) contando enquanto a meta mínima foi cumprida.
   for (let i = 0; i < 365; i++) {
     const dateStr = format(checkDate, 'yyyy-MM-dd');
     const t = trackingMap.get(dateStr);
@@ -79,12 +98,18 @@ function computeStreak(trackingHistory: DailyTracking[]): number {
 }
 
 /* ── Animated Fire ── */
+// Desenha o fogo animado que representa a sequência. Quanto maior a sequência,
+// maior, mais colorido e mais "vivo" (tremeluzente) o fogo fica.
 function AnimatedFire({ streak }: { streak: number }) {
+  // "intensidade" de 0 a 1: 0 dias = fogo apagado, 30+ dias = fogo no máximo.
   // intensity 0-1 based on streak: 0 days = 0, 30+ days = 1
   const intensity = Math.min(streak / 30, 1);
+  // Tamanho do fogo cresce com a intensidade (de 60 a 110px de altura).
   const height = 60 + intensity * 50; // 60-110px
   const width = height * 0.8;
 
+  // As três cores do fogo (interna, meio e externa). Sem sequência ficam roxo
+  // apagado; com sequência ficam roxo/magenta vibrante e quente.
   // Colors shift from dim purple to vibrant hot purple/magenta
   const innerColor = streak === 0
     ? 'hsl(262 30% 70%)'
@@ -96,17 +121,21 @@ function AnimatedFire({ streak }: { streak: number }) {
     ? 'hsl(262 50% 40%)'
     : `hsl(${255} ${80 + intensity * 10}% ${35 + intensity * 15}%)`;
 
+  // Velocidade da animação: sequência maior faz o fogo tremeluzir mais rápido.
   // Animation speeds — higher streak = faster flicker
   const flickerDuration = Math.max(0.4, 1.2 - intensity * 0.8);
   const swayDuration = Math.max(0.8, 2 - intensity * 1.2);
 
+  // Quantidade de faíscas subindo — aumenta junto com a intensidade.
   // Particle count scales with intensity
   const particleCount = Math.floor(intensity * 6);
 
+  // Medidas de apoio para desenhar o fogo (altura total, centro e base).
   const h = height + 16;
   const cx = width / 2;
   const base = h - 6; // bottom of flame
 
+  // Desenho do fogo em SVG: camadas de chama + faíscas, todas animadas.
   return (
     <div className="flex justify-center" style={{ height: h }}>
       <svg
@@ -209,25 +238,35 @@ function AnimatedFire({ streak }: { streak: number }) {
   );
 }
 
+// Componente principal do calendário. Recebe o histórico de acompanhamento
+// diário (trackingHistory) e monta a tela completa.
 export function PerformanceCalendar({ trackingHistory }: PerformanceCalendarProps) {
+  // Guarda qual mês está sendo exibido (começa no mês atual).
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
+  // Organiza o histórico por data para consulta rápida (recalcula só quando
+  // o histórico muda), evitando refazer esse trabalho a cada redesenho.
   const trackingMap = useMemo(() => {
     const map = new Map<string, DailyTracking>();
     trackingHistory.forEach(t => map.set(t.date, t));
     return map;
   }, [trackingHistory]);
 
+  // Calcula a sequência atual de dias (memorizada, recalcula só se mudar o histórico).
   const streak = useMemo(() => computeStreak(trackingHistory), [trackingHistory]);
 
+  // Descobre os limites e os dias do mês exibido, além do dia da semana em que
+  // ele começa (para alinhar o calendário) e a data de hoje.
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
   const startDayOfWeek = getDay(monthStart);
   const today = new Date();
 
+  // Texto do mês/ano em português (ex.: "julho 2026").
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: ptBR });
 
+  // Monta a tela: fogo + sequência, navegação de mês, grade de dias e legenda.
   return (
     <div className="bg-card rounded-2xl p-5 shadow-lg border space-y-5">
       {/* Animated Fire + Streak */}
@@ -277,14 +316,17 @@ export function PerformanceCalendar({ trackingHistory }: PerformanceCalendarProp
           <div key={`empty-${i}`} />
         ))}
 
+        {/* Um quadradinho para cada dia do mês. */}
         {/* Day cells */}
         {daysInMonth.map((day) => {
+          // Para cada dia: busca os dados, calcula a nota e marca se é futuro/hoje.
           const dateStr = format(day, 'yyyy-MM-dd');
           const tracking = trackingMap.get(dateStr);
           const score = tracking ? getDayScore(tracking) : 0;
           const isFuture = isAfter(day, today);
           const isToday = isSameDay(day, today);
 
+          // Quadradinho do dia: cor pela nota, destaque se for hoje, dias futuros esmaecidos.
           return (
             <motion.div
               key={dateStr}

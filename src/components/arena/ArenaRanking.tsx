@@ -1,3 +1,9 @@
+// ============================================================================
+// ArenaRanking (Ranking da Arena)
+// Monta a tabela de classificação (ranking) de um grupo de desafio de bem-estar.
+// Calcula a pontuação de cada participante e mostra abas como Total, Evolução,
+// Streak e Equilíbrio, respeitando o nível de transparência escolhido pelo grupo.
+// ============================================================================
 import { ArenaDailyScore, ArenaGroup, ArenaMember } from '@/hooks/useArena';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
@@ -21,6 +27,9 @@ interface RankedMember {
   days: number;
 }
 
+// Para cada membro, soma e faz a média das pontuações diárias (hidratação,
+// alimentação, treino, pontos totais, streak e dias registrados) e devolve
+// uma lista pronta para ser ordenada no ranking.
 function computeRankings(members: ArenaMember[], scores: ArenaDailyScore[]): RankedMember[] {
   return members.map(m => {
     const memberScores = scores.filter(s => s.user_id === m.user_id);
@@ -42,22 +51,28 @@ function computeRankings(members: ArenaMember[], scores: ArenaDailyScore[]): Ran
   });
 }
 
+// Lista visual do ranking: recebe os membros já calculados e desenha cada linha
+// (posição, avatar, nome e pontuação), destacando o pódio (1º, 2º e 3º lugares).
 function RankingList({ ranked, sortKey, group }: { ranked: RankedMember[]; sortKey: string; group: ArenaGroup }) {
+  // Ordena os participantes conforme a aba escolhida (streak, equilíbrio ou pontos totais).
   const sorted = [...ranked].sort((a, b) => {
     if (sortKey === 'streak') return b.streak - a.streak;
     if (sortKey === 'balance') return (b.hydration + b.nutrition + b.workout) - (a.hydration + a.nutrition + a.workout);
     return b.totalScore - a.totalScore;
   });
 
+  // Ícones e cores usados para marcar os três primeiros lugares (coroa, medalha e troféu).
   const podiumIcons = [
     { icon: Crown, color: 'text-yellow-500' },
     { icon: Medal, color: 'text-slate-400' },
     { icon: Trophy, color: 'text-amber-600' },
   ];
 
+  // Desenha uma linha (cartão) para cada participante, em ordem de classificação.
   return (
     <div className="space-y-2">
       {sorted.map((r, i) => {
+        // Define ícone/cor de pódio apenas para as três primeiras posições.
         const PodiumIcon = i < 3 ? podiumIcons[i].icon : null;
         const podiumColor = i < 3 ? podiumIcons[i].color : '';
 
@@ -89,6 +104,7 @@ function RankingList({ ranked, sortKey, group }: { ranked: RankedMember[]; sortK
                 )}
               </div>
               <div className="text-right">
+                {/* Valor mostrado à direita muda conforme a aba e o nível de transparência do grupo */}
                 {sortKey === 'streak' ? (
                   <div className="flex items-center gap-1">
                     <Flame className="w-4 h-4 text-orange-500" />
@@ -105,6 +121,7 @@ function RankingList({ ranked, sortKey, group }: { ranked: RankedMember[]; sortK
         );
       })}
 
+      {/* Mensagem exibida quando o grupo ainda não tem participantes */}
       {sorted.length === 0 && (
         <p className="text-center text-sm text-muted-foreground py-8">Nenhum participante ainda</p>
       )}
@@ -112,19 +129,25 @@ function RankingList({ ranked, sortKey, group }: { ranked: RankedMember[]; sortK
   );
 }
 
+// Componente principal: calcula o ranking e monta as abas disponíveis conforme
+// as opções ativadas no grupo (Total, Evolução, Streak e Equilíbrio).
 export function ArenaRanking({ group, members, scores }: ArenaRankingProps) {
+  // Calcula as pontuações de todos os membros uma única vez.
   const ranked = computeRankings(members, scores);
 
+  // Monta a lista de abas apenas com os tipos de ranking que o grupo habilitou.
   const tabs = [];
   if (group.ranking_total_score) tabs.push({ key: 'total', label: 'Total', icon: Trophy });
   if (group.ranking_evolution) tabs.push({ key: 'evolution', label: 'Evolução', icon: TrendingUp });
   if (group.ranking_streak) tabs.push({ key: 'streak', label: 'Streak', icon: Flame });
   if (group.ranking_balance) tabs.push({ key: 'balance', label: 'Equilíbrio', icon: Scale });
 
+  // Garante ao menos a aba "Total" caso nenhum tipo de ranking esteja ativo.
   if (tabs.length === 0) tabs.push({ key: 'total', label: 'Total', icon: Trophy });
 
   return (
     <Tabs defaultValue={tabs[0].key}>
+      {/* Só mostra a barra de abas quando existe mais de um tipo de ranking */}
       {tabs.length > 1 && (
         <TabsList className={`grid w-full grid-cols-${tabs.length} h-10 rounded-xl bg-card border border-border p-1`}>
           {tabs.map(t => (
@@ -135,6 +158,7 @@ export function ArenaRanking({ group, members, scores }: ArenaRankingProps) {
           ))}
         </TabsList>
       )}
+      {/* Conteúdo de cada aba: a mesma lista de ranking, ordenada pelo tipo escolhido */}
       {tabs.map(t => (
         <TabsContent key={t.key} value={t.key} className="mt-3">
           <RankingList ranked={ranked} sortKey={t.key} group={group} />

@@ -1,3 +1,11 @@
+// ============================================================================
+// RASTREADOR DE PERCURSO POR GPS (CORRIDA / PEDAL)
+// Usa o GPS do celular para acompanhar uma corrida ou pedalada em tempo real:
+// mostra tempo, distância e ritmo, desenha o trajeto em um mapa e salva o
+// percurso ao finalizar. Mantém a tela ligada, filtra pontos de GPS ruins e
+// guarda a sessão em andamento para retomar caso o app seja fechado.
+// ============================================================================
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { MapPin, Play, Square, Navigation, Trash2, Timer, Ruler, Zap, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,11 +19,17 @@ export interface ExtendedCoordinate extends Coordinate {
   speed?: number | null;
 }
 
+// Configurações do rastreamento:
+// STORAGE_KEY: nome usado para guardar a sessão em andamento no navegador
+// MAX_ACCURACY_METERS: descarta pontos de GPS com erro maior que 50m
+// MIN_DISTANCE_METERS: ignora movimentos menores que 3m (ruído parado)
+// SAVE_INTERVAL: intervalo (em segundos) entre gravações da sessão em andamento
 const STORAGE_KEY = 'workout_gps_session';
 const MAX_ACCURACY_METERS = 50;
 const MIN_DISTANCE_METERS = 3;
 const SAVE_INTERVAL = 5;
 
+// Calcula a distância em metros entre dois pontos de latitude/longitude (fórmula de Haversine)
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000; // meters
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -44,6 +58,7 @@ interface WorkoutRouteTrackerProps {
   onFetchRoutes: () => void;
 }
 
+// Converte uma quantidade de segundos em texto de tempo (h:mm:ss ou mm:ss)
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -52,6 +67,7 @@ function formatDuration(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// Calcula o ritmo (pace) em minutos por quilômetro e formata como mm:ss
 function formatPace(distanceKm: number, seconds: number): string {
   if (distanceKm < 0.01) return '--:--';
   const pace = seconds / 60 / distanceKm;
@@ -60,6 +76,7 @@ function formatPace(distanceKm: number, seconds: number): string {
   return `${paceMin}:${String(paceSec).padStart(2, '0')}`;
 }
 
+// Soma a distância total (em km) percorrida ao longo de todos os pontos do trajeto
 function calculateDistance(coords: Coordinate[]): number {
   if (coords.length < 2) return 0;
   let total = 0;
@@ -77,10 +94,14 @@ function calculateDistance(coords: Coordinate[]): number {
   return total;
 }
 
+// Mapa estático de um percurso já salvo: desenha a linha do trajeto com marcadores
+// de início (verde) e fim (vermelho) e enquadra o mapa para mostrar todo o caminho.
 function RouteMap({ coordinates, id }: { coordinates: Coordinate[]; id: string }) {
+  // Referências para o elemento do mapa e para a instância do Leaflet
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<import('leaflet').Map | null>(null);
 
+  // Cria/atualiza o mapa sempre que as coordenadas mudam; limpa ao desmontar
   useEffect(() => {
     if (!mapRef.current || coordinates.length === 0) return;
 
@@ -144,6 +165,7 @@ function RouteMap({ coordinates, id }: { coordinates: Coordinate[]; id: string }
     };
   }, [coordinates, id]);
 
+  // Carrega o CSS do Leaflet uma única vez (necessário para o mapa aparecer certo)
   // Add Leaflet CSS once
   useEffect(() => {
     if (!document.getElementById('leaflet-css')) {
@@ -158,12 +180,16 @@ function RouteMap({ coordinates, id }: { coordinates: Coordinate[]; id: string }
   return <div ref={mapRef} style={{ height: 220, width: '100%', borderRadius: 12 }} />;
 }
 
+// Mapa ao vivo durante o rastreamento: vai desenhando o trajeto e movendo o
+// marcador da posição atual conforme novos pontos de GPS vão chegando.
 function LiveMap({ coordinates }: { coordinates: Coordinate[] }) {
+  // Referências do mapa, da linha do trajeto e do marcador da posição atual
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<import('leaflet').Map | null>(null);
   const polylineRef = useRef<import('leaflet').Polyline | null>(null);
   const markerRef = useRef<import('leaflet').Marker | null>(null);
 
+  // Inicializa o mapa e atualiza a linha/marcador a cada novo ponto recebido
   useEffect(() => {
     const initMap = async () => {
       if (!mapRef.current) return;
@@ -211,6 +237,7 @@ function LiveMap({ coordinates }: { coordinates: Coordinate[] }) {
     initMap();
   }, [coordinates]);
 
+  // Carrega o CSS do Leaflet uma única vez
   useEffect(() => {
     if (!document.getElementById('leaflet-css')) {
       const link = document.createElement('link');
@@ -221,6 +248,7 @@ function LiveMap({ coordinates }: { coordinates: Coordinate[] }) {
     }
   }, []);
 
+  // Remove o mapa da memória quando o componente sai da tela
   useEffect(() => {
     return () => {
       mapInstanceRef.current?.remove();
@@ -232,40 +260,47 @@ function LiveMap({ coordinates }: { coordinates: Coordinate[] }) {
 }
 
 export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onDeleteRoute, onFetchRoutes }: WorkoutRouteTrackerProps) {
-  const [isTracking, setIsTracking] = useState(false);
-  const [_isPaused, setIsPaused] = useState(false);
-  const [coordinates, setCoordinates] = useState<Coordinate[]>([]);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [distance, setDistance] = useState(0);
-  const [startedAt, setStartedAt] = useState<Date | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [permissionDenied, setPermissionDenied] = useState(false);
-  const [pointsReceived, setPointsReceived] = useState(0);
-  const [pointsAccepted, setPointsAccepted] = useState(0);
+  // Estados que descrevem a atividade em andamento e a interface:
+  const [isTracking, setIsTracking] = useState(false);       // se está rastreando agora
+  const [_isPaused, setIsPaused] = useState(false);          // se está pausado
+  const [coordinates, setCoordinates] = useState<Coordinate[]>([]); // pontos do trajeto
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);   // tempo decorrido em segundos
+  const [distance, setDistance] = useState(0);               // distância acumulada em km
+  const [startedAt, setStartedAt] = useState<Date | null>(null); // horário de início
+  const [saving, setSaving] = useState(false);               // se está salvando o percurso
+  const [showHistory, setShowHistory] = useState(false);     // se o histórico está aberto
+  const [permissionDenied, setPermissionDenied] = useState(false); // se o GPS foi negado
+  const [pointsReceived, setPointsReceived] = useState(0);   // quantos pontos de GPS chegaram
+  const [pointsAccepted, setPointsAccepted] = useState(0);   // quantos foram aceitos (bons)
 
-  const watchIdRef = useRef<number | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const coordsRef = useRef<Coordinate[]>([]);
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
-  const lastSaveRef = useRef(0);
+  // Referências que persistem entre renderizações sem disparar nova renderização:
+  const watchIdRef = useRef<number | null>(null);            // id do monitoramento de GPS
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null); // id do cronômetro
+  const coordsRef = useRef<Coordinate[]>([]);                // cópia dos pontos para uso imediato
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null); // trava que mantém a tela ligada
+  const lastSaveRef = useRef(0);                             // marca do último salvamento da sessão
 
+  // Rótulo e ícone exibidos conforme o tipo de treino (corrida ou pedal)
   const label = workoutType === 'running' ? 'Corrida' : 'Pedal';
   const icon = workoutType === 'running' ? '🏃' : '🚴';
 
+  // Para o cronômetro que conta o tempo decorrido
   const stopTimer = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
   };
 
+  // Para de monitorar a posição do GPS
   const stopWatch = () => {
     if (watchIdRef.current !== null) { navigator.geolocation.clearWatch(watchIdRef.current); watchIdRef.current = null; }
   };
 
+  // Libera a trava que mantinha a tela ligada
   const releaseWakeLock = async () => {
     try { await wakeLockRef.current?.release(); } catch { /* ignore */ }
     wakeLockRef.current = null;
   };
 
+  // Pede para manter a tela do celular ligada durante o treino
   const requestWakeLock = async () => {
     try {
       if ('wakeLock' in navigator) {
@@ -277,6 +312,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     } catch { /* Wake Lock not available */ }
   };
 
+  // Readquire a trava de tela ligada quando o app volta a ficar visível
   // Re-acquire wake lock when page becomes visible again
   useEffect(() => {
     const handleVisibility = async () => {
@@ -288,6 +324,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isTracking]);
 
+  // Salva a sessão atual no navegador de tempos em tempos (para poder retomar depois)
   const persistSession = useCallback((coords: Coordinate[], started: Date, elapsed: number) => {
     const now = Date.now();
     // Throttle localStorage writes to every SAVE_INTERVAL seconds
@@ -301,6 +338,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     }));
   }, [workoutType]);
 
+  // Salva a sessão imediatamente, sem esperar o intervalo (usado em momentos críticos)
   const forcePersistSession = useCallback((coords: Coordinate[], started: Date, elapsed: number) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       workoutType,
@@ -310,8 +348,11 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     }));
   }, [workoutType]);
 
+  // Apaga a sessão salva no navegador
   const clearSession = () => localStorage.removeItem(STORAGE_KEY);
 
+  // Decide se um ponto de GPS recebido é confiável o suficiente para ser usado.
+  // Descarta pontos imprecisos, muito próximos (parado) ou com "saltos" impossíveis.
   const shouldAcceptPoint = (pos: GeolocationPosition, prevCoords: Coordinate[]): boolean => {
     // Reject points with poor accuracy
     if (pos.coords.accuracy > MAX_ACCURACY_METERS) return false;
@@ -334,6 +375,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     return true;
   };
 
+  // Processa cada nova posição do GPS: valida, adiciona ao trajeto e atualiza a distância
   const handlePosition = useCallback((pos: GeolocationPosition, startTime: Date, currentElapsed: number) => {
     setPointsReceived(p => p + 1);
 
@@ -351,6 +393,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     persistSession(coordsRef.current, startTime, currentElapsed);
   }, [persistSession, workoutType]);
 
+  // Começa a monitorar continuamente a posição do GPS com alta precisão
   const startGpsWatch = useCallback((startTime: Date, elapsedRef: { value: number }) => {
     return navigator.geolocation.watchPosition(
       (pos) => handlePosition(pos, startTime, elapsedRef.value),
@@ -368,6 +411,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     );
   }, [handlePosition]);
 
+  // Retoma um rastreamento anterior a partir dos dados salvos (tempo, distância e pontos)
   const resumeTracking = useCallback((startTime: Date, initialElapsed: number, initialCoords: Coordinate[]) => {
     setStartedAt(startTime);
     setElapsedSeconds(initialElapsed);
@@ -387,6 +431,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     }, 1000);
   }, [startGpsWatch]);
 
+  // Inicia um novo rastreamento do zero (zera tudo, liga o GPS e o cronômetro)
   const startTracking = useCallback(() => {
     if (!navigator.geolocation) {
       toast.error('Geolocalização não suportada neste dispositivo');
@@ -416,6 +461,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     }, 1000);
   }, [persistSession, startGpsWatch]);
 
+  // Para todo o rastreamento: cronômetro, GPS, trava de tela e limpa a sessão salva
   const stopTracking = useCallback(() => {
     stopTimer();
     stopWatch();
@@ -425,6 +471,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     clearSession();
   }, []);
 
+  // Finaliza o treino e salva o percurso no banco (exige pelo menos 2 pontos)
   const handleFinish = async () => {
     stopTracking();
     if (coordsRef.current.length < 2) {
@@ -452,6 +499,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     }
   };
 
+  // Ao abrir o componente: se havia um rastreamento ativo salvo, retoma-o
   // On mount: restore session if there was an active tracking
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -470,6 +518,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     return () => { stopTimer(); stopWatch(); releaseWakeLock(); };
   }, [workoutType]);
 
+  // Ritmo atual (min/km) calculado a partir da distância e do tempo decorrido
   const pace = formatPace(distance, elapsedSeconds);
 
   return (
@@ -497,6 +546,8 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
       )}
 
       {/* Active tracking UI */}
+      {/* Enquanto rastreia, mostra tempo/distância/ritmo + mapa ao vivo + botão de finalizar; */}
+      {/* quando parado, mostra apenas o botão para iniciar o rastreamento. */}
       {isTracking ? (
         <div className="space-y-3">
           {/* Live stats */}
@@ -573,7 +624,10 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
   );
 }
 
+// Cartão de um percurso já salvo no histórico: mostra distância, tempo e ritmo,
+// permite abrir o mapa do trajeto e excluir o registro.
 function SavedRouteCard({ route, label, onDelete }: { route: WorkoutRoute; label: string; onDelete: (id: string) => void }) {
+  // Controla se o mapa do trajeto está sendo exibido
   const [showMap, setShowMap] = useState(false);
 
   return (

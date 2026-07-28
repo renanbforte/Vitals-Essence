@@ -1,3 +1,9 @@
+// ============================================================================
+// COMPONENTE: MedicationsCard (Cartão de Medicamentos)
+// Cartão onde o usuário cadastra, edita, ativa/desativa e remove seus remédios,
+// definindo os horários de cada um. Mostra a lista de medicamentos ativos e uma
+// seção recolhível com os inativos. O cadastro/edição acontece num diálogo (modal).
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { Pill, Plus, Clock, Trash2, Edit2, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -35,13 +41,20 @@ import {
 import { useUserMedications, type Medication, type MedicationInput } from '@/hooks/useUserMedications';
 import { toast } from 'sonner';
 
+// Lista de horários "atalho" que aparecem como botões rápidos ao cadastrar um remédio
 const COMMON_TIMES = ['06:00', '08:00', '12:00', '14:00', '18:00', '20:00', '22:00'];
 
 export function MedicationsCard() {
+  // Hook de dados: traz a lista de medicamentos do banco e as funções para
+  // buscar, adicionar, atualizar e remover, além do indicador de carregamento.
   const { medications, loading, fetchMedications, addMedication, updateMedication, deleteMedication } = useUserMedications();
+  // Controla se o diálogo (modal) de cadastro/edição está aberto
   const [isAddOpen, setIsAddOpen] = useState(false);
+  // Guarda o ID do medicamento em edição (null = estamos cadastrando um novo)
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Guarda o ID do medicamento cujo detalhe está expandido na lista
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Dados digitados no formulário do diálogo (nome, dosagem, horários, etc.)
   const [formData, setFormData] = useState<MedicationInput>({
     name: '',
     composition: '',
@@ -50,13 +63,17 @@ export function MedicationsCard() {
     notes: '',
     active: true,
   });
+  // Texto do campo de horário personalizado (antes de ser adicionado à lista)
   const [customTime, setCustomTime] = useState('');
+  // Indica que o formulário está sendo salvo (para desabilitar o botão)
   const [submitting, setSubmitting] = useState(false);
 
+  // Ao montar o componente, busca os medicamentos já cadastrados
   useEffect(() => {
     fetchMedications();
   }, [fetchMedications]);
 
+  // Limpa o formulário e volta ao modo "novo cadastro"
   const resetForm = () => {
     setFormData({
       name: '',
@@ -70,6 +87,7 @@ export function MedicationsCard() {
     setEditingId(null);
   };
 
+  // Adiciona um horário à lista do medicamento (evita repetir e mantém ordenado)
   const handleAddTime = (time: string) => {
     if (!formData.schedule_times?.includes(time)) {
       setFormData(prev => ({
@@ -79,6 +97,7 @@ export function MedicationsCard() {
     }
   };
 
+  // Remove um horário da lista do medicamento
   const handleRemoveTime = (time: string) => {
     setFormData(prev => ({
       ...prev,
@@ -86,6 +105,7 @@ export function MedicationsCard() {
     }));
   };
 
+  // Adiciona o horário personalizado digitado e limpa o campo
   const handleAddCustomTime = () => {
     if (customTime && !formData.schedule_times?.includes(customTime)) {
       handleAddTime(customTime);
@@ -93,6 +113,8 @@ export function MedicationsCard() {
     }
   };
 
+  // Salva o formulário: valida o nome, decide entre atualizar ou criar,
+  // mostra mensagens de sucesso/erro e fecha o diálogo quando dá certo.
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
       toast.error('Nome do medicamento é obrigatório');
@@ -124,6 +146,7 @@ export function MedicationsCard() {
     setSubmitting(false);
   };
 
+  // Abre o diálogo já preenchido com os dados do medicamento escolhido para editar
   const handleEdit = (medication: Medication) => {
     setFormData({
       name: medication.name,
@@ -137,6 +160,7 @@ export function MedicationsCard() {
     setIsAddOpen(true);
   };
 
+  // Remove um medicamento pelo ID e avisa o resultado ao usuário
   const handleDelete = async (id: string) => {
     const { error } = await deleteMedication(id);
     if (error) {
@@ -146,6 +170,7 @@ export function MedicationsCard() {
     }
   };
 
+  // Liga/desliga o status "ativo" de um medicamento (sem abrir o diálogo)
   const handleToggleActive = async (medication: Medication) => {
     const { error } = await updateMedication(medication.id, { active: !medication.active });
     if (error) {
@@ -153,6 +178,7 @@ export function MedicationsCard() {
     }
   };
 
+  // Separa os medicamentos em duas listas: os ativos e os inativos
   const activeMedications = medications.filter(m => m.active);
   const inactiveMedications = medications.filter(m => !m.active);
 
@@ -319,6 +345,7 @@ export function MedicationsCard() {
       </CardHeader>
 
       <CardContent className="pt-4">
+        {/* Enquanto carrega mostra "esqueletos"; se vazio, um aviso; senão, as listas */}
         {loading ? (
           <div className="space-y-3">
             {[1, 2].map(i => (
@@ -390,6 +417,8 @@ interface MedicationItemProps {
   onToggleActive: () => void;
 }
 
+// Sub-componente que desenha UM item da lista de medicamentos: nome, dosagem,
+// horários e, ao expandir, a composição/observações com os botões Editar e Remover.
 function MedicationItem({ medication, isExpanded, onToggleExpand, onEdit, onDelete, onToggleActive }: MedicationItemProps) {
   return (
     <div 

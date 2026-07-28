@@ -1,3 +1,9 @@
+// ============================================================================
+// COMPONENTE: FriendsRanking (Ranking de Amigos)
+// Mostra um placar comparando o desempenho do dia entre o usuário e seus amigos.
+// Tem uma aba "Geral" (pontuação total) e abas por categoria (Água, Refeições,
+// Treino e Peso). Destaca o pódio (1º, 2º e 3º) com ícones e cores especiais.
+// ============================================================================
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Droplets, Utensils, Dumbbell, Scale, Crown, Medal, Award, TrendingUp, TrendingDown, Minus } from 'lucide-react';
@@ -14,6 +20,8 @@ interface FriendsRankingProps {
   selectedDate: Date;
 }
 
+// Devolve o ícone da posição no ranking: coroa (1º), medalha (2º), troféu (3º)
+// ou o número da colocação para os demais. O "size" controla o tamanho do ícone.
 const getRankIcon = (rank: number, size: 'sm' | 'md' | 'lg' = 'md') => {
   const sizes = {
     sm: 'w-4 h-4',
@@ -33,6 +41,8 @@ const getRankIcon = (rank: number, size: 'sm' | 'md' | 'lg' = 'md') => {
   }
 };
 
+// Escolhe as cores de fundo (degradê) e a borda do cartão conforme a colocação
+// e se aquele cartão é do próprio usuário (que recebe um destaque extra).
 const getRankGradient = (rank: number, isCurrentUser: boolean) => {
   if (rank === 1) {
     return isCurrentUser 
@@ -54,12 +64,15 @@ const getRankGradient = (rank: number, isCurrentUser: boolean) => {
     : 'bg-card border-border/50';
 };
 
+// Define a cor da pontuação: verde (bom, >=80), âmbar (médio, >=50) ou vermelho (baixo)
 const getScoreColor = (score: number) => {
   if (score >= 80) return 'text-green-600';
   if (score >= 50) return 'text-amber-600';
   return 'text-red-500';
 };
 
+// Sub-componente que mostra a variação de peso: seta para baixo em verde quando
+// emagreceu, seta para cima em vermelho quando ganhou peso, ou traço quando não mudou.
 const WeightTrend = ({ change }: { change: number | null }) => {
   if (change === null) {
     return (
@@ -90,8 +103,10 @@ const WeightTrend = ({ change }: { change: number | null }) => {
   );
 };
 
-const StatBadge = ({ 
-  icon: Icon, 
+// Sub-componente reutilizável: uma "etiqueta" arredondada com ícone e valor
+// (ex.: gota d'água + porcentagem de hidratação), com cores configuráveis.
+const StatBadge = ({
+  icon: Icon,
   value, 
   colorClass,
   bgClass 
@@ -107,7 +122,10 @@ const StatBadge = ({
   </div>
 );
 
+// Sub-componente do cartão da aba "Geral": mostra a colocação, avatar, nome,
+// pontuação total e as estatísticas do dia (água, refeições, treino e peso).
 const RankingCard = ({ entry, index }: { entry: RankingEntry; index: number }) => {
+  // Monta as iniciais do nome (até 2 letras) para exibir quando não há foto
   const initials = entry.name
     .split(' ')
     .map(n => n[0])
@@ -234,19 +252,23 @@ const RankingCard = ({ entry, index }: { entry: RankingEntry; index: number }) =
   );
 };
 
-const CategoryRanking = ({ 
-  entries, 
+// Sub-componente das abas por categoria (Água, Refeições, Treino, Peso).
+// Recebe a função "getValue" que diz como calcular a nota e o texto a exibir de
+// cada participante naquela categoria, e monta uma lista ordenada por desempenho.
+const CategoryRanking = ({
+  entries,
   icon: Icon,
   color,
   bgColor,
-  getValue 
-}: { 
+  getValue
+}: {
   entries: RankingEntry[];
   icon: React.ElementType;
   color: string;
   bgColor: string;
   getValue: (entry: RankingEntry) => { score: number; display: string };
 }) => {
+  // Ordena os participantes do maior para o menor desempenho nesta categoria
   const sorted = [...entries].sort((a, b) => getValue(b).score - getValue(a).score);
 
   return (
@@ -315,19 +337,25 @@ const CategoryRanking = ({
   );
 };
 
+// Componente principal. Recebe a lista de amigos e a data selecionada,
+// e monta o placar do dia a partir desses dados.
 export function FriendsRanking({ friends, selectedDate }: FriendsRankingProps) {
+  // Hook de dados: calcula/traz o ranking e informa se ainda está carregando
   const { ranking, loading, fetchRanking } = useFriendsRanking();
 
+  // Sempre que os amigos ou a data mudarem, recalcula o ranking do dia
   useEffect(() => {
     if (friends.length > 0) {
       fetchRanking(friends, selectedDate);
     }
   }, [friends, selectedDate, fetchRanking]);
 
+  // Sem amigos, não mostra nada
   if (friends.length === 0) {
     return null;
   }
 
+  // Enquanto carrega, exibe "esqueletos" animados no lugar dos cartões
   if (loading) {
     return (
       <Card className="overflow-hidden">
@@ -371,6 +399,7 @@ export function FriendsRanking({ friends, selectedDate }: FriendsRankingProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-4 pb-6">
+        {/* Abas: Geral (pontuação total) e as quatro categorias (Água, Refeições, Treino, Peso) */}
         <Tabs defaultValue="overall" className="w-full">
           <TabsList className="grid grid-cols-5 w-full mb-4 bg-muted/50 p-1 rounded-xl">
             <TabsTrigger value="overall" className="text-xs px-1 rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm">

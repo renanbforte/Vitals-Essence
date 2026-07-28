@@ -1,3 +1,10 @@
+// ============================================================================
+// COMPONENTE: MealsCard (Cartão de Alimentação)
+// Cartão do plano nutricional do dia. No topo mostra um gráfico em formato de
+// pizza com as refeições concluídas e as calorias consumidas; abaixo, a lista de
+// refeições que podem ser marcadas como feitas, expandidas para ver os detalhes
+// (opção principal e alternativa), fotografadas e editadas.
+// ============================================================================
 import { UtensilsCrossed, Check, ChevronDown, ChevronUp, Pencil } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,6 +27,8 @@ interface MealsCardProps {
   uploadingPhoto?: boolean;
 }
 
+// De/Para: liga a "chave" de cada refeição ao campo correspondente no registro
+// diário que guarda se aquela refeição foi concluída (ex.: 'lunch' -> 'lunch_completed')
 const mealKeyToTrackingKey: Record<string, keyof DailyTracking> = {
   'breakfast': 'breakfast_completed',
   'morning_snack': 'morning_snack_completed',
@@ -29,6 +38,8 @@ const mealKeyToTrackingKey: Record<string, keyof DailyTracking> = {
   'night_snack': 'night_snack_completed',
 };
 
+// Nomes curtos de cada refeição, usados como rótulos dentro do gráfico de pizza
+// (o "\n" quebra o texto em duas linhas, ex.: "Lanche" na primeira e "Manhã" na segunda)
 const mealShortNames: Record<string, string> = {
   'breakfast': 'Café',
   'morning_snack': 'Lanche\nManhã',
@@ -38,17 +49,24 @@ const mealShortNames: Record<string, string> = {
   'night_snack': 'Ceia',
 };
 
+// Sub-componente que desenha o gráfico de pizza (rosca) das refeições:
+// cada fatia é uma refeição, colorida quando concluída, com o total no centro.
 // Pizza/Pie chart visualization for meals
 function MealPizza({ meals, tracking }: { meals: UserMealPlan[]; tracking: DailyTracking | null }) {
+  // Medidas e geometria do gráfico: quantidade de fatias, ângulo de cada uma,
+  // centro (cx, cy) e raios externo/interno da rosca.
   const totalMeals = meals.length;
   const sliceAngle = totalMeals > 0 ? 360 / totalMeals : 360;
   const cx = 100;
   const cy = 100;
   const outerR = 85;
   const innerR = 30;
+  // Refeições ordenadas pelo horário (recalculado só quando a lista muda)
   const sortedMeals = useMemo(() => [...meals].sort((a, b) => a.meal_time.localeCompare(b.meal_time)), [meals]);
+  // Quantas refeições já foram marcadas como concluídas
   const completedCount = meals.filter(m => tracking?.[mealKeyToTrackingKey[m.meal_key]]).length;
 
+  // Soma as calorias apenas das refeições concluídas (energia já consumida)
   const totalCalories = useMemo(() => {
     return sortedMeals.reduce((sum, m) => {
       const isCompleted = tracking?.[mealKeyToTrackingKey[m.meal_key]];
@@ -57,17 +75,21 @@ function MealPizza({ meals, tracking }: { meals: UserMealPlan[]; tracking: Daily
     }, 0);
   }, [sortedMeals, tracking]);
 
+  // Soma as calorias de TODAS as refeições planejadas (meta total do dia)
   const totalPlannedCalories = useMemo(() => {
     return sortedMeals.reduce((sum, m) => sum + (m.main_macros?.calories || 0), 0);
   }, [sortedMeals]);
 
+  // Se não há refeições, não desenha nada
   if (totalMeals === 0) return null;
 
+  // Converte um ângulo (em graus) em coordenadas x/y sobre o círculo — usado para desenhar as fatias
   function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
     const rad = ((angleDeg - 90) * Math.PI) / 180;
     return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
   }
 
+  // Monta o "caminho" (path SVG) que desenha o formato de uma fatia da rosca
   function describeSlice(index: number, outerRadius: number, innerRadius: number) {
     const startAngle = index * sliceAngle;
     const endAngle = startAngle + sliceAngle;
@@ -89,6 +111,7 @@ function MealPizza({ meals, tracking }: { meals: UserMealPlan[]; tracking: Daily
     return polarToCartesian(cx, cy, labelR, midAngle);
   }
 
+  // Paleta de cores (degradês) para as fatias concluídas — tons quentes de comida
   // Gradient colors for completed slices (from outer to inner, warm food tones)
   const sliceColors = [
     { from: 'hsl(25, 95%, 55%)', to: 'hsl(35, 90%, 60%)' },   // warm orange
@@ -179,14 +202,21 @@ function MealPizza({ meals, tracking }: { meals: UserMealPlan[]; tracking: Daily
   );
 }
 
-export function MealsCard({ 
+// Componente principal do cartão. Recebe: o registro do dia (tracking), a função
+// para marcar/desmarcar uma refeição, o plano de refeições, a função de salvar
+// edição, além das fotos e das funções de enviar/apagar foto de cada refeição.
+export function MealsCard({
   tracking, onToggleMeal, mealPlans, onSaveMealPlan,
   mealPhotos = [], onUploadMealPhoto, onDeleteMealPhoto, uploadingPhoto = false,
 }: MealsCardProps) {
+  // Guarda qual refeição está com os detalhes expandidos (null = nenhuma)
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
+  // Guarda a refeição que está sendo editada no diálogo (null = nenhuma)
   const [editingMeal, setEditingMeal] = useState<UserMealPlan | null>(null);
-  
+
+  // Abre/fecha os detalhes de uma refeição ao clicar na setinha
   const toggleExpand = (key: string) => setExpandedMeal(expandedMeal === key ? null : key);
+  // Busca a foto já enviada para uma refeição específica (se houver)
   const getPhotoForMeal = (mealKey: string) => mealPhotos.find(p => p.meal_key === mealKey);
 
   return (
@@ -210,8 +240,11 @@ export function MealsCard({
 
       {/* Meal Items */}
       <div className="bg-card p-3 space-y-2">
+        {/* Para cada refeição do plano, desenha uma linha com marcar/foto/editar/expandir */}
         {mealPlans.map((meal) => {
+          // Campo do registro que indica se esta refeição foi concluída
           const trackingKey = mealKeyToTrackingKey[meal.meal_key];
+          // Está concluída? / Está com os detalhes abertos?
           const isCompleted = tracking?.[trackingKey] || false;
           const isExpanded = expandedMeal === meal.meal_key;
           
@@ -324,6 +357,7 @@ export function MealsCard({
         })}
       </div>
 
+      {/* Diálogo (modal) de edição de uma refeição, aberto ao clicar no lápis */}
       <EditMealDialog
         meal={editingMeal}
         open={!!editingMeal}

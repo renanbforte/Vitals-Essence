@@ -1,3 +1,10 @@
+// ============================================================================
+// EditWorkoutDialog — Janela (diálogo) para EDITAR uma atividade/treino.
+// Permite escolher o tipo de atividade, o nome, quantas vezes por semana,
+// a duração (opções prontas ou personalizada), o dia da semana, uma
+// descrição e uma lista de detalhes/exercícios. Também pode remover a
+// atividade. Ao salvar ou remover, mostra aviso de sucesso ou erro.
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { Pencil, Plus, Trash2, Clock, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,8 +35,11 @@ interface EditWorkoutDialogProps {
   onDelete?: (workoutId: string) => Promise<{ error: Error | null }>;
 }
 
+// Nomes dos dias da semana, na ordem usada pelo sistema (0 = Domingo).
 const dayNames = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 
+// Lista fixa de tipos de atividade. 'value' é o código guardado; 'label' é o
+// texto que aparece na tela.
 const workoutTypes = [
   { value: 'swimming', label: 'Natação' },
   { value: 'gym_upper', label: 'Musculação - Superiores' },
@@ -48,6 +58,7 @@ const workoutTypes = [
   { value: 'other', label: 'Outro' },
 ];
 
+// Durações prontas oferecidas como botões (além delas há um campo livre).
 const durationOptions = [
   '15 min',
   '20 min',
@@ -61,10 +72,15 @@ const durationOptions = [
 ];
 
 export function EditWorkoutDialog({ workout, open, onOpenChange, onSave, onDelete }: EditWorkoutDialogProps) {
+  // Cópia editável da atividade (o usuário mexe nesta, não na original).
   const [editedWorkout, setEditedWorkout] = useState<UserWorkoutPlan | null>(null);
+  // Indica se está salvando/removendo (para trocar textos e travar botões).
   const [saving, setSaving] = useState(false);
+  // Indica se a duração é personalizada (digitada) em vez de uma opção pronta.
   const [customDuration, setCustomDuration] = useState(false);
 
+  // Ao abrir a janela com uma atividade, copia seus dados para edição e
+  // detecta se a duração salva é personalizada (não está nas opções prontas).
   useEffect(() => {
     if (workout && open) {
       setEditedWorkout({ ...workout });
@@ -74,9 +90,10 @@ export function EditWorkoutDialog({ workout, open, onOpenChange, onSave, onDelet
     }
   }, [workout, open]);
 
+  // Salva a atividade editada; avisa sucesso e fecha, ou avisa erro.
   const handleSave = async () => {
     if (!editedWorkout) return;
-    
+
     setSaving(true);
     const { error } = await onSave(editedWorkout);
     setSaving(false);
@@ -89,6 +106,7 @@ export function EditWorkoutDialog({ workout, open, onOpenChange, onSave, onDelet
     }
   };
 
+  // Remove a atividade; avisa sucesso e fecha, ou avisa erro.
   const handleDelete = async () => {
     if (!editedWorkout?.id || !onDelete) return;
     
@@ -104,6 +122,7 @@ export function EditWorkoutDialog({ workout, open, onOpenChange, onSave, onDelet
     }
   };
 
+  // Adiciona um novo detalhe/exercício vazio ao final da lista.
   const addDetail = () => {
     if (!editedWorkout) return;
     setEditedWorkout({
@@ -112,6 +131,7 @@ export function EditWorkoutDialog({ workout, open, onOpenChange, onSave, onDelet
     });
   };
 
+  // Atualiza o texto de um detalhe/exercício específico da lista.
   const updateDetail = (index: number, value: string) => {
     if (!editedWorkout) return;
     const newDetails = [...editedWorkout.details];
@@ -119,14 +139,18 @@ export function EditWorkoutDialog({ workout, open, onOpenChange, onSave, onDelet
     setEditedWorkout({ ...editedWorkout, details: newDetails });
   };
 
+  // Remove um detalhe/exercício da lista pela sua posição.
   const removeDetail = (index: number) => {
     if (!editedWorkout) return;
     const newDetails = editedWorkout.details.filter((_, i) => i !== index);
     setEditedWorkout({ ...editedWorkout, details: newDetails });
   };
 
+  // Sem atividade carregada, não desenha nada na tela.
   if (!editedWorkout) return null;
 
+  // Monta a janela com todos os campos da atividade e os botões de
+  // Remover, Cancelar e Salvar.
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

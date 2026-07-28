@@ -1,3 +1,9 @@
+// ============================================================================
+// Gerenciador de "Premium Vitalício" (área do Administrador)
+// Cartão exclusivo para admins que permite dar acesso premium para sempre a um
+// usuário. O admin busca a pessoa pelo código de amigo, adiciona à lista e pode
+// remover quem já está lá. Quem não for admin não vê nada deste componente.
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -16,16 +22,26 @@ interface LifetimeUser {
 }
 
 export default function LifetimePremiumManager() {
+  // Usuário logado atualmente (usado para checar se é admin e registrar quem adicionou)
   const { user } = useAuth();
+  // Guarda se o usuário logado é administrador da plataforma
   const [isAdmin, setIsAdmin] = useState(false);
+  // Indica que ainda estamos verificando se é admin (evita piscar a tela)
   const [checkingAdmin, setCheckingAdmin] = useState(true);
+  // Lista de usuários que já possuem premium vitalício
   const [lifetimeUsers, setLifetimeUsers] = useState<LifetimeUser[]>([]);
+  // Indica que a lista de usuários vitalícios está carregando
   const [loadingList, setLoadingList] = useState(false);
+  // Texto do campo de busca (o código de amigo digitado pelo admin)
   const [searchCode, setSearchCode] = useState('');
+  // Usuário encontrado na busca (aparece para ser confirmado antes de adicionar)
   const [foundUser, setFoundUser] = useState<{ user_id: string; name: string; friend_code: string } | null>(null);
+  // Indica que a busca por código está em andamento
   const [searching, setSearching] = useState(false);
+  // Indica que a adição de um usuário à lista está em andamento
   const [adding, setAdding] = useState(false);
 
+  // Ao carregar: verifica no banco se o usuário logado é admin da plataforma
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -39,11 +55,13 @@ export default function LifetimePremiumManager() {
     })();
   }, [user]);
 
+  // Assim que confirmar que é admin, busca a lista de usuários vitalícios
   useEffect(() => {
     if (!isAdmin) return;
     fetchLifetimeUsers();
   }, [isAdmin]);
 
+  // Busca no banco todos os usuários com premium vitalício e junta o nome/código de cada um
   const fetchLifetimeUsers = async () => {
     setLoadingList(true);
     const { data: ltData } = await supabase
@@ -70,6 +88,7 @@ export default function LifetimePremiumManager() {
     setLoadingList(false);
   };
 
+  // Busca um usuário pelo código de amigo digitado; se achar, mostra para confirmar
   const handleSearch = async () => {
     if (!searchCode.trim()) return;
     setSearching(true);
@@ -87,6 +106,7 @@ export default function LifetimePremiumManager() {
     setSearching(false);
   };
 
+  // Adiciona o usuário encontrado à lista de premium vitalício (evita duplicados)
   const handleAdd = async () => {
     if (!foundUser || !user) return;
     // Check if already in list
@@ -109,6 +129,7 @@ export default function LifetimePremiumManager() {
     setAdding(false);
   };
 
+  // Remove um usuário da lista de premium vitalício
   const handleRemove = async (id: string, name: string) => {
     const { error } = await supabase
       .from('lifetime_premium_users')
@@ -122,9 +143,11 @@ export default function LifetimePremiumManager() {
     }
   };
 
+  // Enquanto verifica, ou se não for admin, não mostra nada na tela
   if (checkingAdmin) return null;
   if (!isAdmin) return null;
 
+  // Tela do cartão: campo de busca, resultado encontrado e lista de vitalícios
   return (
     <Card className="border-amber-500/30 bg-amber-500/5">
       <CardHeader className="pb-3">

@@ -1,3 +1,10 @@
+// ============================================================================
+// Feed da Arena (mural do grupo de bem-estar)
+// Mostra o mural do grupo: um campo para escrever e postar uma mensagem, seguido
+// da lista de posts dos membros com avatar, tempo, pontuação total, texto, foto,
+// selos de pontos por pilar (respeitando o nível de transparência do grupo) e
+// botões de reação por emoji. Se não houver posts, exibe um estado vazio.
+// ============================================================================
 import { useState } from 'react';
 import { ArenaFeedPost, ArenaGroup } from '@/hooks/useArena';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,18 +24,23 @@ interface ArenaFeedProps {
   onReact: (postId: string, emoji: string) => void;
 }
 
+// Emojis disponíveis para reagir aos posts
 const EMOJIS = ['🔥', '💪', '👏', '🎯', '⭐'];
 
 export function ArenaFeed({ posts, group, onPost, onReact }: ArenaFeedProps) {
+  // Usuário logado (usado para destacar as reações que ele mesmo deu)
   const { user } = useAuth();
+  // Texto que o usuário está digitando no campo de novo post
   const [content, setContent] = useState('');
 
+  // Publica o texto digitado como um novo post e limpa o campo
   const handlePost = () => {
     if (!content.trim()) return;
     onPost({ post_type: 'check_in', content: content.trim() });
     setContent('');
   };
 
+  // Tela: campo para compor um post, a lista de posts e o estado vazio
   return (
     <div className="space-y-4">
       {/* Compose */}

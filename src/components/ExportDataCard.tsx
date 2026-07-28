@@ -1,3 +1,10 @@
+// ============================================================================
+// CARTÃO "EXPORTAR DADOS" (ExportDataCard)
+// Permite ao usuário escolher um período (data inicial e final) e baixar uma
+// planilha (.csv) com o histórico de hidratação, refeições, treinos e peso.
+// Busca os dados no banco, monta o arquivo e dispara o download no navegador.
+// ============================================================================
+
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,21 +23,28 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 
+// Representa o período escolhido: data de início (from) e de fim (to)
 interface DateRange {
   from: Date;
   to: Date;
 }
 
 export function ExportDataCard() {
+  // Usuário logado (necessário para buscar apenas os dados dele)
   const { user } = useAuth();
+  // Período selecionado; por padrão, os últimos 30 dias até hoje
   const [dateRange, setDateRange] = useState<DateRange>({
     from: subDays(new Date(), 30),
     to: new Date(),
   });
+  // Controla se o calendário da data inicial está aberto
   const [fromOpen, setFromOpen] = useState(false);
+  // Controla se o calendário da data final está aberto
   const [toOpen, setToOpen] = useState(false);
+  // Indica se a exportação está em andamento (para mostrar "Exportando...")
   const [exporting, setExporting] = useState(false);
 
+  // Busca os dados do período, monta a planilha CSV e baixa o arquivo
   const handleExport = async () => {
     if (!user) {
       toast.error('Você precisa estar logado para exportar');
@@ -40,9 +54,11 @@ export function ExportDataCard() {
     setExporting(true);
 
     try {
+      // Converte as datas do período para o formato usado pelo banco de dados
       const startDate = format(dateRange.from, 'yyyy-MM-dd');
       const endDate = format(dateRange.to, 'yyyy-MM-dd');
 
+      // Busca os registros diários (hidratação, refeições e treino) do período
       // Fetch tracking data
       const { data: trackingData, error: trackingError } = await supabase
         .from('daily_tracking')
@@ -54,6 +70,7 @@ export function ExportDataCard() {
 
       if (trackingError) throw trackingError;
 
+      // Busca o histórico de peso do período
       // Fetch weight data
       const { data: weightData, error: weightError } = await supabase
         .from('weight_history')
@@ -65,6 +82,7 @@ export function ExportDataCard() {
 
       if (weightError) throw weightError;
 
+      // Organiza os dados por data para localizar rapidamente cada dia
       // Create a map for quick lookup
       const trackingMap = new Map<string, typeof trackingData[number]>();
       (trackingData || []).forEach((t) => {
@@ -76,9 +94,11 @@ export function ExportDataCard() {
         weightMap.set(w.date, w.weight_kg);
       });
 
+      // Gera a lista de todos os dias do período (inclusive dias sem registro)
       // Generate all days in the range
       const allDays = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
 
+      // Cabeçalho (primeira linha) da planilha, com o nome de cada coluna
       // Create CSV content
       const headers = [
         'Data',
@@ -96,11 +116,13 @@ export function ExportDataCard() {
         'Peso (kg)',
       ];
 
+      // Para cada dia do período, monta uma linha da planilha com os dados daquele dia
       const rows = allDays.map(day => {
         const dateStr = format(day, 'yyyy-MM-dd');
         const tracking = trackingMap.get(dateStr);
         const weight = weightMap.get(dateStr);
 
+        // Conta quantas das 6 refeições do dia foram marcadas como concluídas
         const mealsCompleted = tracking ? [
           tracking.breakfast_completed,
           tracking.morning_snack_completed,
@@ -127,16 +149,19 @@ export function ExportDataCard() {
         ];
       });
 
+      // Junta cabe\u00E7alho e linhas em um \u00FAnico texto CSV (colunas separadas por ";")
       // Convert to CSV
       const csvContent = [
         headers.join(';'),
         ...rows.map(row => row.map(cell => `"${cell}"`).join(';')),
       ].join('\n');
 
+      // Adiciona um marcador (BOM) para o Excel reconhecer os acentos corretamente
       // Add BOM for Excel to recognize UTF-8
       const BOM = '\uFEFF';
       const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-      
+
+      // Cria um link tempor\u00E1rio e simula um clique para baixar o arquivo
       // Download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -156,6 +181,7 @@ export function ExportDataCard() {
     }
   };
 
+  // Monta a tela do cartão: descrição, seletores de data, atalhos e botão de exportar
   return (
     <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
       <CardHeader className="pb-4">
@@ -241,6 +267,7 @@ export function ExportDataCard() {
           </div>
         </div>
 
+        {/* Botões de atalho para períodos comuns (semana, mês, 3 meses) */}
         {/* Quick period buttons */}
         <div className="flex flex-wrap gap-2">
           <Button

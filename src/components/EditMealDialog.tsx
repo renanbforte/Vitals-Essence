@@ -1,3 +1,9 @@
+// ============================================================================
+// EditMealDialog — Janela (diálogo) para EDITAR uma refeição do plano alimentar.
+// Permite mudar o nome e o horário da refeição e, em duas abas (Principal e
+// Alternativa), a descrição e os alimentos/ingredientes de cada opção.
+// Ao salvar, envia a refeição editada e mostra um aviso de sucesso ou erro.
+// ============================================================================
 import { useState } from 'react';
 import { Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,17 +28,23 @@ interface EditMealDialogProps {
 }
 
 export function EditMealDialog({ meal, open, onOpenChange, onSave }: EditMealDialogProps) {
+  // Cópia editável da refeição (o usuário mexe nesta, não na original).
   const [editedMeal, setEditedMeal] = useState<UserMealPlan | null>(null);
+  // Indica se está salvando (para trocar o texto do botão e travá-lo).
   const [saving, setSaving] = useState(false);
+  // Guarda qual refeição já foi carregada, para não recarregar sem necessidade.
   const [lastMealKey, setLastMealKey] = useState<string | null>(null);
 
   // Sync editedMeal whenever meal prop changes or dialog opens
+  // Quando abre a janela com uma refeição diferente da última carregada,
+  // copia os dados dessa refeição para a cópia editável.
   const currentKey = meal ? `${meal.meal_key}_${meal.id ?? ''}` : null;
   if (open && meal && currentKey !== lastMealKey) {
     setEditedMeal({ ...meal });
     setLastMealKey(currentKey);
   }
 
+  // Ao fechar a janela, limpa os dados temporários da edição.
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
       setLastMealKey(null);
@@ -41,9 +53,10 @@ export function EditMealDialog({ meal, open, onOpenChange, onSave }: EditMealDia
     onOpenChange(newOpen);
   };
 
+  // Salva a refeição editada; avisa sucesso e fecha, ou avisa erro.
   const handleSave = async () => {
     if (!editedMeal) return;
-    
+
     setSaving(true);
     const { error } = await onSave(editedMeal);
     setSaving(false);
@@ -56,6 +69,8 @@ export function EditMealDialog({ meal, open, onOpenChange, onSave }: EditMealDia
     }
   };
 
+  // Atualiza os ingredientes e os valores nutricionais (macros) da opção
+  // Principal ('main') ou da Alternativa ('alt') quando o usuário muda os alimentos.
   const handleFoodChange = (type: 'main' | 'alt', ingredients: MealIngredient[], macros: MealMacros) => {
     if (!editedMeal) return;
     const ingredientsKey = type === 'main' ? 'main_ingredients' : 'alt_ingredients';
@@ -63,8 +78,11 @@ export function EditMealDialog({ meal, open, onOpenChange, onSave }: EditMealDia
     setEditedMeal({ ...editedMeal, [ingredientsKey]: ingredients, [macrosKey]: macros });
   };
 
+  // Sem refeição carregada, não desenha nada na tela.
   if (!editedMeal) return null;
 
+  // Monta a janela: cabeçalho, campos de nome e horário, abas Principal/
+  // Alternativa (com descrição e seletor de alimentos) e botões de ação.
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">

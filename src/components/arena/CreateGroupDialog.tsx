@@ -1,3 +1,9 @@
+// ============================================================================
+// CreateGroupDialog (Diálogo de Criar Grupo)
+// Assistente (wizard) em 7 passos para criar um novo grupo de desafio: nome,
+// tipo, pilares, regras, intensidade, tipos de ranking e calendário. Ao final,
+// junta tudo num objeto e envia para quem chamou o componente (onSubmit).
+// ============================================================================
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,10 +20,13 @@ interface CreateGroupDialogProps {
   onSubmit: (data: any) => void;
 }
 
+// Títulos dos 7 passos do assistente, na ordem em que aparecem.
 const STEPS = ['Básico', 'Tipo', 'Pilares', 'Regras', 'Intensidade', 'Ranking', 'Calendário'];
 
 export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupDialogProps) {
+  // Passo atual do assistente (começa em 0 = primeiro passo).
   const [step, setStep] = useState(0);
+  // Formulário com todos os dados do grupo em construção e seus valores padrão.
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -42,10 +51,15 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
     calendar_members_only: true,
   });
 
+  // Atualiza um único campo do formulário, preservando os demais.
   const update = (key: string, value: any) => setForm(f => ({ ...f, [key]: value }));
+  // No primeiro passo, só permite avançar se o nome estiver preenchido.
   const canNext = step === 0 ? form.name.trim().length > 0 : true;
+  // Verifica se pelo menos um pilar foi selecionado (obrigatório para criar o grupo).
   const atLeastOnePillar = form.pillar_hydration || form.pillar_nutrition || form.pillar_workout;
 
+  // Finaliza a criação: valida os pilares, remove campos opcionais vazios, envia os
+  // dados via onSubmit e zera o assistente (volta ao passo 0 com os valores padrão).
   const handleSubmit = () => {
     if (!atLeastOnePillar) return;
     const payload = { ...form };
@@ -56,18 +70,21 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
     setForm({ name: '', description: '', start_date: new Date().toISOString().split('T')[0], end_date: '', group_type: 'private', transparency_level: 'full', pillar_hydration: true, pillar_nutrition: true, pillar_workout: true, photo_required: false, deadline_hour: '', streak_breaks_on_fail: false, ranking_resets_weekly: false, intensity: 'balanced', ranking_total_score: true, ranking_evolution: false, ranking_streak: false, ranking_balance: false, calendar_show_photos: true, calendar_show_daily_score: true, calendar_members_only: true });
   };
 
+  // Opções de tipo de grupo mostradas no passo "Tipo" (valor, ícone, rótulo e descrição).
   const groupTypes = [
     { value: 'private', icon: Lock, label: 'Privado', desc: 'Só entra por convite' },
     { value: 'public', icon: Globe, label: 'Público', desc: 'Qualquer pessoa pode entrar' },
     { value: 'hybrid', icon: Shield, label: 'Híbrido', desc: 'Privado + ranking global' },
   ];
 
+  // Opções de nível de transparência (quanto os outros participantes podem ver).
   const transparencyLevels = [
     { value: 'full', icon: Eye, label: 'Transparente', desc: 'Tudo visível' },
     { value: 'partial', icon: Minus, label: 'Parcial', desc: 'Só pontuação final' },
     { value: 'discreet', icon: EyeOff, label: 'Discreto', desc: 'Apenas posição' },
   ];
 
+  // Opções de intensidade (definem como falhas afetam pontos e streak).
   const intensityLevels = [
     { value: 'light', icon: '🌿', label: 'Leve', desc: 'Apenas soma pontos' },
     { value: 'balanced', icon: '⚖', label: 'Equilibrado', desc: 'Perde streak, não pontos' },
@@ -79,6 +96,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
       <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">Criar Grupo</DialogTitle>
+          {/* Barra de progresso: um traço por passo, preenchido até o passo atual */}
           <div className="flex items-center gap-1 mt-2">
             {STEPS.map((s, i) => (
               <div key={s} className={`h-1.5 flex-1 rounded-full transition-colors ${i <= step ? 'bg-primary' : 'bg-muted'}`} />
@@ -96,6 +114,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
             transition={{ duration: 0.2 }}
             className="space-y-4 py-2"
           >
+            {/* Passo 0 - Básico: nome, descrição e datas de início/fim do grupo */}
             {step === 0 && (
               <>
                 <div className="space-y-2">
@@ -119,6 +138,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
               </>
             )}
 
+            {/* Passo 1 - Tipo: escolha do tipo de grupo e do nível de transparência */}
             {step === 1 && (
               <>
                 <Label className="text-sm font-semibold">Tipo de Grupo</Label>
@@ -157,6 +177,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
               </>
             )}
 
+            {/* Passo 2 - Pilares: liga/desliga os pilares do desafio (mínimo de 1) */}
             {step === 2 && (
               <>
                 <Label className="text-sm font-semibold">Pilares Ativos</Label>
@@ -180,6 +201,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
               </>
             )}
 
+            {/* Passo 3 - Regras: foto obrigatória, horário limite, quebra de streak e reset semanal */}
             {step === 3 && (
               <>
                 <Label className="text-sm font-semibold">Regras</Label>
@@ -228,6 +250,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
               </>
             )}
 
+            {/* Passo 4 - Intensidade: define o rigor do grupo (leve, equilibrado ou hardcore) */}
             {step === 4 && (
               <>
                 <Label className="text-sm font-semibold">Intensidade</Label>
@@ -249,6 +272,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
               </>
             )}
 
+            {/* Passo 5 - Ranking: escolhe quais tipos de classificação o grupo terá */}
             {step === 5 && (
               <>
                 <Label className="text-sm font-semibold">Tipos de Ranking</Label>
@@ -272,6 +296,7 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
               </>
             )}
 
+            {/* Passo 6 - Calendário: define o que fica visível no calendário compartilhado */}
             {step === 6 && (
               <>
                 <Label className="text-sm font-semibold">Calendário Compartilhado</Label>
@@ -294,11 +319,13 @@ export function CreateGroupDialog({ open, onOpenChange, onSubmit }: CreateGroupD
           </motion.div>
         </AnimatePresence>
 
+        {/* Rodapé de navegação: botão de voltar/cancelar e botão de avançar/criar */}
         <div className="flex justify-between pt-2">
           <Button variant="ghost" onClick={() => step > 0 ? setStep(s => s - 1) : onOpenChange(false)} size="sm">
             <ChevronLeft className="w-4 h-4 mr-1" />
             {step === 0 ? 'Cancelar' : 'Voltar'}
           </Button>
+          {/* Antes do último passo mostra "Próximo"; no último, mostra "Criar Grupo" */}
           {step < STEPS.length - 1 ? (
             <Button onClick={() => setStep(s => s + 1)} disabled={!canNext || (step === 2 && !atLeastOnePillar)} size="sm">
               Próximo

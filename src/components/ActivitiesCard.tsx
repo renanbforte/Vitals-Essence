@@ -1,3 +1,9 @@
+// ============================================================================
+// CARTAO "METAS DO DIA"
+// Mostra a lista de metas/atividades pessoais do usuario para o dia.
+// Permite adicionar uma nova meta, marcar como concluida, apagar e escolher se
+// a meta se repete todos os dias. Tambem exibe uma barra de progresso no topo.
+// ============================================================================
 import { useState } from 'react';
 import { ListTodo, Plus, Trash2, Repeat } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -22,11 +28,16 @@ interface ActivitiesCardProps {
 }
 
 export function ActivitiesCard({ activities, onAdd, onToggle, onDelete, onUpdateRepeat }: ActivitiesCardProps) {
+  // Texto digitado no campo de "nova atividade".
   const [newActivity, setNewActivity] = useState('');
+  // Controla o interruptor "Repetir diariamente" ao criar uma meta.
   const [repeatDaily, setRepeatDaily] = useState(false);
+  // Controla se a janela de confirmacao de exclusao esta aberta.
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // Guarda qual meta o usuario pediu para apagar (usada na confirmacao).
   const [activityToDelete, setActivityToDelete] = useState<DailyActivity | null>(null);
 
+  // Envia o formulario e cria uma nova meta (mostra aviso se o campo estiver vazio).
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newActivity.trim()) { toast.error('Digite uma atividade'); return; }
@@ -37,18 +48,24 @@ export function ActivitiesCard({ activities, onAdd, onToggle, onDelete, onUpdate
     }
   };
 
+  // Ao clicar na lixeira: se a meta se repete, abre a janela de confirmacao;
+  // se nao, apaga direto so deste dia.
   const handleDeleteClick = (activity: DailyActivity) => {
     if (activity.repeat_daily) { setActivityToDelete(activity); setDeleteDialogOpen(true); }
     else { onDelete(activity.id, false); toast.success('Meta removida'); }
   };
 
+  // Confirma a exclusao de uma meta recorrente: apagar so hoje ou em todos os dias.
   const handleConfirmDelete = (deleteAll: boolean) => {
     if (activityToDelete) { onDelete(activityToDelete.id, deleteAll); toast.success(deleteAll ? 'Meta removida de todos os dias' : 'Meta removida apenas deste dia'); }
     setDeleteDialogOpen(false); setActivityToDelete(null);
   };
 
+  // Quantidade de metas ja concluidas (usada no texto e na barra de progresso).
   const completedCount = activities.filter(a => a.completed).length;
 
+  // Monta a aparencia do cartao: cabecalho com progresso, formulario, lista de
+  // metas e a janela de confirmacao de exclusao.
   return (
     <div className="rounded-3xl overflow-hidden shadow-xl">
       {/* Header */}
@@ -92,6 +109,7 @@ export function ActivitiesCard({ activities, onAdd, onToggle, onDelete, onUpdate
         </form>
 
         <div className="space-y-1.5 max-h-64 overflow-y-auto">
+          {/* Sem metas: mostra um aviso. Com metas: desenha cada linha da lista. */}
           {activities.length === 0 ? (
             <div className="text-center py-6">
               <ListTodo className="w-8 h-8 mx-auto mb-2 text-muted-foreground/20" />
@@ -123,6 +141,7 @@ export function ActivitiesCard({ activities, onAdd, onToggle, onDelete, onUpdate
         </div>
       </div>
 
+      {/* Janela de confirmacao mostrada apenas ao apagar uma meta recorrente. */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

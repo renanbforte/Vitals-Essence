@@ -1,3 +1,9 @@
+// ============================================================================
+// ArenaSettings (Configurações da Arena)
+// Tela de configurações de um grupo: mostra o tipo, a transparência, a
+// intensidade e os pilares ativos, lista os membros e, para o criador,
+// permite buscar pessoas por nome e convidá-las para o grupo.
+// ============================================================================
 import { ArenaGroup, ArenaMember } from '@/hooks/useArena';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,12 +23,19 @@ interface ArenaSettingsProps {
 }
 
 export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSettingsProps) {
+  // Usuário logado (usado para não aparecer nos resultados da busca de convite).
   const { user } = useAuth();
+  // Texto digitado no campo de busca de pessoas.
   const [search, setSearch] = useState('');
+  // Lista de pessoas encontradas na busca por nome.
   const [searchResults, setSearchResults] = useState<any[]>([]);
+  // Indica se uma busca está em andamento (mostra "Buscando...").
   const [searching, setSearching] = useState(false);
+  // Guarda o temporizador que atrasa a busca enquanto o usuário digita (debounce).
   const debounceRef = useRef<NodeJS.Timeout>();
 
+  // Executa a busca de pessoas por nome no banco (Supabase), com um pequeno atraso
+  // para não consultar a cada tecla, ignorando quem já é membro e o próprio usuário.
   const handleSearch = (value: string) => {
     setSearch(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -41,30 +54,34 @@ export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSett
     }, 300);
   };
 
+  // Rótulos e ícones para cada tipo de grupo (Privado, Público, Híbrido).
   const typeLabels: Record<string, { icon: any; label: string }> = {
     private: { icon: Lock, label: 'Privado' },
     public: { icon: Globe, label: 'Público' },
     hybrid: { icon: Shield, label: 'Híbrido' },
   };
 
+  // Rótulos e ícones para cada nível de transparência (Transparente, Parcial, Discreto).
   const transparencyLabels: Record<string, { icon: any; label: string }> = {
     full: { icon: Eye, label: 'Transparente' },
     partial: { icon: Minus, label: 'Parcial' },
     discreet: { icon: EyeOff, label: 'Discreto' },
   };
 
+  // Rótulos (com emoji) para cada nível de intensidade do grupo.
   const intensityLabels: Record<string, string> = {
     light: '🌿 Leve',
     balanced: '⚖ Equilibrado',
     hardcore: '🔥 Hardcore',
   };
 
+  // Ícones escolhidos conforme o tipo e a transparência atuais do grupo.
   const TypeIcon = typeLabels[group.group_type]?.icon || Lock;
   const TransIcon = transparencyLabels[group.transparency_level]?.icon || Eye;
 
   return (
     <div className="space-y-4">
-      {/* Group info */}
+      {/* Cartão com as informações gerais do grupo (tipo, transparência, intensidade e pilares) */}
       <Card className="p-4 rounded-2xl border-border space-y-3">
         <h3 className="font-bold text-sm">Configurações do Grupo</h3>
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -80,6 +97,7 @@ export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSett
             <span>{intensityLabels[group.intensity]}</span>
           </div>
         </div>
+        {/* Selos dos pilares ativos no grupo (aparecem apenas os que estão habilitados) */}
         <div className="flex gap-2">
           {group.pillar_hydration && (
             <Badge variant="secondary" className="gap-1 text-xs"><Droplets className="w-3 h-3" /> Hidratação</Badge>
@@ -93,7 +111,7 @@ export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSett
         </div>
       </Card>
 
-      {/* Members */}
+      {/* Cartão com a lista de membros do grupo (o criador recebe uma coroa) */}
       <Card className="p-4 rounded-2xl border-border space-y-3">
         <h3 className="font-bold text-sm">Membros ({members.length})</h3>
         <div className="space-y-2">
@@ -112,7 +130,7 @@ export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSett
         </div>
       </Card>
 
-      {/* Invite */}
+      {/* Cartão de convite: aparece somente para o criador do grupo */}
       {isCreator && (
         <Card className="p-4 rounded-2xl border-border space-y-3">
           <h3 className="font-bold text-sm flex items-center gap-2"><UserPlus className="w-4 h-4" /> Convidar</h3>
@@ -125,6 +143,7 @@ export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSett
               className="pl-9"
             />
           </div>
+          {/* Resultados da busca: cada pessoa encontrada com um botão "Convidar" */}
           {searchResults.length > 0 && (
             <div className="space-y-1">
               {searchResults.map(p => (

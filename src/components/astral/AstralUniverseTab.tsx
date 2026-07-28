@@ -1,3 +1,10 @@
+// ============================================================================
+// AstralUniverseTab — Aba "Universo" da seção Astral.
+// Apresenta o mapa astral do usuário: a roda do zodíaco animada, o "Big Three"
+// (Sol, Lua e Ascendente), o número do Caminho de Vida (numerologia) e a lista
+// de posicionamentos planetários. Tocar num planeta abre um modal com detalhes.
+// ============================================================================
+
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
@@ -19,6 +26,7 @@ import planetUranoImg from '@/assets/planet-urano.png';
 import planetNetunoImg from '@/assets/planet-netuno.png';
 import planetPlutaoImg from '@/assets/planet-plutao.png';
 
+// Imagem ilustrativa de cada planeta (usada nos cards e no modal).
 const PLANET_IMG: Record<string, string> = {
   'Sol': planetSolImg,
   'Lua': planetLuaImg,
@@ -32,6 +40,7 @@ const PLANET_IMG: Record<string, string> = {
   'Plutão': planetPlutaoImg,
 };
 
+// Cor de fundo (semitransparente) associada a cada planeta.
 const PLANET_COLORS: Record<string, string> = {
   'Sol': 'rgba(251,191,36,0.25)',
   'Lua': 'rgba(196,181,253,0.2)',
@@ -45,6 +54,7 @@ const PLANET_COLORS: Record<string, string> = {
   'Plutão': 'rgba(139,92,246,0.2)',
 };
 
+// Cor da borda associada a cada planeta.
 const PLANET_BORDER: Record<string, string> = {
   'Sol': 'rgba(251,191,36,0.3)',
   'Lua': 'rgba(196,181,253,0.3)',
@@ -58,6 +68,7 @@ const PLANET_BORDER: Record<string, string> = {
   'Plutão': 'rgba(139,92,246,0.3)',
 };
 
+// Texto que explica, em linguagem simples, o que cada planeta representa.
 const PLANET_DESC: Record<string, string> = {
   'Sol': 'Sua essência, vitalidade e identidade central',
   'Lua': 'Suas emoções, intuição e necessidades íntimas',
@@ -72,14 +83,19 @@ const PLANET_DESC: Record<string, string> = {
 };
 
 export default function AstralUniverseTab() {
+  // Perfil astral do usuário e a lista de posicionamentos planetários.
   const { profile, planetPlacements } = useAstral();
+  // Guarda o planeta escolhido para exibir no modal (ou null se fechado).
   const [selectedPlanet, setSelectedPlanet] = useState<any | null>(null);
 
+  // Extrai do perfil os signos principais e o número do caminho de vida.
   const sunSign = profile?.sun_sign as ZodiacSign | undefined;
   const moonSign = profile?.moon_sign as ZodiacSign | undefined;
   const ascendant = profile?.ascendant_sign as ZodiacSign | undefined;
   const lifePathNumber = profile?.life_path_number;
 
+  // Monta o "Big Three" (Sol, Lua, Ascendente) com rótulo, valor, descrição,
+  // emoji e cores — usado para renderizar os três cards de destaque.
   const bigThree = [
     { label: 'Sol', value: sunSign, desc: sunSign ? SIGN_DESCRIPTIONS[sunSign]?.sun : '', emoji: '☀️', color: 'rgba(251,191,36,0.3)', glow: 'rgba(251,191,36,0.5)' },
     { label: 'Lua', value: moonSign, desc: moonSign ? SIGN_DESCRIPTIONS[moonSign]?.moon : '', emoji: '🌙', color: 'rgba(196,181,253,0.3)', glow: 'rgba(196,181,253,0.5)' },

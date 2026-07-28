@@ -1,3 +1,10 @@
+// ============================================================================
+// CARTÃO "MEUS EXAMES" (ExamDocumentsCard)
+// Mostra a lista de exames médicos já enviados pelo usuário, organizados por
+// data (mês/ano). Permite filtrar por tipo de exame, baixar o arquivo, copiar
+// um link temporário de compartilhamento, editar os dados do exame e excluí-lo.
+// ============================================================================
+
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,12 +33,17 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+// Informações que este cartão recebe de quem o utiliza:
+// - uploads: a lista de exames já enviados
+// - onDelete: função chamada ao excluir um exame
+// - onUpdate: função chamada ao salvar edições de um exame
 interface ExamDocumentsCardProps {
   uploads: ExamUpload[];
   onDelete: (uploadId: string) => void;
   onUpdate: (id: string, data: { exam_date: string; exam_type: string; image_description: string | null }) => Promise<boolean>;
 }
 
+// Tradução dos códigos internos de tipo de exame para nomes legíveis em português
 const examTypeLabels: Record<string, string> = {
   'bioquimica': 'Bioquímica Sanguínea',
   'hemograma': 'Hemograma',
@@ -50,9 +62,12 @@ const examTypeLabels: Record<string, string> = {
 };
 
 export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocumentsCardProps) {
+  // Guarda qual filtro de tipo está ativo ('all' = mostrar todos)
   const [filterType, setFilterType] = useState<string>('all');
+  // Guarda qual exame está sendo editado no momento (null = nenhum)
   const [editingExam, setEditingExam] = useState<ExamUpload | null>(null);
 
+  // Baixa o arquivo do exame do armazenamento e força o download no navegador
   const downloadDocument = async (upload: ExamUpload) => {
     try {
       toast.info('Baixando documento...');
@@ -80,6 +95,7 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
     }
   };
 
+  // Gera um link temporário para o arquivo e copia para a área de transferência
   const copyLink = async (upload: ExamUpload) => {
     try {
       const { data, error } = await supabase.storage
@@ -96,6 +112,7 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
     }
   };
 
+  // Converte o campo de tipos (salvo como texto) em uma lista de tipos
   // Parse exam types from the stored string
   const parseExamTypes = (examType: string | null): string[] => {
     if (!examType) return [];
@@ -108,17 +125,20 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
     }
   };
 
+  // Reúne todos os tipos de exame existentes para montar as opções do filtro
   // Get all unique exam types for filter
   const allTypes = new Set<string>();
   uploads.forEach(u => {
     parseExamTypes(u.exam_type).forEach(t => allTypes.add(t));
   });
 
+  // Aplica o filtro escolhido: se for 'all', mostra tudo; senão, só o tipo selecionado
   // Filter uploads
-  const filteredUploads = filterType === 'all' 
-    ? uploads 
+  const filteredUploads = filterType === 'all'
+    ? uploads
     : uploads.filter(u => parseExamTypes(u.exam_type).includes(filterType));
 
+  // Agrupa os exames por data para exibi-los em blocos por mês/ano
   // Group by date
   const groupedByDate: Record<string, ExamUpload[]> = {};
   filteredUploads.forEach(upload => {
@@ -129,12 +149,15 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
     groupedByDate[dateKey].push(upload);
   });
 
-  const sortedDates = Object.keys(groupedByDate).sort((a, b) => 
+  // Ordena as datas da mais recente para a mais antiga
+  const sortedDates = Object.keys(groupedByDate).sort((a, b) =>
     new Date(b).getTime() - new Date(a).getTime()
   );
 
+  // Monta a tela do cartão: cabeçalho com título e filtro, e a lista de exames
   return (
     <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
+      {/* Cabeçalho: título "Meus Exames" e o seletor de filtro por tipo */}
       <CardHeader className="pb-4">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
           <CardTitle className="flex items-center gap-2 text-lg font-semibold">
@@ -163,6 +186,7 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
         </div>
       </CardHeader>
       <CardContent>
+        {/* Se não há exames para mostrar, exibe uma mensagem de "nada encontrado"; caso contrário, exibe a lista agrupada por data */}
         {filteredUploads.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
@@ -175,8 +199,10 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
           </div>
         ) : (
           <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1 sm:pr-2">
+            {/* Para cada data, cria um bloco com o cabeçalho do mês e os exames daquela data */}
             {sortedDates.map(dateKey => (
               <div key={dateKey}>
+                {/* Cabeçalho do bloco: ícone de calendário e o mês/ano formatado */}
                 <div className="flex items-center gap-2 mb-2 sticky top-0 bg-card/95 backdrop-blur-sm py-1 z-10">
                   <Calendar className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm font-medium text-muted-foreground capitalize">
@@ -184,10 +210,13 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
                   </span>
                 </div>
                 
+                {/* Lista dos exames enviados naquela data */}
                 <div className="space-y-2">
                   {groupedByDate[dateKey].map((upload) => {
+                    // Lê os tipos de exame deste item para exibir como etiquetas
                     const types = parseExamTypes(upload.exam_type);
-                    
+
+                    // Monta o cartão individual de um exame
                     return (
                       <div 
                         key={upload.id} 
@@ -289,6 +318,7 @@ export function ExamDocumentsCard({ uploads, onDelete, onUpdate }: ExamDocuments
         )}
       </CardContent>
 
+      {/* Janela (diálogo) de edição, aberta quando algum exame está sendo editado */}
       <EditExamDialog
         open={!!editingExam}
         onOpenChange={(open) => !open && setEditingExam(null)}

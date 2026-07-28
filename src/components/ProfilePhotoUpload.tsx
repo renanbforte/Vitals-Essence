@@ -1,3 +1,10 @@
+// ============================================================================
+// Upload de Foto de Perfil (ProfilePhotoUpload)
+// Mostra o avatar do usuário (foto ou iniciais) e, quando editável, abre um
+// diálogo para adicionar, trocar ou remover a foto de perfil. Envia e apaga os
+// arquivos no armazenamento do Supabase e atualiza o endereço da foto no perfil.
+// ============================================================================
+
 import { useState, useRef } from 'react';
 import { Camera, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,16 +35,21 @@ export function ProfilePhotoUpload({
   size = 'md',
   editable = true,
 }: ProfilePhotoUploadProps) {
+  // Indica se um envio/remoção está em andamento (mostra o ícone de carregando)
   const [uploading, setUploading] = useState(false);
+  // Controla se o diálogo de edição da foto está aberto
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Referência ao campo de arquivo oculto, usado para abrir o seletor de imagens
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Tamanhos possíveis do avatar (pequeno, médio, grande)
   const sizeClasses = {
     sm: 'w-10 h-10',
     md: 'w-16 h-16',
     lg: 'w-24 h-24',
   };
 
+  // Executado ao escolher um arquivo: valida, apaga a foto antiga, envia a nova e atualiza o perfil
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -63,7 +75,7 @@ export function ProfilePhotoUpload({
         }
       }
 
-      // Upload new photo
+      // Envia a nova foto usando um nome único (pasta do usuário + horário atual)
       const fileExt = file.name.split('.').pop();
       const fileName = `${userId}/${Date.now()}.${fileExt}`;
       
@@ -86,6 +98,7 @@ export function ProfilePhotoUpload({
 
       if (updateError) throw updateError;
 
+      // Avisa o componente pai da nova foto e fecha o diálogo
       onPhotoUpdated(publicUrl);
       toast.success('Foto atualizada!');
       setDialogOpen(false);
@@ -100,6 +113,7 @@ export function ProfilePhotoUpload({
     }
   };
 
+  // Remove a foto de perfil: apaga o arquivo do armazenamento e limpa o endereço no perfil
   const handleDelete = async () => {
     if (!currentPhotoUrl) return;
 
@@ -128,6 +142,7 @@ export function ProfilePhotoUpload({
     }
   };
 
+  // Monta as iniciais do nome (até 2 letras) usadas quando não há foto
   const initials = userName
     .split(' ')
     .map(n => n[0])
@@ -135,9 +150,11 @@ export function ProfilePhotoUpload({
     .join('')
     .toUpperCase();
 
+  // Estrutura visual: o avatar clicável e o diálogo de edição da foto
   return (
     <>
-      <div 
+      {/* Avatar do usuário; ao passar o mouse (se editável) aparece o ícone de câmera */}
+      <div
         className={`relative ${editable ? 'cursor-pointer group' : ''}`}
         onClick={() => editable && setDialogOpen(true)}
       >
@@ -154,6 +171,7 @@ export function ProfilePhotoUpload({
         )}
       </div>
 
+      {/* Diálogo de edição: prévia grande da foto e botões de adicionar/trocar/remover */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

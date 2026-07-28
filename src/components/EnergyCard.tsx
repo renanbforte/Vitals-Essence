@@ -1,3 +1,11 @@
+// ============================================================================
+// EnergyCard — Cartão "Energia do Dia" com um raio animado.
+// Mostra, em forma de raio que enche/esvazia, quanta energia o corpo tem ao
+// longo do dia. A energia começa cheia à meia-noite e cai com o passar das
+// horas; refeições concluídas recarregam, treinos consomem e a hidratação
+// regula a eficiência (bem hidratado rende mais; desidratado deixa o raio
+// instável e mais fraco). Também traz um botão de ajuda explicando as regras.
+// ============================================================================
 import { Zap as ZapIcon, Info, Droplets } from 'lucide-react';
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
@@ -6,6 +14,8 @@ import type { DailyTracking } from '@/hooks/useDailyTracking';
 import type { UserMealPlan } from '@/hooks/useUserMealPlans';
 import type { UserWorkoutPlan } from '@/hooks/useUserWorkoutPlans';
 
+// Liga o código de cada refeição ao campo que marca se ela foi concluída
+// no acompanhamento diário (ex.: 'breakfast' -> 'breakfast_completed').
 const mealKeyToTrackingKey: Record<string, keyof DailyTracking> = {
   'breakfast': 'breakfast_completed',
   'morning_snack': 'morning_snack_completed',
@@ -15,6 +25,7 @@ const mealKeyToTrackingKey: Record<string, keyof DailyTracking> = {
   'night_snack': 'night_snack_completed',
 };
 
+// Converte um horário em texto "HH:MM" para um número de horas (ex.: "12:30" -> 12.5).
 function parseTimeToHours(time: string): number {
   const [h, m] = time.split(':').map(Number);
   return h + (m || 0) / 60;
@@ -22,6 +33,7 @@ function parseTimeToHours(time: string): number {
 
 type EnergyState = 'full' | 'high' | 'medium' | 'low' | 'critical';
 
+// Classifica a energia (0 a 100%) em faixas: cheia, alta, média, baixa ou crítica.
 function getEnergyState(pct: number): EnergyState {
   if (pct >= 85) return 'full';
   if (pct >= 65) return 'high';
@@ -32,6 +44,7 @@ function getEnergyState(pct: number): EnergyState {
 
 type HydrationState = 'optimal' | 'good' | 'moderate' | 'low' | 'critical';
 
+// Classifica a hidratação (0 a 100%) em faixas: ótima, boa, moderada, baixa ou crítica.
 function getHydrationState(pct: number): HydrationState {
   if (pct >= 80) return 'optimal';
   if (pct >= 60) return 'good';
@@ -59,6 +72,7 @@ const hydrationWorkoutPenalty: Record<HydrationState, number> = {
   critical: 1.6,
 };
 
+// Texto amigável mostrado para cada faixa de hidratação.
 const hydrationLabels: Record<HydrationState, string> = {
   optimal: 'Eficiência máxima',
   good: 'Boa eficiência',
@@ -67,6 +81,7 @@ const hydrationLabels: Record<HydrationState, string> = {
   critical: 'Eficiência crítica',
 };
 
+// Texto amigável mostrado para cada faixa de energia.
 const energyLabels: Record<EnergyState, string> = {
   full: 'Corpo bem sustentado',
   high: 'Energia estável',
@@ -75,6 +90,7 @@ const energyLabels: Record<EnergyState, string> = {
   critical: 'Energia instável',
 };
 
+// Cores do raio para cada faixa de energia (degradê 'from'->'to' e o brilho 'glow').
 const energyColors: Record<EnergyState, { from: string; to: string; glow: string }> = {
   full:     { from: '#facc15', to: '#f59e0b', glow: 'rgba(250,204,21,0.5)' },
   high:     { from: '#fbbf24', to: '#f59e0b', glow: 'rgba(251,191,36,0.4)' },
@@ -83,12 +99,17 @@ const energyColors: Record<EnergyState, { from: string; to: string; glow: string
   critical: { from: '#a1a1aa', to: '#71717a', glow: 'rgba(161,161,170,0.15)' },
 };
 
+// Quanto de energia (em %) cada tipo de treino consome quando concluído.
 const workoutEnergyCost: Record<string, number> = {
   gym_upper: 18, gym_lower: 20, gym_full: 25, swimming: 18, running: 22,
   cycling: 20, volleyball: 16, crossfit: 25, functional: 18, pilates: 10,
   yoga: 8, dance: 14, martial_arts: 22, rest: 3, other: 15,
 };
 
+// Hook (cálculo) central: recebe refeições, acompanhamento do dia, data
+// escolhida, treinos do dia e a hidratação; devolve a energia final em % e
+// dados de apoio (teto máximo, faixa, custo do treino, hidratação e
+// eficiência). É aqui que ficam todas as regras do "triângulo metabólico".
 function useEnergyLevel(
   meals: UserMealPlan[],
   tracking: DailyTracking | null,
@@ -96,7 +117,10 @@ function useEnergyLevel(
   todayWorkouts: UserWorkoutPlan[] = [],
   hydrationPct: number = 0,
 ) {
+  // useMemo: só refaz a conta pesada quando algum dado de entrada muda.
   return useMemo(() => {
+    // Descobre se a data escolhida é hoje, um dia passado ou futuro, e qual a
+    // "hora atual" a considerar (dia passado conta como 24h; futuro como 0h).
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const selected = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
@@ -110,6 +134,8 @@ function useEnergyLevel(
     const efficiency = hydrationEfficiency[hydState];
     const workoutPenalty = hydrationWorkoutPenalty[hydState];
 
+    // Custo do treino: soma o gasto de cada treino do dia, só se o treino foi
+    // concluído. Depois multiplica pela penalidade da desidratação.
     const workoutCompleted = !!tracking?.workout_completed;
     const baseWorkoutCost = workoutCompleted
       ? todayWorkouts.reduce((sum, w) => sum + (workoutEnergyCost[w.workout_type] || 15), 0)
@@ -117,29 +143,37 @@ function useEnergyLevel(
     // Dehydrated = workout costs more energy
     const workoutCost = Math.round(baseWorkoutCost * workoutPenalty);
 
+    // Desgaste natural: quanto mais tarde no dia, mais energia já foi gasta.
+    // Desidratado esvazia mais rápido (até 25% a mais). Soma-se o custo do treino.
     // Dehydrated = base depletion is faster (efficiency < 1 means drains faster)
     const depletionMultiplier = 1 + (1 - efficiency) * 0.5; // up to 25% faster drain
     const baseDepletion = (currentHour / 24) * 100 * depletionMultiplier;
     const totalDepletion = baseDepletion + workoutCost;
     let energy = 100 - totalDepletion;
 
+    // Sem refeições cadastradas, devolve só a energia do desgaste (limitada a 0-100%).
     if (!meals.length) {
       const pct = Math.max(0, Math.min(100, energy));
       return { energyPct: pct, ceiling: 100, state: getEnergyState(pct), workoutCost, hydState, efficiency };
     }
 
+    // Ordena as refeições pelo horário (da mais cedo para a mais tarde).
     const sorted = [...meals]
       .map(m => ({ ...m, hour: parseTimeToHours(m.meal_time) }))
       .sort((a, b) => a.hour - b.hour);
 
+    // Teto máximo de energia. A desidratação forte já derruba esse teto.
     let ceiling = 100;
     // Dehydrated = ceiling is lower even with perfect meals
     if (efficiency < 0.8) {
       ceiling -= (1 - efficiency) * 15; // up to 7.5% lower ceiling
     }
+    // Recarga total a distribuir entre as refeições (repõe 100% + o gasto do treino).
     const totalRecharge = 100 + baseWorkoutCost;
     const perMeal = totalRecharge / sorted.length;
 
+    // Para cada refeição: se foi concluída, recarrega energia (mais se feita no
+    // horário certo; menos se atrasada). Se estava prevista e foi pulada, baixa o teto.
     for (const meal of sorted) {
       const isCompleted = !!tracking?.[mealKeyToTrackingKey[meal.meal_key]];
       const mealHour = meal.hour;
@@ -158,16 +192,20 @@ function useEnergyLevel(
       }
     }
 
+    // Bônus de recuperação: dia passado terminado bem hidratado ganha um pouco de energia.
     // Recovery bonus: good hydration at end of day
     if (isPastDay && efficiency >= 0.92) {
       energy += 3; // small bonus for well-hydrated day
     }
 
+    // Energia final limitada entre 0, o teto máximo e 100%.
     const energyPct = Math.max(0, Math.min(ceiling, Math.min(100, energy)));
     return { energyPct, ceiling: Math.max(0, ceiling), state: getEnergyState(energyPct), workoutCost, hydState, efficiency };
   }, [meals, tracking, selectedDate, todayWorkouts, hydrationPct]);
 }
 
+// Pequeno traço animado que "escapa" do raio, dando o efeito de faíscas
+// de energia se dissipando. Recebe o caminho a desenhar, cor, atraso e duração.
 function DissipationTrail({ pathD, delay, color, duration }: { pathD: string; delay: number; color: string; duration: number }) {
   return (
     <motion.path
@@ -179,12 +217,17 @@ function DissipationTrail({ pathD, delay, color, duration }: { pathD: string; de
   );
 }
 
+// Desenha o raio em si (SVG animado) e os números embaixo: porcentagem de
+// energia, faixa em texto, refeições concluídas e indicadores de treino e
+// hidratação. Usa o cálculo do useEnergyLevel para saber como preencher/animar.
 function EnergyBolt({ meals, tracking, selectedDate, todayWorkouts = [], hydrationPct = 0 }: {
   meals: UserMealPlan[]; tracking: DailyTracking | null; selectedDate: Date;
   todayWorkouts?: UserWorkoutPlan[]; hydrationPct?: number;
 }) {
+  // Pega a energia calculada e os dados de apoio.
   const { energyPct, ceiling, state, workoutCost, hydState, efficiency } = useEnergyLevel(meals, tracking, selectedDate, todayWorkouts, hydrationPct);
   const colors = energyColors[state];
+  // Quantas refeições do dia já foram concluídas.
   const completedCount = meals.filter(m => tracking?.[mealKeyToTrackingKey[m.meal_key]]).length;
   const isFull = state === 'full';
 
@@ -196,6 +239,7 @@ function EnergyBolt({ meals, tracking, selectedDate, todayWorkouts = [], hydrati
   // Jitter effect for dehydrated bolt
   const jitterAmount = isDehydrated ? (1 - efficiency) * 2 : 0;
 
+  // Desenhos (em coordenadas SVG) do corpo principal do raio e de suas ramificações.
   const boltMain = "M 58 2 L 46 28 L 60 32 L 42 58 L 58 62 L 34 98 L 72 56 L 54 52 L 70 28 L 52 24 L 66 2 Z";
   const boltFork1 = "M 46 28 L 34 38 L 28 52 L 32 50 L 30 60";
   const boltFork2 = "M 42 58 L 30 66 L 24 78 L 28 76";
@@ -203,6 +247,8 @@ function EnergyBolt({ meals, tracking, selectedDate, todayWorkouts = [], hydrati
   const boltFork4 = "M 58 62 L 68 70 L 74 66";
   const allPaths = [boltMain, boltFork1, boltFork2, boltFork3, boltFork4];
 
+  // Calcula até que altura o raio deve aparecer preenchido (revealY) e onde
+  // fica a linha do teto máximo (ceilingY). Mais energia = preenchido mais alto.
   const boltTop = 2;
   const boltBottom = 98;
   const revealY = boltTop + (boltBottom - boltTop) * (1 - energyPct / 100);
@@ -217,6 +263,8 @@ function EnergyBolt({ meals, tracking, selectedDate, todayWorkouts = [], hydrati
     "M 72 56 L 80 52 L 86 56",
   ];
 
+  // Monta o SVG do raio (brilho, esqueleto vazio, parte preenchida e efeitos
+  // de animação) e, embaixo, os textos com a porcentagem e indicadores.
   return (
     <div className="flex flex-col items-center py-2">
       <div className="relative">
@@ -341,10 +389,17 @@ interface EnergyCardProps {
   hydrationGoalMl: number;
 }
 
+// Componente principal exportado: o cartão completo mostrado nas telas.
+// Prepara os dados (treinos do dia e % de hidratação) e desenha o cabeçalho
+// com o botão de ajuda e o raio (EnergyBolt).
 export function EnergyCard({ selectedDate, tracking, mealPlans, workoutPlans, waterMl, hydrationGoalMl }: EnergyCardProps) {
+  // Filtra apenas os treinos previstos para o dia da semana da data escolhida.
   const todayWorkouts = workoutPlans.filter(w => w.day_of_week === selectedDate.getDay());
+  // Calcula a porcentagem de hidratação (água bebida / meta), limitada a 100%.
   const hydrationPct = hydrationGoalMl > 0 ? Math.min(100, (waterMl / hydrationGoalMl) * 100) : 0;
 
+  // Monta o cartão: faixa colorida com título, botão de ajuda (Popover que
+  // explica as regras) e o raio de energia embaixo.
   return (
     <div className="rounded-3xl overflow-hidden shadow-xl">
       <div className="gradient-meals p-5 pb-3">

@@ -1,3 +1,10 @@
+// ============================================================================
+// Check-in Diário da Arena
+// Cartão com um botão que registra o "check-in" do dia. Ao clicar, o app pega as
+// pontuações do Diário de Saúde do usuário (hidratação, alimentação e ativação),
+// considera apenas os pilares que o grupo ativou, salva o resultado e publica
+// automaticamente um post no feed do grupo com a pontuação total do dia.
+// ============================================================================
 import { useState } from 'react';
 import { ArenaGroup } from '@/hooks/useArena';
 import { useComputeArenaScores } from '@/hooks/useArena';
@@ -14,10 +21,14 @@ interface ArenaCheckInProps {
 }
 
 export function ArenaCheckIn({ group, groupId, onSubmit, onPost }: ArenaCheckInProps) {
+  // Indica que o check-in está sendo processado (calculando/salvando)
   const [loading, setLoading] = useState(false);
+  // Indica que o check-in do dia já foi feito (trava o botão)
   const [done, setDone] = useState(false);
+  // Hook que calcula as pontuações da Arena a partir do Diário de Saúde
   const compute = useComputeArenaScores(groupId);
 
+  // Faz o check-in: calcula as pontuações do dia, salva e posta no feed
   const handleCheckIn = async () => {
     setLoading(true);
     try {
@@ -64,12 +75,15 @@ export function ArenaCheckIn({ group, groupId, onSubmit, onPost }: ArenaCheckInP
     setLoading(false);
   };
 
+  // Monta a lista de pilares ativos no grupo (hidratação, alimentação, ativação)
+  // apenas com aqueles habilitados, para exibir os selos coloridos na tela
   const activePillars = [
     ...(group.pillar_hydration ? [{ icon: Droplets, label: 'Hidratação', color: 'text-blue-500', bg: 'bg-blue-500/10' }] : []),
     ...(group.pillar_nutrition ? [{ icon: Utensils, label: 'Alimentação', color: 'text-green-500', bg: 'bg-green-500/10' }] : []),
     ...(group.pillar_workout ? [{ icon: Dumbbell, label: 'Ativação', color: 'text-orange-500', bg: 'bg-orange-500/10' }] : []),
   ];
 
+  // Tela: cabeçalho, selos dos pilares ativos e o botão de check-in
   return (
     <Card className="p-5 rounded-2xl border-border bg-gradient-to-br from-primary/5 to-transparent">
       <div className="flex items-center gap-3 mb-4">

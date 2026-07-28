@@ -1,3 +1,10 @@
+// ============================================================================
+// CycleCalendar (Calendário do Ciclo Menstrual)
+// Mostra um calendário mensal colorido com os dias de menstruação, a previsão da
+// próxima menstruação, a janela fértil e a ovulação. No topo exibe um cartão com
+// a fase atual do ciclo (menstrual, folicular, ovulação, lútea) e dicas de
+// bem-estar para cada fase.
+// ============================================================================
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, Flower2, Droplets, Sun, Moon, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -15,8 +22,10 @@ interface Props {
   settings: MenstrualSettings | null;
 }
 
+// Iniciais dos dias da semana (Domingo a Sábado) usadas no cabeçalho do calendário.
 const weekDays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
 
+// Cores de fundo para cada intensidade de fluxo menstrual (do leve ao muito intenso).
 const flowColors: Record<string, string> = {
   spotting: 'bg-[hsl(340_50%_85%)]',
   light: 'bg-[hsl(340_55%_78%)]',
@@ -26,6 +35,7 @@ const flowColors: Record<string, string> = {
   none: '',
 };
 
+// Cores do texto (número do dia) conforme a intensidade do fluxo, para manter a legibilidade.
 const flowTextColors: Record<string, string> = {
   spotting: 'text-foreground',
   light: 'text-foreground',
@@ -35,8 +45,11 @@ const flowTextColors: Record<string, string> = {
   none: '',
 };
 
+// As quatro fases possíveis do ciclo menstrual (ou nenhuma, quando não há dados).
 type CyclePhase = 'menstrual' | 'folicular' | 'ovulacao' | 'lutea' | null;
 
+// Informações visuais e de conteúdo de cada fase do ciclo: rótulo, ícone, cores,
+// descrição e uma lista de dicas de bem-estar exibidas para a usuária.
 const PHASE_INFO = {
   menstrual: {
     label: 'Fase Menstrual',
@@ -104,26 +117,33 @@ const PHASE_INFO = {
   },
 };
 
+// Calcula em que fase do ciclo a usuária está HOJE, em qual dia do ciclo ela está
+// e o total de dias do ciclo. Serve para o cartão de "Fase atual" no topo da tela.
 function getCurrentPhase(
   today: Date,
   cycles: MenstrualCycle[],
   settings: MenstrualSettings | null,
   prediction: PredictionResult | null
 ): { phase: CyclePhase; dayInCycle: number; totalDays: number } {
+  // Duração média do ciclo e da menstruação (usa 28 e 5 dias como padrão se não houver configuração).
   const cycleLength = settings?.average_cycle_length || 28;
   const periodLength = settings?.average_period_length || 5;
 
   // Find active or most recent cycle
+  // Pega o ciclo mais recente registrado; sem ele, não há fase a mostrar.
   const lastCycle = cycles[0];
   if (!lastCycle) return { phase: null, dayInCycle: 0, totalDays: cycleLength };
 
+  // Descobre há quantos dias o ciclo atual começou (dia 1 = primeiro dia da menstruação).
   const cycleStart = new Date(lastCycle.start_date);
   const dayInCycle = differenceInDays(today, cycleStart) + 1;
 
   if (dayInCycle < 1) return { phase: null, dayInCycle: 0, totalDays: cycleLength };
 
+  // A ovulação costuma ocorrer cerca de 14 dias antes do fim do ciclo.
   const ovulationDay = cycleLength - 14;
 
+  // Define a fase conforme o dia do ciclo: menstrual, folicular, ovulação ou lútea.
   let phase: CyclePhase = null;
   if (dayInCycle <= periodLength) {
     phase = 'menstrual';
@@ -138,16 +158,22 @@ function getCurrentPhase(
   return { phase, dayInCycle: Math.min(dayInCycle, cycleLength), totalDays: cycleLength };
 }
 
+// Componente principal do calendário. Recebe os ciclos, os registros diários,
+// a previsão e as configurações da usuária.
 export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props) {
+  // Mês atualmente exibido no calendário (o usuário pode navegar para frente/trás).
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  // Controla se o cartão da fase atual está expandido, mostrando todas as dicas.
   const [expandedPhaseCard, setExpandedPhaseCard] = useState(false);
 
+  // Organiza os registros diários em um mapa por data, para consulta rápida ao montar o calendário.
   const logMap = useMemo(() => {
     const m = new Map<string, MenstrualDailyLog>();
     dailyLogs.forEach(l => m.set(l.date, l));
     return m;
   }, [dailyLogs]);
 
+  // Calcula o primeiro e o último dia do mês exibido e a lista de todos os seus dias.
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -155,12 +181,15 @@ export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props
   const today = new Date();
   const monthLabel = format(currentMonth, 'MMMM yyyy', { locale: ptBR });
 
+  // Durações médias e dia estimado da ovulação, usados para colorir os dias do calendário.
   const cycleLength = settings?.average_cycle_length || 28;
   const periodLength = settings?.average_period_length || 5;
   const ovulationDay = cycleLength - 14;
 
+  // Data de início do ciclo mais recente, usada como referência para calcular as fases.
   const lastCycleStart = cycles[0] ? new Date(cycles[0].start_date) : null;
 
+  // Descobre a fase do ciclo de um dia qualquer do calendário (repetindo o padrão a cada ciclo).
   const getDayPhase = (day: Date): CyclePhase => {
     if (!lastCycleStart) return null;
     const d = differenceInDays(day, lastCycleStart) + 1;
@@ -172,6 +201,7 @@ export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props
     return 'lutea';
   };
 
+  // Verifica se um dia caiu dentro de algum período de menstruação já registrado.
   const isPeriodDay = (day: Date): boolean => {
     return cycles.some(c => {
       const start = new Date(c.start_date);
@@ -182,6 +212,7 @@ export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props
     });
   };
 
+  // Verifica se um dia está dentro da faixa de PREVISÃO da próxima menstruação (com margem de erro).
   const isPredictedDay = (day: Date): boolean => {
     if (!prediction) return false;
     const marginStart = subDays(prediction.nextPeriodStart, prediction.marginDays);
@@ -189,11 +220,13 @@ export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props
     return isWithinInterval(day, { start: marginStart, end: marginEnd });
   };
 
+  // Verifica se um dia está no centro da previsão (faixa mais provável, sem a margem de erro).
   const isPredictedCenter = (day: Date): boolean => {
     if (!prediction) return false;
     return isWithinInterval(day, { start: prediction.nextPeriodStart, end: prediction.nextPeriodEnd });
   };
 
+  // Verifica se um dia está na janela de ovulação (por volta do dia da ovulação).
   const isOvulationWindow = (day: Date): boolean => {
     if (!lastCycleStart) return false;
     const d = differenceInDays(day, lastCycleStart) + 1;
@@ -201,6 +234,7 @@ export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props
     return normalized >= ovulationDay - 1 && normalized <= ovulationDay + 1;
   };
 
+  // Verifica se um dia está na janela fértil (os dias com maior chance de gravidez, antes da ovulação).
   const isFertileWindow = (day: Date): boolean => {
     if (!lastCycleStart) return false;
     const d = differenceInDays(day, lastCycleStart) + 1;
@@ -208,10 +242,12 @@ export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props
     return normalized >= ovulationDay - 4 && normalized <= ovulationDay + 1;
   };
 
+  // Calcula (e memoriza) a fase atual do ciclo para exibir no cartão do topo.
   const currentPhaseInfo = useMemo(() => {
     return getCurrentPhase(today, cycles, settings, prediction);
   }, [cycles, settings, prediction]);
 
+  // Informações visuais da fase atual e uma dica escolhida aleatoriamente para mostrar.
   const phaseData = currentPhaseInfo.phase ? PHASE_INFO[currentPhaseInfo.phase] : null;
   const randomDica = useMemo(() => {
     if (!phaseData) return null;
@@ -328,6 +364,8 @@ export function CycleCalendar({ cycles, dailyLogs, prediction, settings }: Props
           {Array.from({ length: startDayOfWeek }).map((_, i) => <div key={`e-${i}`} />)}
 
           {daysInMonth.map((day) => {
+            // Para cada dia do mês, descobre o que ele representa (menstruação, previsão,
+            // ovulação, janela fértil ou fase) para escolher a cor e o estilo da célula.
             const dateStr = format(day, 'yyyy-MM-dd');
             const log = logMap.get(dateStr);
             const period = isPeriodDay(day);

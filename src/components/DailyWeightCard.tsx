@@ -1,3 +1,9 @@
+// ============================================================================
+// CARTAO "PESO DO DIA"
+// Registra e mostra o peso do usuario na data selecionada, com um velocimetro
+// animado comparando o peso atual com a meta. Tambem calcula a diferenca para a
+// meta e permite anexar/trocar/remover uma foto de progresso do dia.
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { Scale, Check, Camera, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -21,12 +27,17 @@ interface DailyWeightCardProps {
   uploadingPhoto?: boolean;
 }
 
+// Velocimetro (gauge) animado que desenha o peso atual como um ponteiro e a meta
+// como um marcador, dentro de uma faixa de peso minimo/maximo.
 // Animated scale/gauge visual
 function WeightGauge({ current, target, min = 40, max = 150 }: { current: number | null; target: number; min?: number; max?: number }) {
+  // Calcula os angulos do ponteiro (peso atual) e do marcador (meta) na faixa min-max.
   const range = max - min;
   const currentAngle = current ? ((current - min) / range) * 180 - 90 : -90;
   const targetAngle = ((target - min) / range) * 180 - 90;
-  
+
+  // Desenha o arco do velocimetro, os segmentos coloridos, o marcador de meta,
+  // o ponteiro e o valor do peso em numero.
   return (
     <div className="flex flex-col items-center py-2">
       <svg width="160" height="100" viewBox="0 0 160 100">
@@ -93,19 +104,26 @@ export function DailyWeightCard({
   selectedDate, weights, onAddWeight, targetWeight = 80,
   progressPhoto, onUploadProgressPhoto, onDeleteProgressPhoto, uploadingPhoto = false,
 }: DailyWeightCardProps) {
+  // Valor digitado no campo de peso.
   const [newWeight, setNewWeight] = useState('');
+  // Indica que o peso esta sendo salvo (desativa o botao enquanto isso).
   const [loading, setLoading] = useState(false);
+  // Controla se a janela de visualizacao da foto de progresso esta aberta.
   const [photoPreviewOpen, setPhotoPreviewOpen] = useState(false);
+  // Referencia para o campo de arquivo escondido, usado para abrir a camera/galeria.
   const fileInputRef = { current: null as HTMLInputElement | null };
 
+  // Data selecionada em texto e o registro de peso correspondente (se existir).
   const selectedDateString = format(selectedDate, 'yyyy-MM-dd');
   const todayWeight = weights.find(w => w.date === selectedDateString);
 
+  // Ao trocar de data, preenche o campo com o peso ja registrado ou deixa vazio.
   useEffect(() => {
     if (todayWeight) setNewWeight(todayWeight.weight_kg.toString());
     else setNewWeight('');
   }, [selectedDateString, todayWeight]);
 
+  // Valida e salva o peso digitado (deve ficar entre 30kg e 300kg).
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const weight = parseFloat(newWeight);
@@ -117,11 +135,14 @@ export function DailyWeightCard({
     else toast.success(todayWeight ? 'Peso atualizado!' : 'Peso registrado!');
   };
 
+  // Informacoes derivadas da data e do peso: se e hoje, se e futuro, o peso atual
+  // e a diferenca em relacao a meta.
   const isToday = format(new Date(), 'yyyy-MM-dd') === selectedDateString;
   const isFuture = selectedDate > new Date();
   const currentWeight = todayWeight ? Number(todayWeight.weight_kg) : null;
   const diffToTarget = currentWeight ? currentWeight - targetWeight : null;
 
+  // Trata a escolha de uma foto: valida tipo/tamanho (max 5MB) e faz o envio.
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !onUploadProgressPhoto) return;
@@ -133,6 +154,7 @@ export function DailyWeightCard({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Remove a foto de progresso do dia e fecha a janela de visualizacao.
   const handleDeletePhoto = async () => {
     if (!progressPhoto || !onDeleteProgressPhoto) return;
     const { error } = await onDeleteProgressPhoto(progressPhoto.id);
@@ -140,6 +162,8 @@ export function DailyWeightCard({
     else { toast.success('Foto removida'); setPhotoPreviewOpen(false); }
   };
 
+  // Monta o cartao: cabecalho com o velocimetro e a foto, o corpo com o formulario
+  // de peso e os quadros de resumo, e a janela de visualizacao da foto.
   return (
     <div className="rounded-3xl overflow-hidden shadow-xl">
       <input ref={(el) => { fileInputRef.current = el; }} type="file" accept="image/*" capture="environment" onChange={handlePhotoChange} className="hidden" />
@@ -185,6 +209,7 @@ export function DailyWeightCard({
 
       {/* Body */}
       <div className="bg-card p-4">
+        {/* Bloqueia datas futuras; caso contrario, mostra o formulario e o resumo. */}
         {isFuture ? (
           <div className="bg-muted/50 rounded-xl p-4 text-center">
             <p className="text-muted-foreground text-sm">Não é possível registrar em datas futuras</p>

@@ -1,3 +1,10 @@
+// ============================================================================
+// Calendário da Arena (desafio em grupo de bem-estar)
+// Mostra um calendário mensal onde cada dia é colorido conforme a pontuação
+// média dos membros (verde = ótimo, amarelo/laranja = mediano). Dá para filtrar
+// por membro, navegar entre meses e clicar num dia para ver as fotos de progresso
+// e de treino registradas naquele dia, com visualizador em tela cheia.
+// ============================================================================
 import { useState, useMemo } from 'react';
 import { ArenaDailyScore, ArenaGroup, ArenaMember, ArenaMemberDayPhotos } from '@/hooks/useArena';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -15,6 +22,7 @@ interface ArenaCalendarProps {
   onFetchDayPhotos?: (date: string) => Promise<ArenaMemberDayPhotos[]>;
 }
 
+// Decide a cor de fundo de um dia conforme a pontuação (verde=alta, laranja=baixa)
 function getScoreColor(score: number): string {
   if (score >= 80) return 'bg-green-500';
   if (score >= 50) return 'bg-yellow-500';
@@ -23,26 +31,36 @@ function getScoreColor(score: number): string {
 }
 
 export function ArenaCalendar({ group, members, scores, onFetchDayPhotos }: ArenaCalendarProps) {
+  // Mês atualmente exibido no calendário
   const [month, setMonth] = useState(new Date());
+  // Membro selecionado no filtro (null = mostrar todos)
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
+  // Dia clicado para abrir a galeria de fotos (null = nenhum aberto)
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  // Fotos dos membros carregadas para o dia selecionado
   const [dayPhotos, setDayPhotos] = useState<ArenaMemberDayPhotos[]>([]);
+  // Indica que as fotos do dia estão carregando
   const [loadingPhotos, setLoadingPhotos] = useState(false);
+  // Foto aberta em tela cheia (null = nenhuma)
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
 
+  // Calcula todos os dias do mês exibido (recalcula só quando o mês muda)
   const days = useMemo(() => {
     const start = startOfMonth(month);
     const end = endOfMonth(month);
     return eachDayOfInterval({ start, end });
   }, [month]);
 
+  // Quantos quadradinhos vazios colocar antes do dia 1 (para alinhar o dia da semana)
   const startPad = getDay(startOfMonth(month));
 
+  // Pontuações filtradas: só do membro escolhido, ou todas se nenhum for escolhido
   const filteredScores = useMemo(() => {
     if (selectedMember) return scores.filter(s => s.user_id === selectedMember);
     return scores;
   }, [scores, selectedMember]);
 
+  // Organiza as pontuações por data (chave = dia) para consulta rápida no calendário
   const scoreMap = useMemo(() => {
     const map: Record<string, ArenaDailyScore[]> = {};
     filteredScores.forEach(s => {
@@ -59,6 +77,7 @@ export function ArenaCalendar({ group, members, scores, onFetchDayPhotos }: Aren
     return set;
   }, [scores]);
 
+  // Ao clicar num dia: abre o dia e carrega as fotos dos membros daquela data
   const handleDayClick = async (dateStr: string) => {
     if (!onFetchDayPhotos) return;
     setSelectedDay(dateStr);
@@ -69,6 +88,7 @@ export function ArenaCalendar({ group, members, scores, onFetchDayPhotos }: Aren
     setLoadingPhotos(false);
   };
 
+  // Tela: filtro de membros, navegação de mês, grade do calendário e galeria de fotos
   return (
     <div className="space-y-4">
       {/* Member filter */}

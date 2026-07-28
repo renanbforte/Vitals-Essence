@@ -1,3 +1,10 @@
+// ============================================================================
+// CARTÃO "ENVIAR EXAME" (ExamUploadCard)
+// Formulário onde o usuário anexa arquivos de exames (PDF, imagens ou ZIP),
+// informa o mês/ano do exame e marca um ou mais tipos de exame. Ao salvar,
+// envia cada arquivo para armazenamento e limpa o formulário em caso de sucesso.
+// ============================================================================
+
 import { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -7,12 +14,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Upload, FileText, Loader2, Clock } from 'lucide-react';
 import { ExamUpload } from '@/hooks/useExamResults';
 
+// Informações que este cartão recebe de quem o utiliza:
+// - uploads: exames já salvos (usado só para mostrar a mensagem de "nenhum ainda")
+// - uploading: indica se um envio está em andamento (para desabilitar o botão)
+// - onUpload: função que efetivamente envia um arquivo
 interface ExamUploadCardProps {
   uploads: ExamUpload[];
   uploading: boolean;
   onUpload: (file: File, examDate: Date, examTypes: string[]) => Promise<ExamUpload | null>;
 }
 
+// Lista de tipos de exame disponíveis para o usuário marcar (código + nome exibido)
 const examTypeOptions = [
   { value: 'bioquimica', label: 'Bioquímica Sanguínea' },
   { value: 'hemograma', label: 'Hemograma' },
@@ -35,12 +47,17 @@ export function ExamUploadCard({
   uploading, 
   onUpload, 
 }: ExamUploadCardProps) {
+  // Arquivos escolhidos pelo usuário e ainda não enviados
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  // Data (mês/ano) informada para o exame; começa na data de hoje
   const [examDate, setExamDate] = useState<Date>(new Date());
+  // Tipos de exame marcados pelo usuário
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  
+
+  // Referência ao campo de arquivo, para poder limpá-lo após o envio
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Guarda os arquivos escolhidos quando o usuário seleciona no campo de arquivo
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
@@ -48,6 +65,7 @@ export function ExamUploadCard({
     }
   };
 
+  // Marca ou desmarca um tipo de exame na lista de selecionados
   const toggleExamType = (value: string) => {
     setSelectedTypes(prev => 
       prev.includes(value) 
@@ -56,9 +74,10 @@ export function ExamUploadCard({
     );
   };
 
+  // Envia todos os arquivos selecionados, um por um; se todos derem certo, limpa o formulário
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
-    
+
     // Upload each file
     let success = true;
     for (const file of selectedFiles) {
@@ -78,6 +97,7 @@ export function ExamUploadCard({
     }
   };
 
+  // Monta a tela do formulário de envio de exames
   return (
     <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
       <CardHeader className="pb-4">
@@ -130,6 +150,7 @@ export function ExamUploadCard({
             )}
           </div>
 
+          {/* Seleção da data do exame: um menu para o mês e outro para o ano */}
           <div className="space-y-2">
             <Label>Data do Exame (Mês/Ano)</Label>
             <div className="flex gap-2">
@@ -171,6 +192,7 @@ export function ExamUploadCard({
             </div>
           </div>
 
+          {/* Lista de caixas de seleção com os tipos de exame */}
           <div className="space-y-2">
             <Label>Tipo de Exame (selecione um ou mais)</Label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
@@ -209,6 +231,7 @@ export function ExamUploadCard({
           </Button>
         </div>
 
+        {/* Mensagem exibida apenas quando o usuário ainda não salvou nenhum exame */}
         {uploads.length === 0 && (
           <div className="text-center py-6 text-muted-foreground">
             <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />

@@ -1,3 +1,10 @@
+// ============================================================================
+// Botão de Upload de Foto (PhotoUploadButton)
+// Componente reutilizável que permite tirar/escolher uma foto (ex.: foto da
+// refeição), enviá-la, visualizá-la em um diálogo e, opcionalmente, removê-la.
+// Valida se o arquivo é imagem e se tem no máximo 5MB antes de enviar.
+// ============================================================================
+
 import { useRef, useState } from 'react';
 import { Camera, Loader2, X, Image as ImageIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -28,9 +35,12 @@ export function PhotoUploadButton({
   variant = 'icon',
   className = '',
 }: PhotoUploadButtonProps) {
+  // Referência ao campo <input type="file"> oculto, usado para abrir o seletor de arquivos
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Controla se o diálogo de visualização da foto está aberto ou fechado
   const [previewOpen, setPreviewOpen] = useState(false);
 
+  // Executado quando o usuário escolhe um arquivo: valida e envia a foto
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -47,6 +57,7 @@ export function PhotoUploadButton({
       return;
     }
 
+    // Chama a função de envio recebida por props e mostra aviso de sucesso ou erro
     const { error } = await onUpload(file);
     if (error) {
       toast.error('Erro ao enviar foto');
@@ -54,12 +65,13 @@ export function PhotoUploadButton({
       toast.success('Foto enviada com sucesso!');
     }
 
-    // Clear the input
+    // Limpa o campo para permitir reenviar o mesmo arquivo depois
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
+  // Remove a foto existente (quando a função onDelete é fornecida)
   const handleDelete = async () => {
     if (!onDelete) return;
     
@@ -72,19 +84,23 @@ export function PhotoUploadButton({
     }
   };
 
+  // Tamanhos possíveis do botão (pequeno, médio, grande)
   const sizeClasses = {
     sm: 'h-7 w-7',
     md: 'h-9 w-9',
     lg: 'h-11 w-11',
   };
 
+  // Tamanhos correspondentes dos ícones dentro do botão
   const iconSizes = {
     sm: 'w-3.5 h-3.5',
     md: 'w-4 h-4',
     lg: 'w-5 h-5',
   };
 
+  // Modo "full": mostra a miniatura da foto (se houver) ou um botão de câmera maior
   if (variant === 'full') {
+    // Estrutura visual do modo completo
     return (
       <>
         <input
@@ -97,6 +113,7 @@ export function PhotoUploadButton({
         />
         
         <div className={`flex items-center gap-2 ${className}`}>
+          {/* Se já existe foto, mostra a miniatura clicável; senão, mostra o botão de câmera */}
           {existingPhotoUrl ? (
             <button
               onClick={() => setPreviewOpen(true)}
@@ -128,6 +145,7 @@ export function PhotoUploadButton({
           )}
         </div>
 
+        {/* Diálogo de visualização: exibe a foto ampliada e botões de trocar/remover */}
         <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -171,6 +189,7 @@ export function PhotoUploadButton({
     );
   }
 
+  // Modo "icon" (padrão): versão compacta do botão de foto
   return (
     <>
       <input
@@ -181,7 +200,8 @@ export function PhotoUploadButton({
         onChange={handleFileChange}
         className="hidden"
       />
-      
+
+      {/* Miniatura clicável quando há foto, ou botão de câmera quando não há */}
       {existingPhotoUrl ? (
         <button
           onClick={() => setPreviewOpen(true)}
@@ -212,6 +232,7 @@ export function PhotoUploadButton({
         </Button>
       )}
 
+      {/* Diálogo de visualização: exibe a foto ampliada e botões de trocar/remover */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>

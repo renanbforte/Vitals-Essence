@@ -1,3 +1,10 @@
+// ============================================================================
+// ContraceptiveMethodDialog — Janela para cadastrar um método anticoncepcional.
+// O usuário escolhe o tipo (pílula, injeção, DIU, etc.) e os campos do formulário
+// se adaptam ao tipo selecionado (horário da pílula, intervalo da injeção, data
+// de renovação...). Ao salvar, os dados vão para o banco e o diálogo se fecha.
+// ============================================================================
+
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -14,26 +21,32 @@ interface Props {
   onSaved: () => void;
 }
 
+// Lista de tipos de método (valor + rótulo) para preencher o seletor.
 const METHOD_TYPES = Object.entries(METHOD_LABELS);
 
 export function ContraceptiveMethodDialog({ open, onOpenChange, onSaved }: Props) {
+  // Função que grava o método no banco de dados.
   const { saveMethod } = useContraceptive();
+  // Indica se está salvando (para desabilitar o botão e mostrar "Salvando...").
   const [saving, setSaving] = useState(false);
 
-  const [methodType, setMethodType] = useState('pill');
-  const [name, setName] = useState('');
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
-  const [endDate, setEndDate] = useState('');
-  const [pillTime, setPillTime] = useState('08:00');
-  const [pillCycleDays, setPillCycleDays] = useState(21);
-  const [pillBreakDays, setPillBreakDays] = useState(7);
-  const [injectionInterval, setInjectionInterval] = useState(90);
-  const [renewalReminderDays, setRenewalReminderDays] = useState(7);
-  const [notes, setNotes] = useState('');
+  // Campos do formulário, cada um guardando o que o usuário digita/escolhe:
+  const [methodType, setMethodType] = useState('pill');            // tipo do método
+  const [name, setName] = useState('');                            // nome / marca
+  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10)); // data de início (hoje por padrão)
+  const [endDate, setEndDate] = useState('');                      // data de validade / renovação
+  const [pillTime, setPillTime] = useState('08:00');               // horário para tomar a pílula
+  const [pillCycleDays, setPillCycleDays] = useState(21);          // dias ativos da cartela
+  const [pillBreakDays, setPillBreakDays] = useState(7);           // dias de pausa/placebo
+  const [injectionInterval, setInjectionInterval] = useState(90);  // intervalo entre injeções (dias)
+  const [renewalReminderDays, setRenewalReminderDays] = useState(7); // antecedência do aviso de renovação
+  const [notes, setNotes] = useState('');                          // observações livres
 
-  const needsDaily = METHOD_NEEDS_DAILY.includes(methodType);
-  const hasEndDate = METHOD_HAS_END_DATE.includes(methodType);
+  // Deriva do tipo escolhido quais campos extras mostrar:
+  const needsDaily = METHOD_NEEDS_DAILY.includes(methodType);   // precisa de horário diário?
+  const hasEndDate = METHOD_HAS_END_DATE.includes(methodType);  // tem data de validade/renovação?
 
+  // Valida, monta o objeto do método e salva no banco; avisa por toast e fecha ao concluir.
   const handleSave = async () => {
     if (!name.trim()) { toast.error('Informe o nome do método'); return; }
     setSaving(true);
@@ -66,6 +79,7 @@ export function ContraceptiveMethodDialog({ open, onOpenChange, onSaved }: Props
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
+          {/* Seletor do tipo de método (pílula, injeção, DIU, etc.) */}
           <div className="space-y-2">
             <Label>Tipo de método</Label>
             <Select value={methodType} onValueChange={setMethodType}>
@@ -95,6 +109,7 @@ export function ContraceptiveMethodDialog({ open, onOpenChange, onSaved }: Props
             <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="rounded-xl" />
           </div>
 
+          {/* Só aparece para métodos que têm validade (ex.: DIU, implante) */}
           {hasEndDate && (
             <div className="space-y-2">
               <Label>Data de validade / próxima renovação</Label>
@@ -103,6 +118,7 @@ export function ContraceptiveMethodDialog({ open, onOpenChange, onSaved }: Props
             </div>
           )}
 
+          {/* Campos específicos da pílula: horário, dias ativos e dias de pausa */}
           {methodType === 'pill' && (
             <>
               <div className="space-y-2">
@@ -134,6 +150,7 @@ export function ContraceptiveMethodDialog({ open, onOpenChange, onSaved }: Props
             </>
           )}
 
+          {/* Campo específico da injeção: intervalo entre as aplicações */}
           {methodType === 'injection' && (
             <div className="space-y-2">
               <Label>Intervalo entre aplicações (dias)</Label>
@@ -147,6 +164,7 @@ export function ContraceptiveMethodDialog({ open, onOpenChange, onSaved }: Props
             </div>
           )}
 
+          {/* Antecedência do lembrete de renovação (para métodos com validade ou injeção) */}
           {(hasEndDate || methodType === 'injection') && (
             <div className="space-y-2">
               <Label>Avisar com quantos dias de antecedência?</Label>
@@ -175,6 +193,7 @@ export function ContraceptiveMethodDialog({ open, onOpenChange, onSaved }: Props
             />
           </div>
 
+          {/* Botão que dispara o salvamento; mostra "Salvando..." enquanto grava */}
           <Button
             onClick={handleSave}
             disabled={saving}
