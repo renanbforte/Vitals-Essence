@@ -1,10 +1,23 @@
+// ============================================================================
+// Professional  —  TELA PROFISSIONAL / CARREIRA (rota /profissional)
+// ----------------------------------------------------------------------------
+// Painel de evolução profissional gamificado (nível, XP, score semanal). Tem
+// abas: Visão geral, Score do dia (com cronômetro de foco), Estudos (planos e
+// sessões), Carreira (perfil, renda, competências, aprendizado) e Oportunidades.
+// Todos os dados vêm/vão para o Supabase através do hook "useProfessional".
+// ============================================================================
+
+// Ferramenta do React para guardar valores que mudam na tela.
 import { useState } from 'react';
+// Imagens usadas nos cartões de "Oportunidades" (currículo, proposta, reunião, entrevista).
 import oppCurriculoImg from '@/assets/opp-curriculo.png';
 import oppPropostaImg from '@/assets/opp-proposta.png';
 import oppReuniaoImg from '@/assets/opp-reuniao.png';
 import oppEntrevistaImg from '@/assets/opp-entrevista.png';
 import { useNavigate } from 'react-router-dom';
+// "motion" cria as animações suaves de entrada dos cartões.
 import { motion } from 'framer-motion';
+// Conjunto de ícones desenhados usados pela tela inteira.
 import {
   ArrowLeft, Briefcase, TrendingUp, Target, BookOpen, Star,
   Zap, Trophy, Plus, Check, Trash2, BarChart3,
@@ -13,10 +26,13 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+// Hook que busca e salva TODOS os dados profissionais no banco (Supabase).
 import { useProfessional } from '@/hooks/useProfessional';
+// Ferramentas de data (formatar datas e pegar o início do mês) em português.
 import { format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+// Componentes de janela pop-up (diálogos), seletor, área de texto e barra deslizante.
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from '@/components/ui/dialog';
@@ -24,6 +40,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Slider } from '@/components/ui/slider';
 
+// Receitas de animação: "fadeUp" faz o item surgir subindo; "stagger" faz os filhos aparecerem em sequência.
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 22 } },
@@ -33,6 +50,8 @@ const stagger = {
   show: { opacity: 1, transition: { staggerChildren: 0.07 } },
 };
 
+// Listas fixas usadas nos menus da tela (trilhas de carreira, categorias, tipos, etc.).
+// Trilhas de carreira disponíveis (com emoji + nome exibido).
 const CAREER_TRACKS: Record<string, string> = {
   corporativo: '🏢 Corporativo',
   empreendedorismo: '🚀 Empreendedorismo',
@@ -41,6 +60,7 @@ const CAREER_TRACKS: Record<string, string> = {
   transicao: '🔄 Transição de Carreira',
 };
 
+// Categorias de competências/habilidades (usadas no "Banco de Competências").
 const SKILL_CATEGORIES: Record<string, string> = {
   comunicacao: '💬 Comunicação',
   lideranca: '👑 Liderança',
@@ -50,16 +70,19 @@ const SKILL_CATEGORIES: Record<string, string> = {
   marketing: '📢 Marketing',
 };
 
-const LEARNING_TYPES = ['curso', 'livro', 'aula', 'certificacao', 'outros'];
-const OPP_TYPES = ['curriculo', 'proposta', 'reuniao', 'entrevista'];
-const STUDY_TYPES = ['aula', 'leitura', 'exercicio', 'revisao', 'simulado'];
-const PLAN_TYPES = ['curso', 'concurso', 'habilidade', 'certificacao', 'idioma', 'livre'];
-const MISSION_TYPES = ['estrategica', 'aprendizado', 'networking', 'organizacao'];
+// Tipos de opções para os menus de cada seção.
+const LEARNING_TYPES = ['curso', 'livro', 'aula', 'certificacao', 'outros'];   // tipos de aprendizado registrado
+const OPP_TYPES = ['curriculo', 'proposta', 'reuniao', 'entrevista'];          // tipos de oportunidade/ação
+const STUDY_TYPES = ['aula', 'leitura', 'exercicio', 'revisao', 'simulado'];   // tipos de sessão de estudo
+const PLAN_TYPES = ['curso', 'concurso', 'habilidade', 'certificacao', 'idioma', 'livre']; // tipos de plano de estudo
+const MISSION_TYPES = ['estrategica', 'aprendizado', 'networking', 'organizacao']; // tipos de missão da semana
 
+// Formata um número como dinheiro em reais (ex: 3500 -> "R$ 3.500").
 function formatCurrency(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
 }
 
+// Cartão reutilizável com efeito de "vidro fosco" — a moldura visual padrão desta tela.
 function GlassCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`rounded-2xl bg-card/70 backdrop-blur-xl border border-border/40 p-4 shadow-lg ${className}`}>
@@ -68,20 +91,24 @@ function GlassCard({ children, className = '' }: { children: React.ReactNode; cl
   );
 }
 
-// Amber-themed button class helper
+// Atalho de estilo: cor âmbar/laranja padrão dos botões desta tela.
 const amberBtn = "bg-amber-500 hover:bg-amber-600 text-white border-0";
 
+// Pequeno rótulo de título de seção (texto cinza em maiúsculas).
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">{children}</p>;
 }
 
-// ─── Timer Component ───────────────────────────────────────────────────────────
+// ─── Componente Cronômetro (Timer de Foco tipo "Pomodoro") ─────────────────────
+// Cronômetro regressivo de 25 ou 50 minutos. Ao terminar, avisa a tela pai
+// quantos minutos de foco foram concluídos (via "onComplete").
 function FocusTimer({ onComplete }: { onComplete: (minutes: number) => void }) {
-  const [running, setRunning] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [preset, setPreset] = useState(25);
-  const intervalRef = useState<NodeJS.Timeout | null>(null);
+  const [running, setRunning] = useState(false); // cronômetro está rodando?
+  const [seconds, setSeconds] = useState(0);      // segundos já passados
+  const [preset, setPreset] = useState(25);       // duração escolhida (25 ou 50 min)
+  const intervalRef = useState<NodeJS.Timeout | null>(null); // guarda o "relógio interno" para poder pará-lo
 
+  // Inicia a contagem: a cada segundo soma 1; ao chegar no tempo escolhido, encerra e avisa.
   const start = () => {
     setRunning(true);
     const interval = setInterval(() => {
@@ -99,6 +126,7 @@ function FocusTimer({ onComplete }: { onComplete: (minutes: number) => void }) {
     (intervalRef as any)[0] = interval;
   };
 
+  // Para o cronômetro antes da hora: se passaram mais de 30s, conta os minutos já feitos.
   const stop = () => {
     if ((intervalRef as any)[0]) clearInterval((intervalRef as any)[0]);
     setRunning(false);
@@ -108,6 +136,7 @@ function FocusTimer({ onComplete }: { onComplete: (minutes: number) => void }) {
     setSeconds(0);
   };
 
+  // Converte os segundos em minutos e segundos com dois dígitos (ex: 05:09) e calcula o quanto já andou (0 a 1).
   const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
   const secs = (seconds % 60).toString().padStart(2, '0');
   const progress = seconds / (preset * 60);
@@ -115,6 +144,7 @@ function FocusTimer({ onComplete }: { onComplete: (minutes: number) => void }) {
   return (
     <GlassCard className="text-center">
       <SectionLabel>Modo Foco Profundo</SectionLabel>
+      {/* Botões para escolher a duração: 25 ou 50 minutos (só troca quando parado) */}
       <div className="flex justify-center gap-2 mb-4">
         {[25, 50].map(p => (
           <button
@@ -126,6 +156,7 @@ function FocusTimer({ onComplete }: { onComplete: (minutes: number) => void }) {
           </button>
         ))}
       </div>
+      {/* Círculo de progresso: o anel âmbar se completa conforme o tempo passa, com o relógio no centro */}
       <div className="relative w-32 h-32 mx-auto mb-4">
         <svg className="w-32 h-32 -rotate-90" viewBox="0 0 100 100">
           <circle cx="50" cy="50" r="44" fill="none" stroke="hsl(var(--muted))" strokeWidth="8" />
@@ -134,10 +165,12 @@ function FocusTimer({ onComplete }: { onComplete: (minutes: number) => void }) {
             strokeDashoffset={`${2 * Math.PI * 44 * (1 - progress)}`}
             strokeLinecap="round" className="transition-all duration-1000" />
         </svg>
+        {/* Número do relógio no meio do círculo (mm:ss) */}
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="text-2xl font-bold font-mono">{running || seconds > 0 ? `${mins}:${secs}` : `${preset}:00`}</span>
         </div>
       </div>
+      {/* Botão muda conforme o estado: "Iniciar Foco" quando parado, "Encerrar" quando rodando */}
       {!running ? (
         <Button onClick={start} className={`gap-2 rounded-xl px-6 ${amberBtn}`}>
           <Play className="w-4 h-4" /> Iniciar Foco
@@ -151,16 +184,20 @@ function FocusTimer({ onComplete }: { onComplete: (minutes: number) => void }) {
   );
 }
 
-// ─── Overview Tab ─────────────────────────────────────────────────────────────
+// ─── Aba "Visão" (resumo geral) ────────────────────────────────────────────────
+// Mostra nível/XP, estatísticas da semana, meta de renda e as missões da semana.
 function OverviewTab() {
+  // Puxa do banco os números e as ações (concluir/excluir/adicionar missão).
   const { profile, weekScore, weekFocusHours, incomeProgress, xpForNextLevel, xpProgress, weeklyMissions, completeMission, deleteMission, addMission } = useProfessional();
-  const [newMission, setNewMission] = useState({ type: 'estrategica', title: '' });
-  const [addingMission, setAddingMission] = useState(false);
+  const [newMission, setNewMission] = useState({ type: 'estrategica', title: '' }); // dados da nova missão sendo criada
+  const [addingMission, setAddingMission] = useState(false); // formulário de nova missão está aberto?
 
+  // Emoji de cada tipo de missão (só visual).
   const missionEmojis: Record<string, string> = {
     estrategica: '🎯', aprendizado: '📚', networking: '🤝', organizacao: '📁'
   };
 
+  // Salva a nova missão (só se tiver título) e fecha o formulário.
   const handleAddMission = async () => {
     if (!newMission.title.trim()) return;
     await addMission(newMission.type, newMission.title);
@@ -168,12 +205,13 @@ function OverviewTab() {
     setAddingMission(false);
   };
 
+  // Traduz o número do nível em um nome (nível 1 = Iniciante, ... até Lendário).
   const levelLabels = ['Iniciante', 'Aprendiz', 'Profissional', 'Sênior', 'Expert', 'Mestre', 'Lendário'];
   const levelLabel = levelLabels[Math.min((profile?.level || 1) - 1, levelLabels.length - 1)];
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
-      {/* Level & XP */}
+      {/* Cartão de Nível e XP: troféu, número do nível, título e barra de progresso até o próximo nível */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center gap-4">
@@ -195,7 +233,7 @@ function OverviewTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Weekly Stats */}
+      {/* Estatísticas da semana: pontuação semanal e total de horas de foco */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <SectionLabel>Semana Atual</SectionLabel>
@@ -212,7 +250,7 @@ function OverviewTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Income Progress */}
+      {/* Progresso da meta de renda (só aparece se o usuário definiu uma meta) */}
       {profile && profile.target_income > 0 && (
         <motion.div variants={fadeUp}>
           <GlassCard>
@@ -237,16 +275,18 @@ function OverviewTab() {
         </motion.div>
       )}
 
-      {/* Weekly Missions */}
+      {/* Missões da semana: pequenas metas que o usuário cria e marca como concluídas */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
             <SectionLabel>Missões da Semana</SectionLabel>
+            {/* Botão "+" abre o formulário de nova missão */}
             <Button size="sm" variant="ghost" className="h-7 w-7 p-0 rounded-lg" onClick={() => setAddingMission(true)}>
               <Plus className="w-3.5 h-3.5" />
             </Button>
           </div>
 
+          {/* Formulário de nova missão (aparece só quando o "+" é clicado) */}
           {addingMission && (
             <div className="mb-3 space-y-2 p-3 bg-muted/30 rounded-xl border border-border/40">
               <Select value={newMission.type} onValueChange={v => setNewMission(p => ({ ...p, type: v }))}>
@@ -273,10 +313,12 @@ function OverviewTab() {
             </div>
           )}
 
+          {/* Lista das missões: se não houver nenhuma, mostra aviso; senão, lista cada uma */}
           {weeklyMissions.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">Nenhuma missão esta semana</p>
           ) : (
             <div className="space-y-2">
+              {/* Cada missão: emoji, texto (riscado se concluída), botão de concluir e de excluir */}
               {weeklyMissions.map(m => (
                 <div key={m.id} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${m.completed ? 'bg-amber-500/5 border border-amber-500/20' : 'bg-muted/40'}`}>
                   <span className="text-base">{missionEmojis[m.mission_type]}</span>
@@ -299,48 +341,56 @@ function OverviewTab() {
   );
 }
 
-// ─── Score Tab ────────────────────────────────────────────────────────────────
+// ─── Aba "Score" (pontuação do dia) ────────────────────────────────────────────
+// O usuário informa o que produziu hoje (horas de foco, tarefas, entregas...) e
+// o app calcula uma pontuação. Também tem o cronômetro e o histórico da semana.
 function ScoreTab() {
   const { todayRecord, saveDailyRecord, weekRecords } = useProfessional();
+  // Formulário do dia, já preenchido com o que foi salvo hoje (se houver).
   const [form, setForm] = useState({
-    focus_hours: todayRecord?.focus_hours || 0,
-    strategic_tasks_done: todayRecord?.strategic_tasks_done || 0,
-    study_done: todayRecord?.study_done || false,
-    important_deliveries: todayRecord?.important_deliveries || 0,
-    relevant_meetings: todayRecord?.relevant_meetings || 0,
-    notes: todayRecord?.notes || '',
+    focus_hours: todayRecord?.focus_hours || 0,               // horas de foco
+    strategic_tasks_done: todayRecord?.strategic_tasks_done || 0, // tarefas estratégicas feitas
+    study_done: todayRecord?.study_done || false,             // estudou hoje?
+    important_deliveries: todayRecord?.important_deliveries || 0, // entregas importantes
+    relevant_meetings: todayRecord?.relevant_meetings || 0,   // reuniões relevantes
+    notes: todayRecord?.notes || '',                          // observações
   });
-  const [focusMinutes, setFocusMinutes] = useState(0);
-  const [saving, setSaving] = useState(false);
+  const [focusMinutes, setFocusMinutes] = useState(0); // minutos somados pelo cronômetro
+  const [saving, setSaving] = useState(false);          // salvando no banco?
 
+  // Quando o cronômetro termina, soma as horas de foco automaticamente no formulário.
   const handleTimerComplete = (minutes: number) => {
     const addedHours = minutes / 60;
     setForm(p => ({ ...p, focus_hours: Math.round((p.focus_hours + addedHours) * 10) / 10 }));
     setFocusMinutes(m => m + minutes);
   };
 
+  // Salva o registro do dia no banco.
   const handleSave = async () => {
     setSaving(true);
     await saveDailyRecord(form);
     setSaving(false);
   };
 
+  // Prévia da pontuação: soma pontos por cada item, com teto máximo por categoria.
   const preview = Math.round(
-    Math.min(form.focus_hours * 10, 40) +
-    Math.min(form.strategic_tasks_done * 8, 24) +
-    (form.study_done ? 15 : 0) +
-    Math.min(form.important_deliveries * 7, 14) +
-    Math.min(form.relevant_meetings * 4, 8)
+    Math.min(form.focus_hours * 10, 40) +          // foco: 10 pts/hora, máx. 40
+    Math.min(form.strategic_tasks_done * 8, 24) +  // tarefas: 8 pts cada, máx. 24
+    (form.study_done ? 15 : 0) +                   // estudou: +15
+    Math.min(form.important_deliveries * 7, 14) +  // entregas: 7 pts cada, máx. 14
+    Math.min(form.relevant_meetings * 4, 8)        // reuniões: 4 pts cada, máx. 8
   );
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
+      {/* Cronômetro de foco no topo da aba */}
       <FocusTimer onComplete={handleTimerComplete} />
 
       <motion.div variants={fadeUp}>
         <GlassCard>
           <SectionLabel>Score de Hoje</SectionLabel>
 
+          {/* Círculo grande mostrando a pontuação prévia do dia (0 a 100) */}
           <div className="flex items-center justify-center mb-4">
             <div className="relative w-24 h-24">
               <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
@@ -357,7 +407,9 @@ function ScoreTab() {
             </div>
           </div>
 
+          {/* Campos que o usuário preenche para compor a pontuação do dia */}
           <div className="space-y-4">
+            {/* Horas de foco: barra deslizante de 0 a 10 horas (de meia em meia hora) */}
             <div>
               <div className="flex justify-between mb-1">
                 <label className="text-sm font-medium">⏱️ Horas de Foco</label>
@@ -373,6 +425,7 @@ function ScoreTab() {
               </div>
             </div>
 
+            {/* Tarefas estratégicas: contador com botões - e + (nunca abaixo de zero) */}
             <div>
               <div className="flex justify-between mb-1">
                 <label className="text-sm font-medium">🎯 Tarefas Estratégicas</label>
@@ -384,6 +437,7 @@ function ScoreTab() {
               </div>
             </div>
 
+            {/* Entregas importantes: contador com botões - e + */}
             <div>
               <div className="flex justify-between mb-1">
                 <label className="text-sm font-medium">🚀 Entregas Importantes</label>
@@ -395,6 +449,7 @@ function ScoreTab() {
               </div>
             </div>
 
+            {/* Reuniões relevantes: contador com botões - e + */}
             <div>
               <div className="flex justify-between mb-1">
                 <label className="text-sm font-medium">🤝 Reuniões Relevantes</label>
@@ -406,6 +461,7 @@ function ScoreTab() {
               </div>
             </div>
 
+            {/* Botão "Estudei hoje": liga/desliga uma caixinha de marcação */}
             <button
               onClick={() => setForm(p => ({ ...p, study_done: !p.study_done }))}
               className={`w-full flex items-center justify-between p-3 rounded-xl border transition-all ${form.study_done ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' : 'bg-muted/40 border-border/40'}`}
@@ -416,6 +472,7 @@ function ScoreTab() {
               </div>
             </button>
 
+            {/* Campo livre para anotações do dia */}
             <Textarea
               value={form.notes}
               onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
@@ -425,13 +482,14 @@ function ScoreTab() {
             />
           </div>
 
+          {/* Botão que salva a pontuação do dia (mostra "Salvando..." enquanto grava) */}
           <Button onClick={handleSave} disabled={saving} className={`w-full mt-4 rounded-xl font-semibold ${amberBtn}`}>
             {saving ? 'Salvando...' : 'Salvar Score do Dia'}
           </Button>
         </GlassCard>
       </motion.div>
 
-      {/* Week history */}
+      {/* Histórico da semana: lista os dias já registrados com dia da semana, horas e pontos (cor por faixa) */}
       {weekRecords.length > 0 && (
         <motion.div variants={fadeUp}>
           <GlassCard>
@@ -458,32 +516,38 @@ function ScoreTab() {
   );
 }
 
-// ─── Studies Tab ──────────────────────────────────────────────────────────────
+// ─── Aba "Estudos" ──────────────────────────────────────────────────────────────
+// Organiza planos de estudo. Sem plano selecionado, mostra a lista de planos;
+// com um plano aberto, mostra suas sessões (aulas, leituras...) e o progresso.
 function StudiesTab() {
   const { studyPlans, studySessions, addStudyPlan, deleteStudyPlan, addStudySession, completeStudySession, deleteStudySession } = useProfessional();
-  const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
-  const [planDialog, setPlanDialog] = useState(false);
-  const [sessionDialog, setSessionDialog] = useState(false);
-  const [completeDialog, setCompleteDialog] = useState<string | null>(null);
-  const [actualMinutes, setActualMinutes] = useState(30);
-  const [sessionNotes, setSessionNotes] = useState('');
-  const [planForm, setPlanForm] = useState({ title: '', plan_type: 'curso', deadline: '', weekly_hours_goal: 5 });
-  const [sessionForm, setSessionForm] = useState({ planned_date: format(new Date(), 'yyyy-MM-dd'), topic: '', duration_minutes: 30, activity_type: 'aula' });
+  const [selectedPlan, setSelectedPlan] = useState<string | null>(null); // plano aberto no momento (null = lista)
+  const [planDialog, setPlanDialog] = useState(false);      // pop-up de novo plano aberto?
+  const [sessionDialog, setSessionDialog] = useState(false); // pop-up de nova sessão aberto?
+  const [completeDialog, setCompleteDialog] = useState<string | null>(null); // id da sessão sendo concluída
+  const [actualMinutes, setActualMinutes] = useState(30);   // minutos realmente estudados (ao concluir)
+  const [sessionNotes, setSessionNotes] = useState('');     // observação ao concluir a sessão
+  const [planForm, setPlanForm] = useState({ title: '', plan_type: 'curso', deadline: '', weekly_hours_goal: 5 }); // formulário de novo plano
+  const [sessionForm, setSessionForm] = useState({ planned_date: format(new Date(), 'yyyy-MM-dd'), topic: '', duration_minutes: 30, activity_type: 'aula' }); // formulário de nova sessão
 
+  // Localiza o plano aberto e separa suas sessões (todas, de hoje e as concluídas).
   const plan = studyPlans.find(p => p.id === selectedPlan);
   const planSessions = studySessions.filter(s => s.plan_id === selectedPlan);
   const todaySessions = planSessions.filter(s => s.planned_date === format(new Date(), 'yyyy-MM-dd'));
   const doneSessions = planSessions.filter(s => s.completed);
 
+  // Calcula o total de horas planejadas e a porcentagem já concluída do plano.
   const totalPlannedHours = planSessions.reduce((s, ss) => s + ss.duration_minutes / 60, 0);
   const progressPct = totalPlannedHours > 0 ? ((plan?.total_hours_done || 0) / totalPlannedHours) * 100 : 0;
 
+  // Cria um novo plano de estudo e já o abre automaticamente.
   const handleCreatePlan = async () => {
     if (!planForm.title.trim()) return;
     const created = await addStudyPlan({ ...planForm, status: 'active', weekly_hours_goal: Number(planForm.weekly_hours_goal) });
     if (created) { setSelectedPlan(created.id); setPlanDialog(false); setPlanForm({ title: '', plan_type: 'curso', deadline: '', weekly_hours_goal: 5 }); }
   };
 
+  // Adiciona uma sessão de estudo ao plano aberto.
   const handleAddSession = async () => {
     if (!sessionForm.topic.trim() || !selectedPlan) return;
     await addStudySession({ ...sessionForm, plan_id: selectedPlan, duration_minutes: Number(sessionForm.duration_minutes), completed: false, actual_duration_minutes: null, notes: null });
@@ -491,6 +555,7 @@ function StudiesTab() {
     setSessionForm({ planned_date: format(new Date(), 'yyyy-MM-dd'), topic: '', duration_minutes: 30, activity_type: 'aula' });
   };
 
+  // Marca a sessão como concluída, registrando os minutos reais e observações.
   const handleComplete = async () => {
     if (!completeDialog) return;
     await completeStudySession(completeDialog, actualMinutes, sessionNotes || undefined);
@@ -499,8 +564,10 @@ function StudiesTab() {
     setSessionNotes('');
   };
 
+  // Emoji para cada tipo de atividade de estudo (só visual).
   const activityEmoji: Record<string, string> = { aula: '🎥', leitura: '📖', exercicio: '✏️', revisao: '🔄', simulado: '📝' };
 
+  // === VISÃO 1: nenhum plano aberto -> mostra a LISTA de planos ===
   if (!selectedPlan) {
     return (
       <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
@@ -513,6 +580,7 @@ function StudiesTab() {
               </Button>
             </div>
 
+            {/* Sem planos: mensagem de "vazio". Com planos: lista clicável com barra de progresso */}
             {studyPlans.length === 0 ? (
               <div className="text-center py-8">
                 <BookOpen className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
@@ -521,6 +589,7 @@ function StudiesTab() {
               </div>
             ) : (
               <div className="space-y-3">
+                {/* Cada plano vira um botão; ao clicar, abre os detalhes do plano */}
                 {studyPlans.map(p => {
                   const planSess = studySessions.filter(s => s.plan_id === p.id);
                   const done = planSess.filter(s => s.completed).length;
@@ -550,6 +619,7 @@ function StudiesTab() {
           </GlassCard>
         </motion.div>
 
+        {/* Pop-up para criar um novo plano de estudo (título, tipo, meta semanal e prazo) */}
         <Dialog open={planDialog} onOpenChange={setPlanDialog}>
           <DialogContent className="rounded-2xl">
             <DialogHeader><DialogTitle>Novo Plano de Estudo</DialogTitle></DialogHeader>
@@ -577,12 +647,15 @@ function StudiesTab() {
     );
   }
 
+  // === VISÃO 2: um plano está aberto -> mostra os DETALHES e as sessões desse plano ===
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
       <motion.div variants={fadeUp}>
+        {/* Link para voltar à lista de planos */}
         <button onClick={() => setSelectedPlan(null)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2">
           <ArrowLeft className="w-4 h-4" /> Voltar aos planos
         </button>
+        {/* Cartão de cabeçalho do plano: título, meta, progresso, prazo e botão de excluir */}
         <GlassCard>
           <div className="flex items-start justify-between mb-3">
             <div>
@@ -606,7 +679,7 @@ function StudiesTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Today's sessions */}
+      {/* Sessões de hoje: as sessões deste plano marcadas para a data de hoje */}
       {todaySessions.length > 0 && (
         <motion.div variants={fadeUp}>
           <GlassCard>
@@ -632,7 +705,7 @@ function StudiesTab() {
         </motion.div>
       )}
 
-      {/* All sessions */}
+      {/* Todas as sessões do plano (lista rolável), com botão para adicionar nova sessão */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
@@ -642,6 +715,7 @@ function StudiesTab() {
             </Button>
           </div>
 
+          {/* Vazio: aviso. Preenchido: lista ordenada por data, cada uma com concluir/excluir */}
           {planSessions.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">Nenhuma sessão planejada ainda</p>
           ) : (
@@ -670,7 +744,7 @@ function StudiesTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Add Session Dialog */}
+      {/* Pop-up para adicionar uma sessão de estudo (tema, data, duração e tipo) */}
       <Dialog open={sessionDialog} onOpenChange={setSessionDialog}>
         <DialogContent className="rounded-2xl">
           <DialogHeader><DialogTitle>Nova Sessão de Estudo</DialogTitle></DialogHeader>
@@ -700,7 +774,7 @@ function StudiesTab() {
         </DialogContent>
       </Dialog>
 
-      {/* Complete Session Dialog */}
+      {/* Pop-up para concluir uma sessão: informa o tempo real estudado e observações */}
       <Dialog open={!!completeDialog} onOpenChange={() => setCompleteDialog(null)}>
         <DialogContent className="rounded-2xl">
           <DialogHeader><DialogTitle>Concluir Sessão</DialogTitle></DialogHeader>
@@ -720,10 +794,14 @@ function StudiesTab() {
   );
 }
 
-// ─── Growth Tab ───────────────────────────────────────────────────────────────
+// ─── Aba "Carreira" (crescimento) ──────────────────────────────────────────────
+// Reúne o perfil profissional, a evolução da renda mês a mês, o banco de
+// competências (com estrelas) e o registro de aprendizados (cursos, livros...).
 function GrowthTab() {
   const { profile, saveProfile, skills, addSkill, updateSkillRating, deleteSkill, learningLogs, addLearning, deleteLearning, incomeHistory, saveIncome } = useProfessional();
+  // Abre o pop-up de perfil automaticamente se o cargo ainda não foi preenchido.
   const [profileDialog, setProfileDialog] = useState(!profile?.job_role);
+  // Formulário do perfil profissional, já preenchido com o que houver salvo.
   const [profileForm, setProfileForm] = useState({
     job_role: profile?.job_role || '',
     current_income: profile?.current_income || 0,
@@ -731,18 +809,20 @@ function GrowthTab() {
     next_goal: profile?.next_goal || '',
     career_track: profile?.career_track || 'corporativo',
   });
-  const [skillDialog, setSkillDialog] = useState(false);
-  const [skillForm, setSkillForm] = useState({ skill_name: '', category: 'tecnica', rating: 3 });
-  const [learningDialog, setLearningDialog] = useState(false);
-  const [learningForm, setLearningForm] = useState({ type: 'curso', title: '', duration_minutes: 60, log_date: format(new Date(), 'yyyy-MM-dd'), notes: '' });
-  const [incomeDialog, setIncomeDialog] = useState(false);
-  const [incomeForm, setIncomeForm] = useState({ month: format(startOfMonth(new Date()), 'yyyy-MM-dd'), income: profile?.current_income || 0, notes: '' });
+  const [skillDialog, setSkillDialog] = useState(false); // pop-up de nova competência
+  const [skillForm, setSkillForm] = useState({ skill_name: '', category: 'tecnica', rating: 3 }); // formulário de competência
+  const [learningDialog, setLearningDialog] = useState(false); // pop-up de novo aprendizado
+  const [learningForm, setLearningForm] = useState({ type: 'curso', title: '', duration_minutes: 60, log_date: format(new Date(), 'yyyy-MM-dd'), notes: '' }); // formulário de aprendizado
+  const [incomeDialog, setIncomeDialog] = useState(false); // pop-up de registro de renda
+  const [incomeForm, setIncomeForm] = useState({ month: format(startOfMonth(new Date()), 'yyyy-MM-dd'), income: profile?.current_income || 0, notes: '' }); // formulário de renda
 
+  // Salva o perfil profissional no banco.
   const handleSaveProfile = async () => {
     await saveProfile({ ...profileForm, current_income: Number(profileForm.current_income), target_income: Number(profileForm.target_income) });
     setProfileDialog(false);
   };
 
+  // Adiciona uma nova competência (com nome, categoria e nota de 1 a 5).
   const handleAddSkill = async () => {
     if (!skillForm.skill_name.trim()) return;
     await addSkill(skillForm);
@@ -750,6 +830,7 @@ function GrowthTab() {
     setSkillForm({ skill_name: '', category: 'tecnica', rating: 3 });
   };
 
+  // Registra um novo aprendizado concluído (curso, livro, certificação...).
   const handleAddLearning = async () => {
     if (!learningForm.title.trim()) return;
     await addLearning({ ...learningForm, duration_minutes: Number(learningForm.duration_minutes) });
@@ -757,16 +838,18 @@ function GrowthTab() {
     setLearningForm({ type: 'curso', title: '', duration_minutes: 60, log_date: format(new Date(), 'yyyy-MM-dd'), notes: '' });
   };
 
+  // Salva o valor da renda de um determinado mês.
   const handleSaveIncome = async () => {
     await saveIncome(incomeForm.month, Number(incomeForm.income), incomeForm.notes);
     setIncomeDialog(false);
   };
 
+  // Emoji para cada tipo de aprendizado (só visual).
   const learningTypeEmoji: Record<string, string> = { curso: '🎓', livro: '📚', aula: '🎥', certificacao: '🏆', outros: '💡' };
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
-      {/* Career Profile */}
+      {/* Perfil de carreira: cargo, renda atual/meta, próximo objetivo e trilha */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
@@ -775,6 +858,7 @@ function GrowthTab() {
               <Edit2 className="w-3.5 h-3.5" />
             </Button>
           </div>
+          {/* Se o perfil já foi preenchido, mostra os dados; senão, um convite para configurar */}
           {profile?.job_role ? (
             <div className="space-y-2">
               <div className="flex items-center gap-3 p-3 bg-muted/40 rounded-xl">
@@ -817,7 +901,7 @@ function GrowthTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Income History */}
+      {/* Evolução de renda: histórico dos últimos meses (mostra até 6) com botão de registrar */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
@@ -843,7 +927,7 @@ function GrowthTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Skills Bank */}
+      {/* Banco de competências: habilidades agrupadas por categoria, avaliadas de 1 a 5 estrelas */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
@@ -856,15 +940,17 @@ function GrowthTab() {
             <p className="text-sm text-muted-foreground text-center py-4">Avalie suas competências</p>
           ) : (
             <div className="space-y-2">
+              {/* Percorre cada categoria e lista as competências que pertencem a ela */}
               {Object.entries(SKILL_CATEGORIES).map(([cat, label]) => {
                 const catSkills = skills.filter(s => s.category === cat);
-                if (catSkills.length === 0) return null;
+                if (catSkills.length === 0) return null; // pula categorias sem nenhuma competência
                 return (
                   <div key={cat}>
                     <p className="text-xs font-semibold text-muted-foreground mb-1.5">{label}</p>
                     {catSkills.map(s => (
                       <div key={s.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/40 mb-1.5">
                         <span className="flex-1 text-sm font-medium">{s.skill_name}</span>
+                        {/* 5 estrelas clicáveis: clicar em uma define a nota daquela competência */}
                         <div className="flex gap-0.5">
                           {[1, 2, 3, 4, 5].map(n => (
                             <button key={n} onClick={() => updateSkillRating(s.id, n)}>
@@ -885,7 +971,7 @@ function GrowthTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Learning Logs */}
+      {/* Registro de aprendizado: histórico de cursos, livros e certificações concluídos */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
@@ -918,7 +1004,9 @@ function GrowthTab() {
         </GlassCard>
       </motion.div>
 
-      {/* Dialogs */}
+      {/* Pop-ups (janelas) de cadastro desta aba */}
+
+      {/* Pop-up do perfil profissional: cargo, trilha, renda atual/meta e próximo objetivo */}
       <Dialog open={profileDialog} onOpenChange={setProfileDialog}>
         <DialogContent className="rounded-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Perfil Profissional</DialogTitle></DialogHeader>
@@ -942,6 +1030,7 @@ function GrowthTab() {
         </DialogContent>
       </Dialog>
 
+      {/* Pop-up de nova competência: nome, categoria e nota em estrelas */}
       <Dialog open={skillDialog} onOpenChange={setSkillDialog}>
         <DialogContent className="rounded-2xl">
           <DialogHeader><DialogTitle>Nova Competência</DialogTitle></DialogHeader>
@@ -966,6 +1055,7 @@ function GrowthTab() {
         </DialogContent>
       </Dialog>
 
+      {/* Pop-up de registrar aprendizado: tipo, nome, data, duração e observações */}
       <Dialog open={learningDialog} onOpenChange={setLearningDialog}>
         <DialogContent className="rounded-2xl">
           <DialogHeader><DialogTitle>Registrar Aprendizado</DialogTitle></DialogHeader>
@@ -991,6 +1081,7 @@ function GrowthTab() {
         </DialogContent>
       </Dialog>
 
+      {/* Pop-up de registrar renda mensal: mês de referência, valor e observações */}
       <Dialog open={incomeDialog} onOpenChange={setIncomeDialog}>
         <DialogContent className="rounded-2xl">
           <DialogHeader><DialogTitle>Registrar Renda Mensal</DialogTitle></DialogHeader>
@@ -1012,12 +1103,15 @@ function GrowthTab() {
   );
 }
 
-// ─── Opportunities Tab ────────────────────────────────────────────────────────
+// ─── Aba "Radar de Oportunidades" ──────────────────────────────────────────────
+// Registra ações de busca profissional (currículos enviados, propostas, reuniões,
+// entrevistas) e acompanha a taxa de conversão (quantas deram resultado positivo).
 function OpportunitiesTab() {
   const { opportunities, addOpportunity, updateOpportunityResult, deleteOpportunity } = useProfessional();
-  const [dialog, setDialog] = useState(false);
-  const [form, setForm] = useState({ type: 'proposta', description: '', opportunity_date: format(new Date(), 'yyyy-MM-dd'), result: 'pendente' });
+  const [dialog, setDialog] = useState(false); // pop-up de registrar ação aberto?
+  const [form, setForm] = useState({ type: 'proposta', description: '', opportunity_date: format(new Date(), 'yyyy-MM-dd'), result: 'pendente' }); // formulário da nova ação
 
+  // Adiciona uma nova ação/oportunidade (só se tiver descrição) e limpa o formulário.
   const handleAdd = async () => {
     if (!form.description.trim()) return;
     await addOpportunity(form);
@@ -1025,26 +1119,30 @@ function OpportunitiesTab() {
     setForm({ type: 'proposta', description: '', opportunity_date: format(new Date(), 'yyyy-MM-dd'), result: 'pendente' });
   };
 
-  
+  // Imagem de fundo de cada tipo de oportunidade.
   const typeImage: Record<string, string> = {
     curriculo: oppCurriculoImg,
     proposta: oppPropostaImg,
     reuniao: oppReuniaoImg,
     entrevista: oppEntrevistaImg,
   };
+  // Nome exibido de cada tipo.
   const typeLabel: Record<string, string> = {
     curriculo: 'Currículo', proposta: 'Proposta', reuniao: 'Reunião', entrevista: 'Entrevista'
   };
+  // Configuração visual de cada resultado possível (rótulo + cor).
   const resultConfig: Record<string, { label: string; color: string }> = {
     pendente: { label: 'Pendente', color: 'text-yellow-600 bg-yellow-500/10' },
     positivo: { label: 'Positivo', color: 'text-green-600 bg-green-500/10' },
     negativo: { label: 'Negativo', color: 'text-red-500 bg-red-500/10' },
   };
 
+  // Cálculos de resumo: total de ações, quantas foram positivas e a taxa de conversão (%).
   const total = opportunities.length;
   const positive = opportunities.filter(o => o.result === 'positivo').length;
   const conversionRate = total > 0 ? ((positive / total) * 100).toFixed(0) : '0';
 
+  // Conta quantas ações existem de cada tipo (para exibir "X ações" em cada cartão).
   const byType = OPP_TYPES.reduce((acc, t) => {
     acc[t] = opportunities.filter(o => o.type === t).length;
     return acc;
@@ -1052,6 +1150,7 @@ function OpportunitiesTab() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
+      {/* Painel de resumo: total de ações, taxa de conversão e 4 cartões por tipo */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <SectionLabel>Radar de Oportunidades</SectionLabel>
@@ -1065,6 +1164,7 @@ function OpportunitiesTab() {
               <p className="text-xs text-muted-foreground">Taxa de conversão</p>
             </div>
           </div>
+          {/* Quatro cartões com imagem (um por tipo) mostrando quantas ações há de cada */}
           <div className="grid grid-cols-2 gap-3">
             {OPP_TYPES.map(t => (
               <div key={t} className="relative rounded-2xl overflow-hidden h-28 shadow-md">
@@ -1084,6 +1184,7 @@ function OpportunitiesTab() {
         </GlassCard>
       </motion.div>
 
+      {/* Lista de ações registradas: cada uma com imagem, descrição, data, resultado e excluir */}
       <motion.div variants={fadeUp}>
         <GlassCard>
           <div className="flex items-center justify-between mb-3">
@@ -1093,6 +1194,7 @@ function OpportunitiesTab() {
             </Button>
           </div>
 
+          {/* Vazio: aviso. Preenchido: lista rolável das ações */}
           {opportunities.length === 0 ? (
             <div className="text-center py-8">
               <BarChart3 className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
@@ -1110,6 +1212,7 @@ function OpportunitiesTab() {
                     <p className="font-medium text-sm truncate">{o.description}</p>
                     <p className="text-xs text-muted-foreground">{format(new Date(o.opportunity_date + 'T12:00:00'), 'dd/MM/yyyy')}</p>
                   </div>
+                  {/* Menu para mudar o resultado da ação (Pendente/Positivo/Negativo) */}
                   <Select value={o.result} onValueChange={v => updateOpportunityResult(o.id, v)}>
                     <SelectTrigger className={`h-7 text-xs rounded-lg border-0 px-2 w-auto ${resultConfig[o.result].color}`}>
                       <SelectValue />
@@ -1128,6 +1231,7 @@ function OpportunitiesTab() {
         </GlassCard>
       </motion.div>
 
+      {/* Pop-up para registrar uma nova ação: tipo, descrição e data */}
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="rounded-2xl">
           <DialogHeader><DialogTitle>Registrar Ação</DialogTitle></DialogHeader>
@@ -1149,14 +1253,16 @@ function OpportunitiesTab() {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Página Principal (monta tudo) ─────────────────────────────────────────────
+// Junta o cabeçalho e as abas. É este componente que a rota /profissional carrega.
 export default function Professional() {
   const navigate = useNavigate();
+  // Pega os dados de resumo para o cabeçalho e o estado de "carregando".
   const { profile, weekScore, loading } = useProfessional();
 
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Ambient glow */}
+      {/* Brilho de fundo decorativo (manchas de luz suaves, sem função de clique) */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full opacity-[0.06] blur-[120px]"
           style={{ background: 'hsl(38 92% 50%)' }} />
@@ -1164,7 +1270,7 @@ export default function Professional() {
           style={{ background: 'hsl(25 90% 45%)' }} />
       </div>
 
-      {/* Hero Header */}
+      {/* Cabeçalho grande (faixa laranja) com botão de voltar, título e resumo do nível/score */}
       <div className="relative overflow-hidden">
         <div style={{ background: 'linear-gradient(135deg, hsl(38 92% 42%), hsl(22 90% 35%))' }}>
           <div className="absolute inset-0 overflow-hidden">
@@ -1174,6 +1280,7 @@ export default function Professional() {
           </div>
           <div className="relative container mx-auto px-4 pt-6 pb-10">
             <div className="flex items-center gap-3 mb-2">
+              {/* Seta que volta para a tela inicial do app */}
               <Button variant="ghost" size="icon"
                 className="text-white/80 hover:text-white hover:bg-white/10 rounded-xl backdrop-blur-sm"
                 onClick={() => navigate('/')}>
@@ -1190,6 +1297,7 @@ export default function Professional() {
                   {profile ? `Nível ${profile.level} • Score semanal: ${weekScore} pts` : 'Configure seu painel de evolução'}
                 </p>
               </div>
+              {/* Selo com a chama e a pontuação da semana (só quando há perfil) */}
               {profile && (
                 <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-xl px-3 py-1.5">
                   <Flame className="w-3.5 h-3.5 text-orange-300" />
@@ -1202,13 +1310,15 @@ export default function Professional() {
         <div className="h-5 bg-background rounded-t-3xl -mt-5 relative z-10" />
       </div>
 
-      {/* Content */}
+      {/* Conteúdo principal */}
       <div className="relative z-10 container mx-auto px-4 pb-10 max-w-lg">
+        {/* Enquanto carrega, mostra "esqueletos" cinzas piscando; depois, mostra as abas */}
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map(i => <div key={i} className="h-28 rounded-2xl bg-card/50 border border-border/30 animate-pulse" />)}
           </div>
         ) : (
+          // Quatro abas principais: Visão, Score, Estudos e Carreira
           <Tabs defaultValue="overview">
             <TabsList className="grid grid-cols-4 w-full rounded-2xl bg-card/60 backdrop-blur-xl border border-border/30 p-1 mb-5">
               <TabsTrigger value="overview" className="rounded-xl text-xs font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm">
@@ -1225,6 +1335,7 @@ export default function Professional() {
               </TabsTrigger>
             </TabsList>
 
+            {/* Conteúdo de cada aba (cada uma é um componente definido acima) */}
             <TabsContent value="overview"><OverviewTab /></TabsContent>
             <TabsContent value="score"><ScoreTab /></TabsContent>
             <TabsContent value="studies"><StudiesTab /></TabsContent>
@@ -1232,7 +1343,7 @@ export default function Professional() {
           </Tabs>
         )}
 
-        {/* Opportunities floating tab */}
+        {/* Aba separada, logo abaixo, para o Radar de Oportunidades */}
         <div className="mt-4">
           <Tabs defaultValue="opp">
             <TabsList className="w-full rounded-2xl bg-card/60 backdrop-blur-xl border border-border/30 p-1">

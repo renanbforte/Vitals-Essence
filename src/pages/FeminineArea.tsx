@@ -1,3 +1,11 @@
+// ============================================================================
+// FeminineArea  —  SAÚDE REPRODUTIVA (rota /area-feminina)
+// ----------------------------------------------------------------------------
+// Central de saúde íntima com 3 abas: "Ciclo" (menstruação, fluxo, calendário e
+// anticoncepcional), "Intimidade" (registro privado de relações + insights) e
+// "Vitalidade" (bem-estar/hormônios). O visual muda de cor conforme a aba ativa.
+// ============================================================================
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Settings2, Plus, Flower2, Shield, Heart } from 'lucide-react';
@@ -19,17 +27,24 @@ import { IntimacyInsights } from '@/components/feminine/IntimacyInsights';
 
 export default function FeminineArea() {
   const navigate = useNavigate();
+  // Hook com todos os dados e ações do ciclo menstrual (ciclos, registros diários, previsão, configurações)
   const cycle = useMenstrualCycle();
+  // Hook com os registros de intimidade (relações) e seus insights
   const intimacy = useIntimacyLogs();
+  // Controla se a janela de configurações do ciclo está aberta
   const [showSettings, setShowSettings] = useState(false);
+  // Controla se a janela "iniciar novo ciclo/menstruação" está aberta
   const [showStartCycle, setShowStartCycle] = useState(false);
+  // Aba principal selecionada no topo da tela
   const [mainTab, setMainTab] = useState<'ciclo' | 'vitalidade' | 'intimidade'>('ciclo');
+  // Guarda o dia clicado no calendário de intimidade (para abrir o registro daquele dia)
   const [intimacyDate, setIntimacyDate] = useState<Date | null>(null);
+  // Controla se a janela de registro de intimidade está aberta
   const [showIntimacyDialog, setShowIntimacyDialog] = useState(false);
 
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Ambient glow */}
+      {/* Brilho ambiente ao fundo: dois círculos coloridos e desfocados que mudam de cor conforme a aba ativa */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <motion.div
           key={mainTab}
@@ -63,7 +78,7 @@ export default function FeminineArea() {
         />
       </div>
 
-      {/* Hero */}
+      {/* Topo colorido (Hero): título "Saúde Reprodutiva", botão de voltar, engrenagem de configurações e as abas principais. O fundo em degradê muda de cor conforme a aba */}
       <div className="relative overflow-hidden">
         <div
           className="transition-all duration-500"
@@ -101,6 +116,7 @@ export default function FeminineArea() {
                   {mainTab === 'ciclo' ? 'Ciclo, fluxo & anticoncepcional' : mainTab === 'intimidade' ? 'Registro privado & insights' : 'Energia, vitalidade & hormônios'}
                 </p>
               </div>
+              {/* Engrenagem de configurações: só aparece na aba "Ciclo" */}
               {mainTab === 'ciclo' && (
                 <Button
                   variant="ghost"
@@ -113,7 +129,7 @@ export default function FeminineArea() {
               )}
             </div>
 
-            {/* Main tabs inside header */}
+            {/* Botões das 3 abas principais (Ciclo, Intimidade, Vitalidade) dentro do topo colorido */}
             <div className="mt-4 bg-white/10 backdrop-blur-md rounded-2xl p-1 flex gap-1">
               {(['ciclo', 'intimidade', 'vitalidade'] as const).map(tab => {
                 const icons = { ciclo: <Flower2 className="w-3.5 h-3.5" />, intimidade: <Heart className="w-3.5 h-3.5" />, vitalidade: <Shield className="w-3.5 h-3.5" /> };
@@ -134,9 +150,10 @@ export default function FeminineArea() {
         </div>
       </div>
 
-      {/* Content */}
+      {/* Conteúdo: mostra o painel correspondente à aba escolhida, com animação de transição entre elas */}
       <div className="relative z-10 container mx-auto px-4 pb-10 max-w-lg -mt-5 pt-6 bg-background rounded-t-3xl">
         <AnimatePresence mode="wait">
+          {/* ABA CICLO: mensagem de desvio, botão de nova menstruação e sub-abas (calendário/registrar/histórico/anticoncepcional) */}
           {mainTab === 'ciclo' ? (
             <motion.div
               key="ciclo"
@@ -146,7 +163,7 @@ export default function FeminineArea() {
               transition={{ duration: 0.25 }}
               className="space-y-5"
             >
-              {/* Deviation message */}
+              {/* Aviso de desvio: alerta quando o último ciclo saiu do padrão (cor conforme a gravidade: leve/moderado/grande) */}
               <AnimatePresence>
                 {cycle.lastCycleDeviation && (
                   <motion.div
@@ -166,7 +183,7 @@ export default function FeminineArea() {
                 )}
               </AnimatePresence>
 
-              {/* Start new cycle button */}
+              {/* Botão principal: abre a janela para registrar que a menstruação começou (inicia um novo ciclo) */}
               <Button
                 onClick={() => setShowStartCycle(true)}
                 className="w-full rounded-2xl h-12 bg-gradient-to-r from-[hsl(340_60%_55%)] to-[hsl(320_50%_50%)] text-white font-semibold shadow-lg hover:shadow-xl transition-all"
@@ -175,6 +192,7 @@ export default function FeminineArea() {
                 Menstruação começou
               </Button>
 
+              {/* Sub-abas da área "Ciclo" */}
               <Tabs defaultValue="calendario" className="w-full">
                 <TabsList className="w-full rounded-2xl bg-muted/50 border border-border/30 p-1 h-auto grid grid-cols-2 gap-1">
                   <TabsTrigger value="calendario" className="rounded-xl text-xs py-2.5">Calendário</TabsTrigger>
@@ -183,6 +201,7 @@ export default function FeminineArea() {
                   <TabsTrigger value="anticoncepcional" className="rounded-xl text-xs py-2.5">Anticoncepcional</TabsTrigger>
                 </TabsList>
 
+                {/* Calendário do ciclo: mostra os dias com fluxo, previsão e fase atual */}
                 <TabsContent value="calendario" className="mt-4">
                   <CycleCalendar
                     cycles={cycle.cycles}
@@ -192,6 +211,7 @@ export default function FeminineArea() {
                   />
                 </TabsContent>
 
+                {/* Registrar: permite anotar o fluxo e sintomas do dia */}
                 <TabsContent value="registrar" className="mt-4">
                   <FlowLogger
                     dailyLogs={cycle.dailyLogs}
@@ -199,6 +219,7 @@ export default function FeminineArea() {
                   />
                 </TabsContent>
 
+                {/* Histórico: lista os ciclos anteriores, com opção de excluir */}
                 <TabsContent value="historico" className="mt-4">
                   <CycleHistory
                     cycles={cycle.cycles}
@@ -207,12 +228,14 @@ export default function FeminineArea() {
                   />
                 </TabsContent>
 
+                {/* Anticoncepcional: acompanha o uso do método contraceptivo (pílula, etc.) */}
                 <TabsContent value="anticoncepcional" className="mt-4">
                   <ContraceptiveTracker />
                 </TabsContent>
               </Tabs>
             </motion.div>
           ) : mainTab === 'intimidade' ? (
+            /* ABA INTIMIDADE: calendário privado de relações + painel de insights */
             <motion.div
               key="intimidade"
               initial={{ opacity: 0, x: 10 }}
@@ -221,10 +244,12 @@ export default function FeminineArea() {
               transition={{ duration: 0.25 }}
               className="space-y-5"
             >
+              {/* Calendário de intimidade: ao tocar num dia, guarda a data e abre a janela de registro */}
               <IntimacyCalendar
                 logs={intimacy.logs}
                 onDayPress={date => { setIntimacyDate(date); setShowIntimacyDialog(true); }}
               />
+              {/* Insights: resumos e padrões a partir dos registros de intimidade */}
               <IntimacyInsights
                 logs={intimacy.logs}
                 insights={intimacy.insights}
@@ -232,6 +257,7 @@ export default function FeminineArea() {
               />
             </motion.div>
           ) : (
+            /* ABA VITALIDADE: acompanhamento de energia, bem-estar e hormônios */
             <motion.div
               key="vitalidade"
               initial={{ opacity: 0, x: 20 }}
@@ -245,7 +271,8 @@ export default function FeminineArea() {
         </AnimatePresence>
       </div>
 
-      {/* Dialogs */}
+      {/* Janelas (pop-ups) que aparecem por cima da tela quando acionadas */}
+      {/* Janela para iniciar um novo ciclo: ao confirmar a data, registra e fecha */}
       <StartCycleDialog
         open={showStartCycle}
         onOpenChange={setShowStartCycle}
@@ -255,6 +282,7 @@ export default function FeminineArea() {
         }}
       />
 
+      {/* Janela de configurações do ciclo (duração média, etc.) */}
       <CycleSettings
         open={showSettings}
         onOpenChange={setShowSettings}
@@ -262,6 +290,7 @@ export default function FeminineArea() {
         onSave={cycle.saveSettings}
       />
 
+      {/* Janela para registrar uma relação no dia escolhido no calendário de intimidade */}
       <IntimacyLogDialog
         open={showIntimacyDialog}
         date={intimacyDate}

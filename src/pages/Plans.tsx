@@ -1,17 +1,28 @@
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Check, Star, Zap, Package, Crown, ArrowLeft, RefreshCw, ExternalLink, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useSubscription, STRIPE_PRODUCTS, PAID_MODULES } from '@/contexts/SubscriptionContext';
-import { useAuth } from '@/contexts/AuthContext';
-import logo from '@/assets/logo-ve.png';
-import { Heart, DollarSign, Sparkles, Plane, ShoppingCart, PartyPopper, Leaf, Flower2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { useState } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { format, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+// ============================================================================
+// Plans  —  TELA DE PLANOS E ASSINATURAS (rota /planos)
+// ----------------------------------------------------------------------------
+// Vitrine de preços do app. Mostra os planos (Free, Por Módulo, Trio, Pacote
+// Completo), permite alternar entre cobrança mensal/anual, montar um "Trio" de
+// 3 módulos, testar módulos por 14 dias grátis e iniciar a compra via Stripe.
+// ============================================================================
 
+// Ferramentas do React, animações, ícones e recursos de assinatura usados aqui.
+import { useNavigate } from 'react-router-dom';                 // troca de tela/rota
+import { motion } from 'framer-motion';                         // animações suaves de entrada
+import { Check, Star, Zap, Package, Crown, ArrowLeft, RefreshCw, ExternalLink, Clock } from 'lucide-react'; // ícones
+import { Button } from '@/components/ui/button';                // botão padrão do app
+import { useSubscription, STRIPE_PRODUCTS, PAID_MODULES } from '@/contexts/SubscriptionContext'; // dados de assinatura + preços/módulos pagos
+import { useAuth } from '@/contexts/AuthContext';               // informa quem está logado
+import logo from '@/assets/logo-ve.png';                        // logotipo do Vitalis
+import { Heart, DollarSign, Sparkles, Plane, ShoppingCart, PartyPopper, Leaf, Flower2 } from 'lucide-react'; // ícones de cada módulo
+import { toast } from 'sonner';                                 // avisos rápidos no canto da tela
+import { useState } from 'react';                               // guarda escolhas do usuário
+import { Badge } from '@/components/ui/badge';                  // etiquetas (ex.: "Ativo", "Trial")
+import { format, parseISO } from 'date-fns';                    // formatação de datas
+import { ptBR } from 'date-fns/locale';                         // datas em português do Brasil
+
+// Tabela de apoio: para cada módulo pago define o ícone, a cor, o nome exibido
+// e uma frase curta de chamariz (usada nos cartões e no seletor de Trio).
 const MODULE_META: Record<string, { icon: React.ElementType; color: string; label: string; teaser: string }> = {
   financeiro:      { icon: DollarSign, color: 'hsl(152, 68%, 42%)', label: 'Financeiro',       teaser: 'Fluxo, investimentos, trade e cripto' },
   tarefas:         { icon: Sparkles,   color: 'hsl(330, 80%, 55%)', label: 'Vida Pessoal',     teaser: 'Tarefas, rotinas e energia' },
@@ -23,29 +34,44 @@ const MODULE_META: Record<string, { icon: React.ElementType; color: string; labe
   astral:          { icon: Star,       color: 'hsl(270, 70%, 55%)', label: 'Astral',           teaser: 'Mapa natal, horóscopo e tarot' },
 };
 
+// Define os dois tipos de cobrança possíveis: mensal ou anual.
 type BillingPeriod = 'monthly' | 'annual';
 
 export default function Plans() {
+  // Ferramenta para redirecionar o usuário para outra tela.
   const navigate = useNavigate();
+  // Usuário logado (ou nada, se ninguém estiver logado).
   const { user } = useAuth();
+  // Puxa toda a situação de assinatura do usuário e as ações disponíveis:
+  // - is_package/is_lifetime/is_trio: qual tipo de plano ele tem;
+  // - activeTrio/modules/trial_modules: quais módulos estão liberados ou em teste;
+  // - loading: se ainda está buscando os dados;
+  // - startCheckout/openPortal/checkSubscription/startTrial: ações de compra e gestão;
+  // - cancel_at_period_end/subscription_end/canceled_*: dados de cancelamento.
   const {
     is_package, is_lifetime, is_trio, trio_modules: activeTrio, modules, trial_modules,
     loading, startCheckout, openPortal, checkSubscription, startTrial,
     cancel_at_period_end, subscription_end, canceled_modules, canceled_is_package,
   } = useSubscription();
+  // Guarda qual módulo está sendo ativado como trial no momento (para mostrar "Ativando...").
   const [startingTrial, setStartingTrial] = useState<string | null>(null);
+  // Guarda se o usuário escolheu ver preços mensais ou anuais (começa mensal).
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>('monthly');
+  // Guarda os módulos que o usuário selecionou para montar o plano Trio (até 3).
   const [selectedTrioModules, setSelectedTrioModules] = useState<string[]>([]);
 
+  // Converte a data de término da assinatura para o formato "28 de julho de 2026".
   const formattedEndDate = subscription_end
     ? format(parseISO(subscription_end), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
     : null;
 
+  // Inicia a compra (checkout) de um plano. Se não estiver logado, manda para o login.
   const handleCheckout = async (priceId: string, trioMods?: string[]) => {
     if (!user) { navigate('/auth'); return; }
     await startCheckout(priceId, trioMods);
   };
 
+  // Ativa o teste grátis de 14 dias de um módulo e avisa se deu certo ou não.
   const handleStartTrial = async (moduleKey: string) => {
     if (!user) { navigate('/auth'); return; }
     setStartingTrial(moduleKey);
@@ -58,14 +84,16 @@ export default function Plans() {
     setStartingTrial(null);
   };
 
+  // Marca/desmarca um módulo na montagem do Trio (limite de 3 selecionados).
   const toggleTrioModule = (key: string) => {
     setSelectedTrioModules(prev => {
-      if (prev.includes(key)) return prev.filter(k => k !== key);
-      if (prev.length >= 3) return prev;
-      return [...prev, key];
+      if (prev.includes(key)) return prev.filter(k => k !== key); // já estava marcado -> desmarca
+      if (prev.length >= 3) return prev;                          // já tem 3 -> ignora
+      return [...prev, key];                                      // adiciona o novo
     });
   };
 
+  // Confirma a compra do Trio: exige exatamente 3 módulos e usa o preço mensal/anual.
   const handleTrioCheckout = () => {
     if (selectedTrioModules.length !== 3) {
       toast.error('Selecione exatamente 3 módulos');
@@ -77,23 +105,28 @@ export default function Plans() {
     handleCheckout(priceId, selectedTrioModules);
   };
 
+  // Atalho de leitura: verdadeiro quando o usuário está vendo os preços anuais.
   const isAnnual = billingPeriod === 'annual';
 
+  // Parte visual da tela.
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Header */}
+      {/* Cabeçalho fixo no topo: logo (volta para a Home) + botões de ação à direita */}
       <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-border/40">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          {/* Logo + nome do app: clicar volta para a página inicial */}
           <button onClick={() => navigate('/')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" />
             <img src={logo} alt="Vitalis" className="w-7 h-7 rounded-lg" />
             <span className="font-semibold text-sm">Vitalis Essence</span>
           </button>
           <div className="flex items-center gap-2">
+            {/* Botão "Atualizar": reconsulta a situação da assinatura (gira o ícone enquanto carrega) */}
             <Button variant="ghost" size="sm" onClick={checkSubscription} disabled={loading} className="gap-2 text-muted-foreground">
               <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
               {loading ? 'Verificando...' : 'Atualizar'}
             </Button>
+            {/* Botão "Gerenciar": só para quem tem plano pago (e não vitalício); abre o portal da Stripe */}
             {(is_package || is_lifetime) && !is_lifetime && (
               <Button variant="outline" size="sm" onClick={openPortal} className="gap-2">
                 <ExternalLink className="w-3 h-3" />
@@ -104,10 +137,12 @@ export default function Plans() {
         </div>
       </div>
 
+      {/* Corpo central da página, com os planos e módulos */}
       <div className="container mx-auto px-4 py-10 max-w-5xl">
-        {/* Hero */}
+        {/* Seção de destaque (topo): selo do plano + título e frase de chamada */}
         <div className="text-center mb-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+            {/* Selo do topo: muda conforme o usuário já tem acesso vitalício ou não */}
             {is_lifetime ? (
               <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-1.5 rounded-full text-sm font-semibold mb-4">
                 <Crown className="w-4 h-4" />
@@ -119,6 +154,7 @@ export default function Plans() {
                 Escolha seu plano
               </div>
             )}
+            {/* Título principal e subtítulo lembrando que Saúde é grátis e há 14 dias de teste */}
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-3">Desbloqueie todo o potencial</h1>
             <p className="text-muted-foreground text-lg max-w-xl mx-auto">
               O módulo <span className="text-foreground font-semibold">Saúde</span> é sempre gratuito.{' '}
@@ -127,7 +163,7 @@ export default function Plans() {
           </motion.div>
         </div>
 
-        {/* Billing toggle */}
+        {/* Chave Mensal/Anual: só aparece para quem não é vitalício; anual mostra selo "-30%" */}
         {!is_lifetime && (
           <div className="flex justify-center mb-8">
             <div className="inline-flex items-center gap-1 bg-muted/50 rounded-full p-1">
@@ -152,7 +188,7 @@ export default function Plans() {
           </div>
         )}
 
-        {/* Banner: assinatura cancelada */}
+        {/* Aviso de assinatura cancelada: mostra o que foi cancelado, até quando o acesso vale e botão para reativar */}
         {cancel_at_period_end && formattedEndDate && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -179,10 +215,10 @@ export default function Plans() {
           </motion.div>
         )}
 
-        {/* Cards de plano */}
+        {/* Vitrine com os 4 cartões de plano (Free, Por Módulo, Trio, Pacote) — escondida para quem é vitalício */}
         {!is_lifetime && (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-14">
-            {/* Free */}
+            {/* Cartão FREE: gratuito para sempre, inclui Saúde e os testes de 14 dias */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
               className="rounded-2xl border border-border bg-card p-6 flex flex-col"
@@ -198,10 +234,11 @@ export default function Plans() {
                 <li className="flex items-center gap-2 text-sm"><Check className="w-4 h-4 text-green-400 shrink-0" />14 dias de trial por módulo</li>
                 <li className="flex items-center gap-2 text-sm text-muted-foreground"><Zap className="w-4 h-4 shrink-0" />Sem cartão de crédito</li>
               </ul>
+              {/* Botão desativado indicando que este é o plano em que o usuário já está */}
               <Button variant="outline" className="w-full" disabled>Plano atual</Button>
             </motion.div>
 
-            {/* Módulo Individual */}
+            {/* Cartão POR MÓDULO: paga só os módulos que usa; preço muda entre mensal e anual */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}
               className="rounded-2xl border border-border bg-card p-6 flex flex-col"
@@ -225,12 +262,13 @@ export default function Plans() {
                 <li className="flex items-center gap-2 text-sm"><Check className="w-4 h-4 text-green-400 shrink-0" />Acumule quantos quiser</li>
                 <li className="flex items-center gap-2 text-sm"><Check className="w-4 h-4 text-green-400 shrink-0" />Cancele quando quiser</li>
               </ul>
+              {/* Botão que rola a página suavemente até a lista de módulos individuais */}
               <Button variant="outline" className="w-full" onClick={() => document.getElementById('modulos')?.scrollIntoView({ behavior: 'smooth' })}>
                 Ver módulos ↓
               </Button>
             </motion.div>
 
-            {/* Trio */}
+            {/* Cartão TRIO: escolha de 3 módulos com desconto; marcado como "Popular" */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
               className="rounded-2xl border border-blue-500/50 bg-card p-6 flex flex-col relative overflow-hidden"
@@ -257,6 +295,7 @@ export default function Plans() {
                 <li className="flex items-center gap-2 text-sm"><Check className="w-4 h-4 text-green-400 shrink-0" />Economia vs individual</li>
                 <li className="flex items-center gap-2 text-sm"><Check className="w-4 h-4 text-green-400 shrink-0" />Cancele quando quiser</li>
               </ul>
+              {/* Se já tem Trio, mostra "Gerenciar"; senão, botão que rola até o seletor de módulos do Trio */}
               {is_trio ? (
                 <Button className="w-full gap-2" variant="outline" onClick={openPortal}>
                   <Star className="w-4 h-4" /> Gerenciar Trio
@@ -268,7 +307,7 @@ export default function Plans() {
               )}
             </motion.div>
 
-            {/* Pacote */}
+            {/* Cartão PACOTE COMPLETO: todos os módulos; marcado como "Melhor valor" */}
             <motion.div
               initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
               className="rounded-2xl border-2 border-primary bg-card p-6 flex flex-col relative overflow-hidden"
@@ -295,6 +334,7 @@ export default function Plans() {
                 <li className="flex items-center gap-2 text-sm"><Check className="w-4 h-4 text-green-400 shrink-0" />Novos módulos automáticos</li>
                 <li className="flex items-center gap-2 text-sm"><Check className="w-4 h-4 text-green-400 shrink-0" />Suporte prioritário</li>
               </ul>
+              {/* Se já tem o pacote, mostra "Gerenciar"; senão, inicia a compra do pacote (mensal ou anual) */}
               {is_package ? (
                 <Button className="w-full gap-2" variant="outline" onClick={openPortal}>
                   <Crown className="w-4 h-4" /> Gerenciar assinatura
@@ -310,19 +350,22 @@ export default function Plans() {
           </div>
         )}
 
-        {/* Trio selector */}
+        {/* Montador do Trio: grade de módulos para o usuário escolher exatamente 3 e assinar */}
         {!is_lifetime && !is_trio && (
           <div id="trio-selector" className="mb-14">
             <h2 className="text-xl font-bold mb-2">Monte seu Trio</h2>
             <p className="text-muted-foreground text-sm mb-4">
               Selecione exatamente 3 módulos ({selectedTrioModules.length}/3)
             </p>
+            {/* Grade com um botão para cada módulo pago; percorre a lista PAID_MODULES */}
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
               {PAID_MODULES.map((moduleKey) => {
+                // Dados visuais do módulo (ícone, cor, nome) e se ele já está selecionado.
                 const meta = MODULE_META[moduleKey];
                 const Icon = meta.icon;
                 const isSelected = selectedTrioModules.includes(moduleKey);
                 return (
+                  // Botão do módulo: clicar marca/desmarca; muda de cor quando selecionado.
                   <button
                     key={moduleKey}
                     onClick={() => toggleTrioModule(moduleKey)}
@@ -332,13 +375,16 @@ export default function Plans() {
                         : 'border-border bg-card hover:border-muted-foreground/30'
                     }`}
                   >
+                    {/* Ícone colorido do módulo */}
                     <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: meta.color + '22' }}>
                       <Icon className="w-4 h-4" style={{ color: meta.color }} />
                     </div>
+                    {/* Nome e frase curta do módulo */}
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm truncate">{meta.label}</p>
                       <p className="text-muted-foreground text-xs truncate">{meta.teaser}</p>
                     </div>
+                    {/* Círculo à direita que fica preenchido com um "check" quando selecionado */}
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
                       isSelected ? 'border-blue-500 bg-blue-500' : 'border-muted-foreground/30'
                     }`}>
@@ -348,6 +394,7 @@ export default function Plans() {
                 );
               })}
             </div>
+            {/* Botão de assinar o Trio: só habilita quando exatamente 3 módulos estão marcados */}
             <Button
               className="w-full sm:w-auto gap-2"
               disabled={selectedTrioModules.length !== 3}
@@ -359,7 +406,7 @@ export default function Plans() {
           </div>
         )}
 
-        {/* Módulos individuais */}
+        {/* Lista de módulos individuais (âncora "modulos"): um cartão por módulo pago */}
         <div id="modulos">
           <h2 className="text-xl font-bold mb-2">Módulos individuais</h2>
           <p className="text-muted-foreground text-sm mb-6">
@@ -369,13 +416,18 @@ export default function Plans() {
                 ? 'R$ 83,92/ano cada (R$ 6,99/mês) — experimente 14 dias grátis'
                 : 'R$ 9,99/mês cada — experimente 14 dias grátis antes de assinar'}
           </p>
+          {/* Grade que gera um cartão para cada módulo pago */}
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {PAID_MODULES.map((moduleKey, i) => {
+              // Para cada módulo, calcula: dados visuais, preços na Stripe e a situação do usuário.
               const meta = MODULE_META[moduleKey];
               const product = STRIPE_PRODUCTS[moduleKey as keyof typeof STRIPE_PRODUCTS];
+              // Tem acesso total? (vitalício, pacote, módulo avulso já assinado ou dentro do Trio ativo)
               const hasFullAccess = is_lifetime || is_package || modules.includes(moduleKey) || (is_trio && activeTrio.includes(moduleKey));
+              // Está em período de teste grátis deste módulo?
               const isTrial = !hasFullAccess && trial_modules.includes(moduleKey);
               const Icon = meta.icon;
+              // Este módulo está no meio da ativação do trial neste momento?
               const isStarting = startingTrial === moduleKey;
 
               return (
@@ -388,6 +440,7 @@ export default function Plans() {
                     'border-border bg-card'
                   }`}
                 >
+                  {/* Topo do cartão: ícone do módulo + etiqueta de situação (Ativo / Vitalício / Trial) */}
                   <div className="flex items-center justify-between">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: meta.color + '22' }}>
                       <Icon className="w-4 h-4" style={{ color: meta.color }} />
@@ -402,21 +455,26 @@ export default function Plans() {
                       <Badge variant="outline" className="text-[10px] border-blue-500/50 text-blue-500">Trial ativo</Badge>
                     )}
                   </div>
+                  {/* Nome e frase curta do módulo */}
                   <div>
                     <p className="font-semibold text-sm">{meta.label}</p>
                     <p className="text-muted-foreground text-xs">{meta.teaser}</p>
                   </div>
+                  {/* Botão do cartão muda conforme a situação do usuário neste módulo: */}
                   {hasFullAccess ? (
+                    // Já tem acesso: vitalício -> "Acessar" (vai ao app); pago -> "Gerenciar" (portal Stripe).
                     is_lifetime
                       ? <Button size="sm" variant="outline" className="w-full text-xs" onClick={() => navigate('/')}>Acessar</Button>
                       : <Button size="sm" variant="outline" className="w-full text-xs" onClick={openPortal}>Gerenciar</Button>
                   ) : isTrial ? (
+                    // Em teste grátis: oferece assinar de vez.
                     <Button size="sm" className="w-full text-xs" onClick={() => handleCheckout(
                       isAnnual ? product.annual_price_id : product.monthly_price_id
                     )}>
                       Assinar — {isAnnual ? 'R$ 83,92/ano' : 'R$ 9,99/mês'}
                     </Button>
                   ) : (
+                    // Sem acesso: dois botões — testar 14 dias grátis ou assinar direto.
                     <div className="flex flex-col gap-1.5">
                       <Button
                         size="sm"

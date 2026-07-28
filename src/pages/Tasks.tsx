@@ -1,3 +1,12 @@
+// ============================================================================
+// Tasks (Vida Pessoal)  —  MÓDULO DE VIDA PESSOAL (rota /vida-pessoal)
+// ----------------------------------------------------------------------------
+// Tela central de bem-estar pessoal, organizada em várias abas com imagens:
+// Hoje (check-in de humor), Lista (afazeres), Metas, Diário, Pessoas (rede de
+// relacionamentos), Casa (rotinas), Vida (experiências), Mente (descompressão)
+// e Radar (equilíbrio de vida). Cada aba é um componente próprio neste arquivo.
+// ============================================================================
+
 import { useState, useMemo } from 'react';
 import diarySunImg from '@/assets/diary-sun.png';
 import diaryCloudImg from '@/assets/diary-cloud.png';
@@ -51,12 +60,14 @@ import checkinFalouImg from '@/assets/checkin-falou.png';
 import checkinCasaImg from '@/assets/checkin-casa.png';
 import checkinMomentoImg from '@/assets/checkin-momento.png';
 
+// Animações reutilizadas: "fadeUp" faz o elemento surgir subindo; "stagger" faz os filhos aparecerem em sequência
 const fadeUp = {
   hidden: { opacity: 0, y: 18 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 240, damping: 22 } },
 };
 const stagger = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.07 } } };
 
+// Cartão visual reutilizável: imagem no topo com título sobreposto e conteúdo abaixo
 // ── Frosted Image Section Card ──────────────────────────────
 function SectionImageCard({ img, title, children, className = '' }: {
   img: string; title: string; children: React.ReactNode; className?: string;
@@ -76,6 +87,7 @@ function SectionImageCard({ img, title, children, className = '' }: {
   );
 }
 
+// Cartão "de vidro" reutilizável (fundo translúcido com desfoque) usado em várias seções
 function GlassCard({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`rounded-2xl bg-card/70 backdrop-blur-xl border border-border/40 p-4 shadow-lg ${className}`}>
@@ -84,6 +96,8 @@ function GlassCard({ children, className = '' }: { children: React.ReactNode; cl
   );
 }
 
+// ── 1. Termômetro emocional ──────────────────────────────────
+// Opções de humor exibidas na aba "Hoje" (valor salvo, rótulo, imagem e cor do destaque)
 // ── 1. Emotional Thermometer ──────────────────────────────────
 const EMOTIONS: { value: EmotionalState; label: string; img: string; ring: string }[] = [
   { value: 'ótimo', label: 'Ótimo', img: emotionOtimoImg, ring: 'ring-amber-400' },
@@ -93,6 +107,7 @@ const EMOTIONS: { value: EmotionalState; label: string; img: string; ring: strin
   { value: 'sobrecarregado', label: 'Sobre...', img: emotionSobreImg, ring: 'ring-red-400' },
 ];
 
+// Perguntas de "percepção do dia": cada uma tem imagem e dois botões de resposta (sim/não)
 const CHECKIN_ITEMS: {
   field: 'talked_to_someone' | 'home_organized' | 'had_me_time';
   question: string;
@@ -131,18 +146,22 @@ const CHECKIN_ITEMS: {
   },
 ];
 
+// ABA "HOJE" — check-in diário: registra como a pessoa está e a percepção do dia
 function CheckinPanel() {
-  const { checkin, saveCheckin } = useLifePersonal();
+  const { checkin, saveCheckin } = useLifePersonal();  // check-in de hoje e a função para salvá-lo
 
+  // Salva o humor escolhido; se for "sobrecarregado", ativa o modo simplificado com um aviso
   const handleEmotion = async (value: EmotionalState) => {
     await saveCheckin({ emotional_state: value });
     if (value === 'sobrecarregado') toast('Modo simplificado ativado', { description: 'Foque no essencial hoje.' });
   };
 
+  // Salva a resposta (sim/não) de uma das perguntas de percepção do dia
   const answer = async (field: 'talked_to_someone' | 'home_organized' | 'had_me_time', value: boolean) => {
     await saveCheckin({ [field]: value });
   };
 
+  // Quando a pessoa está sobrecarregada, mostra uma versão enxuta focada só no essencial
   if (checkin?.overloaded_mode || checkin?.emotional_state === 'sobrecarregado') {
     return (
       <GlassCard className="border-red-400/20 bg-red-500/5">
@@ -162,6 +181,7 @@ function CheckinPanel() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
+      {/* Termômetro emocional: 5 opções de humor; a atual fica destacada */}
       {/* Emotional thermometer */}
       <motion.div variants={fadeUp}>
         <GlassCard>
@@ -186,6 +206,7 @@ function CheckinPanel() {
         </GlassCard>
       </motion.div>
 
+      {/* Perguntas de percepção do dia: cada cartão tem imagem e dois botões de resposta */}
       {/* Perception questions — answer cards, not checklist */}
       <motion.div variants={fadeUp}>
         <GlassCard>
@@ -236,7 +257,8 @@ function CheckinPanel() {
   );
 }
 
-// ── 2. House Routines ────────────────────────────────────────
+// ── 2. Rotinas da Casa ───────────────────────────────────────
+// Traduções dos códigos internos para texto exibido (categorias e frequências)
 const ROUTINE_CATEGORIES: Record<string, string> = {
   limpeza: 'Limpeza', roupas: 'Roupas', manutencao: 'Manutenção',
   pagamentos: 'Pagamentos', outro: 'Outro',
@@ -245,11 +267,13 @@ const ROUTINE_FREQ: Record<string, string> = {
   diaria: 'Diária', semanal: 'Semanal', quinzenal: 'Quinzenal', mensal: 'Mensal',
 };
 
+// ABA "CASA" — cadastro e acompanhamento de rotinas domésticas
 function HouseTab() {
-  const { routines, addRoutine, markRoutineDone, deleteRoutine } = useLifePersonal();
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ title: '', category: 'limpeza', frequency: 'semanal', shared_with: '' });
+  const { routines, addRoutine, markRoutineDone, deleteRoutine } = useLifePersonal();  // dados e ações das rotinas
+  const [adding, setAdding] = useState(false);  // se o formulário de nova rotina está aberto
+  const [form, setForm] = useState({ title: '', category: 'limpeza', frequency: 'semanal', shared_with: '' });  // campos da nova rotina
 
+  // Salva uma nova rotina e limpa o formulário
   const handleAdd = async () => {
     if (!form.title.trim()) return;
     await addRoutine({ ...form, last_done_at: null, shared_with: form.shared_with || null });
@@ -257,6 +281,7 @@ function HouseTab() {
     setAdding(false);
   };
 
+  // Calcula há quantos dias a rotina foi feita pela última vez (ou nada, se nunca)
   const daysSince = (date: string | null) => {
     if (!date) return null;
     return differenceInDays(new Date(), new Date(date));
@@ -273,6 +298,7 @@ function HouseTab() {
             </Button>
           </div>
 
+          {/* Formulário de nova rotina (aparece só ao clicar em Adicionar) */}
           {adding && (
             <div className="mb-3 p-3 bg-muted/30 rounded-xl border border-border/40 space-y-2">
               <Input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} placeholder="Ex: Lavar roupa..." className="rounded-xl h-9 text-sm" />
@@ -294,14 +320,16 @@ function HouseTab() {
             </div>
           )}
 
+          {/* Lista de rotinas cadastradas (ou aviso de vazio) */}
           {routines.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-6">Nenhuma rotina criada ainda</p>
           ) : (
             <div className="space-y-2">
               {routines.map(r => {
-                const days = daysSince(r.last_done_at);
+                const days = daysSince(r.last_done_at);  // há quantos dias foi feita
                 return (
                   <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/40">
+                    {/* Botão de check: marca a rotina como feita agora */}
                     <button onClick={() => markRoutineDone(r.id)} className="w-8 h-8 rounded-xl bg-orange-500/10 border border-orange-500/20 flex items-center justify-center shrink-0 hover:bg-orange-500/20 transition-colors">
                       <Check className="w-4 h-4 text-orange-500" />
                     </button>
@@ -327,7 +355,8 @@ function HouseTab() {
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────
+// ── Funções auxiliares (usadas pela aba Pessoas) ────────────
+// Formato de um aniversário guardado (data no padrão MM-DD, sem o ano)
 interface Birthday {
   id: string;
   name: string;
@@ -336,6 +365,7 @@ interface Birthday {
   notes: string;
 }
 
+// Calcula quantos dias faltam até o próximo aniversário (considerando o ano que vem se já passou)
 function getDaysUntilBirthday(mmdd: string): number {
   const today = new Date();
   const [month, day] = mmdd.split('-').map(Number);
@@ -345,6 +375,8 @@ function getDaysUntilBirthday(mmdd: string): number {
   return diff;
 }
 
+// Níveis de importância de uma pessoa (do mais central "Núcleo" ao mais distante "Círculo"),
+// com rótulo, descrição e cores usados para exibir cada pessoa
 const IMPORTANCE_LEVELS = [
   { value: 5, label: '★★★ Núcleo', desc: 'Pessoa central da minha vida', color: 'text-amber-400', bg: 'bg-amber-500/15 border-amber-500/30' },
   { value: 4, label: '★★ Pilar', desc: 'Presença constante e importante', color: 'text-rose-400', bg: 'bg-rose-500/15 border-rose-500/30' },
@@ -353,15 +385,19 @@ const IMPORTANCE_LEVELS = [
   { value: 1, label: 'Círculo', desc: 'Conhecidos relevantes', color: 'text-muted-foreground', bg: 'bg-muted/40 border-border/30' },
 ];
 
+// Retorna a configuração (cores/rótulo) do nível de importância informado
 function getImportanceConfig(importance: number) {
   return IMPORTANCE_LEVELS.find(l => l.value === importance) || IMPORTANCE_LEVELS[2];
 }
 
-// ── Pantheon Visual ──────────────────────────────────────────
+// ── Visão "Pantheon" ─────────────────────────────────────────
+// Representa as pessoas como um templo grego: quanto mais importante, mais no topo.
+// Toque em uma pessoa registra um "momento de qualidade" com ela.
 function PantheonView({ relationships, markQualityTime }: {
   relationships: { id: string; name: string; relation: string | null; importance?: number; last_quality_time: string | null }[];
   markQualityTime: (id: string) => void;
 }) {
+  // Separa as pessoas em camadas do templo conforme o nível de importância
   const tiers = useMemo(() => ({
     nucleo:   relationships.filter(r => (r.importance ?? 3) === 5),
     pilar:    relationships.filter(r => (r.importance ?? 3) === 4),
@@ -369,6 +405,7 @@ function PantheonView({ relationships, markQualityTime }: {
     presenca: relationships.filter(r => (r.importance ?? 3) <= 2),
   }), [relationships]);
 
+  // Bolinha que representa uma pessoa (inicial do nome, cor por importância e há quantos dias sem contato)
   const PersonBubble = ({ r, size = 'md' }: { r: typeof relationships[0]; size?: 'lg' | 'md' | 'sm' }) => {
     const imp = r.importance ?? 3;
     const _cfg = getImportanceConfig(imp);
@@ -399,6 +436,7 @@ function PantheonView({ relationships, markQualityTime }: {
     );
   };
 
+  // Sem pessoas cadastradas, mostra um estado vazio convidando a adicionar
   if (relationships.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3">
@@ -410,6 +448,7 @@ function PantheonView({ relationships, markQualityTime }: {
 
   return (
     <div className="relative">
+      {/* Desenho (SVG) do frontão do templo — parte puramente decorativa */}
       {/* Temple SVG frame */}
       <svg viewBox="0 0 320 40" className="w-full" fill="none">
         {/* Pediment / triangle */}
@@ -419,6 +458,7 @@ function PantheonView({ relationships, markQualityTime }: {
         <text x="160" y="28" textAnchor="middle" fontSize="14" fill="hsl(38 92% 60%)">★</text>
       </svg>
 
+      {/* Camadas do templo, de cima para baixo: Núcleo, Pilares, Próximos e Presença */}
       {/* Tier: Núcleo */}
       {tiers.nucleo.length > 0 && (
         <div className="flex justify-center gap-4 mb-3 relative">
@@ -466,6 +506,7 @@ function PantheonView({ relationships, markQualityTime }: {
         </div>
       )}
 
+      {/* Legenda explicando a cor de cada nível de importância */}
       {/* Legend */}
       <div className="flex justify-center gap-3 mt-4 flex-wrap">
         {(['Núcleo', 'Pilar', 'Próximo', 'Presença'] as const).map((label, i) => (
@@ -479,7 +520,8 @@ function PantheonView({ relationships, markQualityTime }: {
   );
 }
 
-// ── Agenda View ──────────────────────────────────────────────
+// ── Visão "Agenda" ───────────────────────────────────────────
+// Mostra um mini calendário do mês, os próximos aniversários e as pessoas que estão precisando de atenção
 function AgendaView({ relationships, birthdays }: {
   relationships: { id: string; name: string; last_quality_time: string | null; importance?: number }[];
   birthdays: Birthday[];
@@ -487,6 +529,7 @@ function AgendaView({ relationships, birthdays }: {
   const now = new Date();
   const today = format(now, 'yyyy-MM-dd');
 
+  // Aniversários que acontecem nos próximos 90 dias, ordenados do mais próximo ao mais distante
   // Upcoming birthdays (next 90 days)
   const upcomingBirthdays = useMemo(() => {
     return birthdays
@@ -495,24 +538,27 @@ function AgendaView({ relationships, birthdays }: {
       .sort((a, b) => a.daysUntil - b.daysUntil);
   }, [birthdays]);
 
+  // Pessoas sem contato há tempo demais para o seu nível de importância (quanto mais importante, menor o prazo)
   // People who need attention (no quality time in a while, based on importance)
   const needAttention = useMemo(() => {
     return relationships
       .filter(r => {
         const imp = r.importance ?? 3;
         const days = r.last_quality_time ? differenceInDays(new Date(), new Date(r.last_quality_time)) : 999;
-        const threshold = imp >= 5 ? 7 : imp === 4 ? 14 : imp === 3 ? 30 : 60;
+        const threshold = imp >= 5 ? 7 : imp === 4 ? 14 : imp === 3 ? 30 : 60;  // prazo em dias por importância
         return days >= threshold;
       })
       .sort((a, b) => (b.importance ?? 3) - (a.importance ?? 3));
   }, [relationships]);
 
+  // Prepara os dias do mês atual para desenhar o mini calendário
   // Mini calendar for current month
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
   const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  const startWeekday = getDay(monthStart); // 0=Sun
+  const startWeekday = getDay(monthStart); // 0=domingo (para alinhar a primeira semana)
 
+  // Aniversários que caem no mês atual, para marcar no calendário
   // Get birthday dates for this month
   const birthdayDays = birthdays.map(b => {
     const [m, d] = b.date.split('-');
@@ -521,6 +567,7 @@ function AgendaView({ relationships, birthdays }: {
 
   return (
     <div className="space-y-4">
+      {/* Mini calendário do mês, com o dia de hoje e os aniversários destacados */}
       {/* Mini Calendar */}
       <GlassCard>
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 capitalize">
@@ -557,6 +604,7 @@ function AgendaView({ relationships, birthdays }: {
         </div>
       </GlassCard>
 
+      {/* Lista dos próximos aniversários (só aparece se houver algum nos 90 dias) */}
       {/* Upcoming birthdays */}
       {upcomingBirthdays.length > 0 && (
         <GlassCard>
@@ -585,6 +633,7 @@ function AgendaView({ relationships, birthdays }: {
         </GlassCard>
       )}
 
+      {/* Pessoas que estão pedindo atenção (contato há muito tempo) — mostra até 5 */}
       {/* Need attention */}
       {needAttention.length > 0 && (
         <GlassCard>
@@ -615,7 +664,8 @@ function AgendaView({ relationships, birthdays }: {
   );
 }
 
-// ── Lista Unificada ──────────────────────────────────────────
+// ── Visão "Lista" ────────────────────────────────────────────
+// Lista completa das pessoas: permite adicionar, importar amigos conectados, editar e excluir
 function ListaView({ relationships, birthdays, addRelationship, updateRelationship, markQualityTime, deleteRelationship, setBirthdays }: {
   relationships: { id: string; name: string; relation: string | null; likes: string | null; last_quality_time: string | null; notes: string | null; importance?: number }[];
   birthdays: Birthday[];
@@ -625,24 +675,28 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
   deleteRelationship: (id: string) => void;
   setBirthdays: (b: Birthday[]) => void;
 }) {
-  const [addingPerson, setAddingPerson] = useState(false);
-  const [importingFriend, setImportingFriend] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', relation: 'família', likes: '', notes: '', importance: 3 });
-  const [personForm, setPersonForm] = useState({ name: '', relation: 'família', likes: '', notes: '', importance: 3, birthday: '' });
-  const { friends } = useFriendships();
+  // Estados de controle dos formulários (adicionar/importar/editar pessoa) e seus campos
+  const [addingPerson, setAddingPerson] = useState(false);        // formulário de nova pessoa aberto?
+  const [importingFriend, setImportingFriend] = useState(false);  // painel de importar amigo aberto?
+  const [editingId, setEditingId] = useState<string | null>(null); // qual pessoa está em edição
+  const [editForm, setEditForm] = useState({ name: '', relation: 'família', likes: '', notes: '', importance: 3 });          // campos da edição
+  const [personForm, setPersonForm] = useState({ name: '', relation: 'família', likes: '', notes: '', importance: 3, birthday: '' }); // campos da nova pessoa
+  const { friends } = useFriendships();  // amigos conectados no app (para importar)
 
+  // Amigos que ainda não estão na lista de pessoas (evita duplicar)
   // Filter out friends already in relationships
   const availableFriends = friends.filter(f => {
     const friendName = f.friend_profile?.name || f.requester_profile?.name || '';
     return friendName && !relationships.some(r => r.name.toLowerCase() === friendName.toLowerCase());
   });
 
+  // Importa um amigo conectado como uma nova pessoa da lista
   const handleImportFriend = async (friendName: string) => {
     await addRelationship({ name: friendName, relation: 'amigo', likes: '', notes: '', importance: 3, important_dates: [], last_quality_time: null });
     setImportingFriend(false);
   };
 
+  // Adiciona uma pessoa nova; se informou aniversário, também o guarda (no aparelho e nas datas importantes)
   const handleAddPerson = async () => {
     if (!personForm.name.trim()) return;
     const importantDates: { label: string; date: string }[] = [];
@@ -661,10 +715,12 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
 
 
 
+  // Ordena as pessoas da mais importante para a menos importante
   const sortedRels = [...relationships].sort((a, b) => (b.importance ?? 3) - (a.importance ?? 3));
 
   return (
     <div className="space-y-4">
+      {/* Cartão "Pessoas" com botões de importar amigos e adicionar pessoa */}
       {/* Pessoas */}
       <SectionImageCard img={vidaRelImg} title="Pessoas">
         <div className="flex items-center justify-between mb-3">
@@ -681,6 +737,7 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
           </div>
         </div>
 
+        {/* Painel para escolher um amigo conectado e importá-lo como pessoa */}
         {/* Import friend dialog */}
         {importingFriend && (
           <div className="mb-3 p-3 bg-muted/30 rounded-xl border border-border/40 space-y-2">
@@ -706,6 +763,7 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
           </div>
         )}
 
+        {/* Formulário de nova pessoa: nome, relação, importância, aniversário e gostos */}
         {addingPerson && (
           <div className="mb-3 p-3 bg-muted/30 rounded-xl border border-border/40 space-y-2">
             <Input value={personForm.name} onChange={e => setPersonForm(p => ({ ...p, name: e.target.value }))} placeholder="Nome..." className="rounded-xl h-9 text-sm" />
@@ -733,15 +791,17 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
           </div>
         )}
 
+        {/* Lista das pessoas (ou aviso de vazio) */}
         {sortedRels.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-6">Adicione as pessoas importantes da sua vida</p>
         ) : (
           <div className="space-y-2">
             {sortedRels.map(r => {
-              const cfg = getImportanceConfig(r.importance ?? 3);
-              const days = r.last_quality_time ? differenceInDays(new Date(), new Date(r.last_quality_time)) : null;
+              const cfg = getImportanceConfig(r.importance ?? 3);  // cores/rótulo por importância
+              const days = r.last_quality_time ? differenceInDays(new Date(), new Date(r.last_quality_time)) : null;  // dias desde o último momento
               const isEditing = editingId === r.id;
 
+              // Se esta pessoa está sendo editada, mostra o formulário de edição no lugar do cartão
               if (isEditing) {
                 return (
                   <div key={r.id} className="p-3 rounded-xl bg-muted/40 border border-rose-500/30 space-y-2">
@@ -771,6 +831,7 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
                 );
               }
 
+              // Cartão normal da pessoa: inicial, nome, relação, importância e ações
               return (
                 <div key={r.id} className="p-3 rounded-xl bg-muted/40 space-y-2">
                   <div className="flex items-center gap-3">
@@ -786,6 +847,7 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
                       </div>
                     </div>
                   </div>
+                  {/* Ações do cartão: registrar momento juntos, editar e excluir */}
                   <div className="flex items-center gap-2 pl-[52px]">
                     <button onClick={() => markQualityTime(r.id)} className="px-3 py-1.5 rounded-lg bg-rose-500/10 text-rose-500 text-[10px] font-semibold hover:bg-rose-500/20 transition-colors">
                       Próximo Momento ❤️
@@ -811,13 +873,15 @@ function ListaView({ relationships, birthdays, addRelationship, updateRelationsh
   );
 }
 
-// ── 3. Pessoas Tab (unified) ─────────────────────────────────
+// ── 3. ABA "PESSOAS" (reúne as três visões) ──────────────────
+// Junta o Pantheon, a Agenda e a Lista, com um seletor no topo para trocar de visão
 function PessoasTab() {
   const { relationships, addRelationship, updateRelationship, markQualityTime, deleteRelationship } = useLifePersonal();
+  // Aniversários ficam guardados no próprio aparelho (localStorage), não no banco
   const [birthdays, setBirthdays] = useState<Birthday[]>(() => {
     try { return JSON.parse(localStorage.getItem('life_birthdays') || '[]'); } catch { return []; }
   });
-  const [view, setView] = useState<'pantheon' | 'agenda' | 'lista'>('pantheon');
+  const [view, setView] = useState<'pantheon' | 'agenda' | 'lista'>('pantheon');  // visão atualmente selecionada
 
   const views = [
     { key: 'pantheon' as const, icon: '🏛️', label: 'Pantheon' },
@@ -827,6 +891,7 @@ function PessoasTab() {
 
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
+      {/* Seletor de visão: Pantheon / Agenda / Lista */}
       {/* View switcher */}
       <motion.div variants={fadeUp}>
         <div className="flex gap-2 p-1 rounded-2xl bg-muted/40 border border-border/30">
@@ -847,6 +912,7 @@ function PessoasTab() {
         </div>
       </motion.div>
 
+      {/* Mostra apenas a visão escolhida, com transição suave entre elas */}
       <AnimatePresence mode="wait">
         {view === 'pantheon' && (
           <motion.div key="pantheon" variants={fadeUp} initial="hidden" animate="show" exit={{ opacity: 0, y: -8, transition: { duration: 0.15 } }}>
@@ -881,12 +947,14 @@ function PessoasTab() {
 }
 
 
-// ── 4. Experiences ──────────────────────────────────────────
+// ── 4. ABA "VIDA" — Experiências ─────────────────────────────
+// Duas listas: coisas que a pessoa quer viver (desejos) e memórias que já viveu
 function ExperiencesTab() {
   const { experiences, addExperience, deleteExperience } = useLifePersonal();
-  const [dialog, setDialog] = useState<'quero_viver' | 'memoria' | null>(null);
-  const [form, setForm] = useState({ title: '', description: '', experience_date: '' });
+  const [dialog, setDialog] = useState<'quero_viver' | 'memoria' | null>(null);  // qual janela está aberta (desejo ou memória)
+  const [form, setForm] = useState({ title: '', description: '', experience_date: '' });  // campos da nova experiência
 
+  // Salva uma nova experiência do tipo aberto (desejo ou memória) e fecha a janela
   const handleAdd = async () => {
     if (!form.title.trim() || !dialog) return;
     await addExperience({ ...form, type: dialog, photo_url: null, experience_date: form.experience_date || null });
@@ -894,6 +962,7 @@ function ExperiencesTab() {
     setDialog(null);
   };
 
+  // Separa a lista de desejos ("quero viver") das memórias já vividas
   const bucketList = experiences.filter(e => e.type === 'quero_viver');
   const memories = experiences.filter(e => e.type === 'memoria');
 
@@ -901,6 +970,7 @@ function ExperiencesTab() {
     <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
       <motion.div variants={fadeUp}>
         <SectionImageCard img={vidaExpImg} title="Tempo de Vida">
+          {/* Botões que abrem a janela para adicionar um desejo ou registrar uma memória */}
           <div className="flex gap-2 mb-4">
             <Button size="sm" onClick={() => setDialog('quero_viver')} className="flex-1 h-8 text-xs rounded-xl bg-amber-500 hover:bg-amber-600 text-white border-0">
               + Quero viver
@@ -910,6 +980,7 @@ function ExperiencesTab() {
             </Button>
           </div>
 
+          {/* Lista de desejos "quero viver" */}
           {bucketList.length > 0 && (
             <div className="mb-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Lista do que quero viver</p>
@@ -930,6 +1001,7 @@ function ExperiencesTab() {
             </div>
           )}
 
+          {/* Lista de memórias já vividas (com data, se informada) */}
           {memories.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Memórias</p>
@@ -954,6 +1026,7 @@ function ExperiencesTab() {
         </SectionImageCard>
       </motion.div>
 
+      {/* Janela compartilhada para adicionar um desejo ou uma memória (muda o título/campos conforme o tipo) */}
       <Dialog open={!!dialog} onOpenChange={() => setDialog(null)}>
         <DialogContent className="rounded-2xl">
           <DialogHeader>
@@ -976,7 +1049,8 @@ function ExperiencesTab() {
   );
 }
 
-// ── 5. Brain Dump ────────────────────────────────────────────
+// ── 5. ABA "MENTE" — Descompressão (esvaziar a cabeça) ───────
+// Rótulos e cores de cada destino possível para um pensamento anotado
 const RESOLUTION_CONFIG: Record<BrainDump['resolution'], { label: string; color: string }> = {
   pendente: { label: 'Pendente', color: 'text-muted-foreground bg-muted/40' },
   resolver: { label: 'Resolver', color: 'text-orange-500 bg-orange-500/10' },
@@ -984,16 +1058,19 @@ const RESOLUTION_CONFIG: Record<BrainDump['resolution'], { label: string; color:
   nao_importa: { label: 'Não importa', color: 'text-green-500 bg-green-500/10' },
 };
 
+// Espaço para "jogar tudo da cabeça"; depois cada anotação recebe um destino
 function DecompressTab() {
   const { brainDumps, addBrainDump, resolveDump, deleteDump } = useLifePersonal();
-  const [text, setText] = useState('');
+  const [text, setText] = useState('');  // texto sendo digitado
 
+  // Adiciona um novo pensamento à lista e limpa o campo
   const handleAdd = async () => {
     if (!text.trim()) return;
     await addBrainDump(text.trim());
     setText('');
   };
 
+  // Separa o que ainda está na cabeça (pendente) do que já foi resolvido/decidido
   const pending = brainDumps.filter(d => d.resolution === 'pendente');
   const resolved = brainDumps.filter(d => d.resolution !== 'pendente');
 
@@ -1002,6 +1079,7 @@ function DecompressTab() {
       <motion.div variants={fadeUp}>
         <SectionImageCard img={vidaDescompImg} title="Espaço de Descompressão">
           <p className="text-xs text-muted-foreground mb-3">Jogue tudo da sua cabeça aqui. Sem julgamentos.</p>
+          {/* Campo de escrita + botão "Jogar fora"; Ctrl+Enter também salva */}
           <div className="flex gap-2 mb-4">
             <Textarea
               value={text}
@@ -1016,6 +1094,7 @@ function DecompressTab() {
             </Button>
           </div>
 
+          {/* Pensamentos pendentes: cada um com botões para dar um destino ou apagar */}
           {pending.length > 0 && (
             <div className="space-y-2 mb-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Na cabeça agora</p>
@@ -1044,6 +1123,7 @@ function DecompressTab() {
             </div>
           )}
 
+          {/* Pensamentos já resolvidos: mostrados riscados, com o destino escolhido */}
           {resolved.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Resolvidos</p>
@@ -1068,7 +1148,8 @@ function DecompressTab() {
   );
 }
 
-// ── 6. Balance Radar ─────────────────────────────────────────
+// ── 6. ABA "RADAR" — Equilíbrio de vida ──────────────────────
+// Áreas da vida acompanhadas no radar, cada uma com seu rótulo e cor
 const BALANCE_AREAS = [
   { key: 'casa', label: 'Casa', color: '#f97316' },
   { key: 'familia', label: 'Família', color: '#f43f5e' },
@@ -1078,17 +1159,21 @@ const BALANCE_AREAS = [
   { key: 'tempo_sozinho', label: 'Eu mesmo', color: '#f59e0b' },
 ];
 
+// Radar visual mostrando quanto cada área da vida foi cuidada + um ritual semanal de intenções
 function RadarTab() {
   const { balanceLogs, logBalance, weeklyRitual, saveWeeklyRitual } = useLifePersonal();
+  // Campos do ritual semanal, já preenchidos com o que foi salvo antes
   const [ritualForm, setRitualForm] = useState({
     want_to_live: weeklyRitual?.want_to_live || '',
     more_present_with: weeklyRitual?.more_present_with || '',
     avoid_repeating: weeklyRitual?.avoid_repeating || '',
   });
 
+  // Cálculos de geometria para desenhar o gráfico de radar (centro, raio e maior contagem)
   const maxCount = Math.max(...balanceLogs.map(l => l.count), 1);
   const cx = 110; const cy = 110; const r = 80;
 
+  // Para cada área, calcula o ponto no radar proporcional a quantas vezes foi registrada
   const points = BALANCE_AREAS.map((area, i) => {
     const angle = (i / BALANCE_AREAS.length) * 2 * Math.PI - Math.PI / 2;
     const log = balanceLogs.find(l => l.area === area.key);
@@ -1096,6 +1181,7 @@ function RadarTab() {
     return { x: cx + r * Math.cos(angle) * val, y: cy + r * Math.sin(angle) * val, ...area, count: log?.count || 0, angle };
   });
 
+  // Pontos que formam o preenchimento colorido e as linhas de grade (o "alvo" ao fundo)
   const polygonPoints = points.map(p => `${p.x},${p.y}`).join(' ');
   const gridPoints = BALANCE_AREAS.map((_, i) => {
     const angle = (i / BALANCE_AREAS.length) * 2 * Math.PI - Math.PI / 2;
@@ -1107,6 +1193,7 @@ function RadarTab() {
       <motion.div variants={fadeUp}>
         <SectionImageCard img={vidaRadarImg} title="Radar de Equilíbrio">
           <p className="text-xs text-muted-foreground mb-4">Baseado nos últimos 30 dias. Toque para registrar.</p>
+          {/* Gráfico de radar (SVG): fundo em grade, área preenchida e um ponto por área */}
           <div className="flex justify-center mb-4">
             <svg width="220" height="220" viewBox="0 0 220 220">
               {/* Grid lines */}
@@ -1138,6 +1225,7 @@ function RadarTab() {
               })}
             </svg>
           </div>
+          {/* Botões para registrar que cuidou de cada área (cada toque soma 1 no radar) */}
           <div className="grid grid-cols-3 gap-2">
             {BALANCE_AREAS.map(area => {
               const log = balanceLogs.find(l => l.area === area.key);
@@ -1153,6 +1241,7 @@ function RadarTab() {
         </SectionImageCard>
       </motion.div>
 
+      {/* Ritual semanal: 3 perguntas de intenção para a semana, salvas ao final */}
       {/* Weekly Ritual */}
       <motion.div variants={fadeUp}>
         <GlassCard>
@@ -1183,7 +1272,8 @@ function RadarTab() {
   );
 }
 
-// ── 7. Light Diary ───────────────────────────────────────────
+// ── 7. ABA "DIÁRIO" — Diário leve ────────────────────────────
+// Os 5 campos do diário do dia, cada um com sua imagem, pergunta, cores e se é texto longo ou curto
 const DIARY_FIELDS = [
   {
     key: 'best_moment' as const,
@@ -1242,7 +1332,8 @@ const DIARY_FIELDS = [
   },
 ];
 
-// ── 6. Checklist Tab ─────────────────────────────────────────
+// ── ABA "LISTA" — Afazeres do dia ────────────────────────────
+// Textos que descrevem a repetição de um afazer (uma vez, todo dia, etc.)
 const RECURRENCE_LABELS: Record<string, string> = {
   none: 'Uma vez',
   daily: 'Todo dia',
@@ -1251,6 +1342,7 @@ const RECURRENCE_LABELS: Record<string, string> = {
   yearly: 'Todo ano',
 };
 
+// Cores do selo de repetição, uma para cada frequência
 const RECURRENCE_BADGE: Record<string, string> = {
   none: 'bg-muted/60 text-muted-foreground',
   daily: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
@@ -1259,13 +1351,15 @@ const RECURRENCE_BADGE: Record<string, string> = {
   yearly: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
 };
 
+// Lista de afazeres do dia, separando pendentes e concluídos; permite criar itens que se repetem
 function ChecklistTab() {
   const { pendingItems, doneItems, toggleComplete, addItem, deleteItem, loading } = useLifeChecklist();
-  const [adding, setAdding] = useState(false);
-  const [title, setTitle] = useState('');
-  const [recurrence, setRecurrence] = useState<Recurrence>('none');
-  const [submitting, setSubmitting] = useState(false);
+  const [adding, setAdding] = useState(false);            // formulário de novo afazer aberto?
+  const [title, setTitle] = useState('');                 // texto do novo afazer
+  const [recurrence, setRecurrence] = useState<Recurrence>('none');  // com que frequência ele se repete
+  const [submitting, setSubmitting] = useState(false);    // salvando em andamento?
 
+  // Cria um novo afazer; ao dar certo, limpa e fecha o formulário
   const handleAdd = async () => {
     if (!title.trim()) return;
     setSubmitting(true);
@@ -1300,6 +1394,7 @@ function ChecklistTab() {
             </Button>
           </div>
 
+          {/* Formulário de novo afazer (texto + frequência de repetição) */}
           {/* Add form */}
           <AnimatePresence>
             {adding && (
@@ -1354,6 +1449,7 @@ function ChecklistTab() {
             )}
           </AnimatePresence>
 
+          {/* Afazeres pendentes: enquanto carrega mostra esqueletos; se vazio, um estado convidativo */}
           {/* Pending items */}
           {loading ? (
             <div className="space-y-2">
@@ -1378,6 +1474,7 @@ function ChecklistTab() {
                   exit={{ opacity: 0, x: 8 }}
                   className="flex items-center gap-3 p-3 rounded-xl bg-muted/30 border border-border/30 group"
                 >
+                  {/* Quadradinho vazio: clicar marca o afazer como concluído */}
                   <button
                     onClick={() => toggleComplete(item.id)}
                     className="w-6 h-6 rounded-lg border-2 border-amber-500/50 flex items-center justify-center shrink-0 hover:bg-amber-500/10 transition-colors"
@@ -1403,6 +1500,7 @@ function ChecklistTab() {
             </div>
           )}
 
+          {/* Afazeres concluídos hoje: aparecem riscados; clicar de novo desmarca */}
           {/* Done items today */}
           {doneItems.length > 0 && (
             <div className="mt-4">
@@ -1437,8 +1535,10 @@ function ChecklistTab() {
   );
 }
 
+// Diário leve do dia: 5 campos rápidos de reflexão que são salvos juntos
 function DiaryTab() {
   const { diary, saveDiary } = useLifePersonal();
+  // Campos do diário, já preenchidos com o que foi escrito hoje (se houver)
   const [form, setForm] = useState({
     best_moment: diary?.best_moment || '',
     bothered_by: diary?.bothered_by || '',
@@ -1446,8 +1546,9 @@ function DiaryTab() {
     kind_to_self: diary?.kind_to_self || '',
     carry_forward: diary?.carry_forward || '',
   });
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(false);  // controla o feedback visual de "guardado"
 
+  // Salva o diário e mostra a confirmação por 2 segundos
   const handleSave = async () => {
     await saveDiary(form);
     setSaved(true);
@@ -1459,6 +1560,7 @@ function DiaryTab() {
       <motion.div variants={fadeUp}>
         <SectionImageCard img={vidaDiarioImg} title="Diário Leve">
           <p className="text-xs text-muted-foreground mb-5">30 segundos. Sem pressão. ✨</p>
+          {/* Um bloco para cada campo do diário; usa área de texto ou campo simples conforme configurado */}
           <div className="space-y-3">
             {DIARY_FIELDS.map(field => (
               <motion.div
@@ -1508,19 +1610,22 @@ function DiaryTab() {
   );
 }
 
-// ── Main Page ─────────────────────────────────────────────────
+// ── Página principal ─────────────────────────────────────────
+// Monta a tela inteira: cabeçalho + barra de abas com imagens; cada aba carrega o componente correspondente
 export default function Tasks() {
-  const navigate = useNavigate();
-  const { loading } = useLifePersonal();
+  const navigate = useNavigate();          // para o botão de voltar ao início
+  const { loading } = useLifePersonal();   // indica se os dados ainda estão carregando
 
   return (
     <div className="min-h-screen bg-background relative">
+      {/* Brilho decorativo ao fundo (não interfere no uso) */}
       {/* Ambient glow */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full bg-amber-500/5 blur-[120px]" />
         <div className="absolute -bottom-40 -left-40 w-[400px] h-[400px] rounded-full bg-rose-500/4 blur-[100px]" />
       </div>
 
+      {/* Cabeçalho grande com título "Vida Pessoal" e botão de voltar */}
       {/* Hero Header */}
       <div className="relative overflow-hidden">
         <div className="gradient-tasks">
@@ -1543,6 +1648,7 @@ export default function Tasks() {
         <div className="h-5 bg-background rounded-t-3xl -mt-5 relative z-10" />
       </div>
 
+      {/* Conteúdo: enquanto carrega mostra esqueletos; depois, o sistema de abas */}
       {/* Content */}
       <div className="relative z-10 container mx-auto px-4 pb-10 max-w-lg">
         {loading ? (
@@ -1553,6 +1659,7 @@ export default function Tasks() {
           </div>
         ) : (
           <Tabs defaultValue="equilibrio" className="w-full">
+            {/* Barra de abas com imagens, rolável na horizontal (Hoje, Lista, Metas, Diário, Pessoas, Casa, Vida, Mente, Radar) */}
             {/* Section nav — horizontal scroll with all 7 tabs */}
             <div className="mb-6 -mx-4 px-4 overflow-x-auto scrollbar-none">
               <TabsList className="flex w-max gap-3 h-auto p-0 bg-transparent shadow-none rounded-none">
@@ -1588,6 +1695,7 @@ export default function Tasks() {
               </TabsList>
             </div>
 
+            {/* Cada aba exibe o componente correspondente definido acima neste arquivo */}
             <TabsContent value="equilibrio"><CheckinPanel /></TabsContent>
             <TabsContent value="lista"><ChecklistTab /></TabsContent>
             <TabsContent value="metas"><GoalsTab /></TabsContent>

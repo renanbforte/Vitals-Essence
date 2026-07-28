@@ -1,3 +1,11 @@
+// ============================================================================
+// Encontros  —  LISTA DE ENCONTROS & RATEIOS (rota /encontros)
+// ----------------------------------------------------------------------------
+// Mostra todos os eventos do usuário (churrasco, jantar, festa, etc.) em cartões,
+// com data, local, nº de participantes e total gasto. Permite criar um novo
+// encontro e, ao clicar num cartão, abrir seus detalhes para dividir as despesas.
+// ============================================================================
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
+// Tipos de evento disponíveis, cada um com seu rótulo e ícone
 const EVENT_TYPES = [
   { value: 'churrasco', label: 'Churrasco', icon: Flame },
   { value: 'jantar', label: 'Jantar', icon: Utensils },
@@ -22,18 +31,21 @@ const EVENT_TYPES = [
   { value: 'outro', label: 'Outro', icon: MoreHorizontal },
 ];
 
+// Cores da etiqueta de status do evento (aberto/fechado/finalizado)
 const STATUS_COLORS: Record<string, string> = {
   open: 'bg-emerald-500/20 text-emerald-400',
   closed: 'bg-amber-500/20 text-amber-400',
   finalized: 'bg-muted text-muted-foreground',
 };
 
+// Texto amigável de cada status
 const STATUS_LABELS: Record<string, string> = {
   open: 'Aberto',
   closed: 'Fechado',
   finalized: 'Finalizado',
 };
 
+// Converte a data salva (texto "AAAA-MM-DD") em data local, evitando erro de fuso horário
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.substring(0, 10).split('-').map(Number);
   return new Date(y, m - 1, d);
@@ -41,12 +53,17 @@ function parseLocalDate(dateStr: string): Date {
 
 export default function Encontros() {
   const navigate = useNavigate();
+  // Usuário logado (usado para marcar eventos "compartilhados" por outra pessoa)
   const { user } = useAuth();
+  // Lista de eventos + estado de carregamento e ações de criar/excluir evento
   const { data: events, isLoading, createEvent, deleteEvent } = useGatheringEvents();
   const { toast } = useToast();
+  // Controla se a janela de "Novo Encontro" está aberta
   const [showCreate, setShowCreate] = useState(false);
+  // Dados digitados no formulário de criação do evento
   const [form, setForm] = useState({ title: '', event_type: 'churrasco', event_date: '', location: '', description: '' });
 
+  // Cria o evento com os dados do formulário; ao terminar, fecha a janela, limpa o form e abre os detalhes do novo evento
   const handleCreate = async () => {
     if (!form.title.trim()) return;
     try {
@@ -65,6 +82,7 @@ export default function Encontros() {
     }
   };
 
+  // Retorna o ícone certo para o tipo do evento (ou um padrão de festa, se não achar)
   const getTypeIcon = (type: string) => {
     const found = EVENT_TYPES.find((t) => t.value === type);
     return found ? found.icon : PartyPopper;
@@ -72,7 +90,7 @@ export default function Encontros() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Cabeçalho fixo: botão de voltar, título da tela e botão "Novo" para criar um encontro */}
       <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border/50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -91,10 +109,12 @@ export default function Encontros() {
         </div>
       </div>
 
+      {/* Corpo da tela: mostra "carregando", o estado vazio, ou a lista de eventos */}
       <div className="container mx-auto px-4 py-4 space-y-3">
         {isLoading ? (
           <div className="text-center text-muted-foreground py-20">Carregando...</div>
         ) : !events?.length ? (
+          /* Estado vazio: nenhum encontro criado ainda, com botão para criar o primeiro */
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center py-20">
             <PartyPopper className="w-16 h-16 mx-auto text-muted-foreground/30 mb-4" />
             <h3 className="text-lg font-semibold mb-1">Nenhum encontro ainda</h3>
@@ -104,6 +124,7 @@ export default function Encontros() {
             </Button>
           </motion.div>
         ) : (
+          /* Lista de eventos: um cartão clicável para cada encontro (abre os detalhes ao clicar) */
           <AnimatePresence>
             {events.map((event, i) => {
               const Icon = getTypeIcon(event.event_type);
@@ -124,6 +145,7 @@ export default function Encontros() {
                           <Icon className="w-5 h-5 text-primary" />
                         </div>
                         <div className="flex-1 min-w-0">
+                          {/* Nome do evento + etiquetas: "Compartilhado" (se for de outra pessoa) e o status atual */}
                           <div className="flex items-center gap-2 mb-0.5">
                             <h3 className="font-semibold truncate">{event.title}</h3>
                             {event.user_id !== user?.id && (
@@ -135,6 +157,7 @@ export default function Encontros() {
                               {STATUS_LABELS[event.status] || event.status}
                             </span>
                           </div>
+                          {/* Linha de resumo: data, local, nº de participantes e total gasto (quando houver) */}
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                             {event.event_date && (
                               <span className="flex items-center gap-1">
@@ -170,7 +193,7 @@ export default function Encontros() {
         )}
       </div>
 
-      {/* Create dialog */}
+      {/* Janela de criação: formulário com nome, tipo, data e local do novo encontro */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -202,6 +225,7 @@ export default function Encontros() {
               <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Onde será?" />
             </div>
           </div>
+          {/* Rodapé da janela: cancelar ou confirmar a criação (botão desativado sem nome ou enquanto salva) */}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
             <Button onClick={handleCreate} disabled={!form.title.trim() || createEvent.isPending}>

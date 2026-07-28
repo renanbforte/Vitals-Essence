@@ -1,13 +1,28 @@
+// ============================================================================
+// Viagens  —  LISTA DE VIAGENS (rota /viagens)
+// ----------------------------------------------------------------------------
+// Tela inicial do módulo de viagens. Mostra os convites pendentes, a lista de
+// viagens do usuário em cartões e um botão "Nova Viagem" que abre um formulário.
+// Clicar em um cartão abre os detalhes daquela viagem (tela TripDetail).
+// ============================================================================
+
+// Ferramentas do React (estado e efeitos) e navegação entre telas.
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+// Dados do usuário logado.
 import { useAuth } from '@/contexts/AuthContext';
+// Hooks que buscam/gravam as viagens e os convites no banco (Supabase).
 import { useTrips } from '@/hooks/useTrips';
 import { useTripInvitations } from '@/hooks/useTripMembers';
+// Lista de status possíveis de uma viagem (planejada, em andamento, etc.).
 import { TRIP_STATUSES } from '@/types/trips';
+// Formatação de datas e acesso direto ao banco/armazenamento Supabase.
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 
 /** Parse date string as local (avoids UTC off-by-one) */
+// Converte um texto de data (ex.: "2026-07-28") em data local, evitando que o
+// fuso horário faça a data "voltar" um dia por engano.
 function parseLocalDate(dateStr: string): Date {
   const [y, m, d] = dateStr.substring(0, 10).split('-').map(Number);
   return new Date(y, m - 1, d);
@@ -25,13 +40,21 @@ import { Badge } from '@/components/ui/badge';
 
 export default function Viagens() {
   const navigate = useNavigate();
+  // Usuário logado e se a autenticação ainda está carregando.
   const { user, loading } = useAuth();
+  // Lista de viagens do usuário, indicador de carregamento e ação de criar viagem.
   const { trips, isLoading, createTrip } = useTrips();
+  // Convites de viagem recebidos e a ação de aceitar/recusar.
   const { invitations, respond } = useTripInvitations();
+  // Controla se o formulário "Nova Viagem" está aberto.
   const [showNew, setShowNew] = useState(false);
+  // Guarda o que o usuário digita no formulário de nova viagem.
   const [form, setForm] = useState({ name: '', main_destination: '', start_date: '', end_date: '', budget: '' });
+  // Guarda os links temporários das imagens de capa de cada viagem (por id).
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
 
+  // Ao carregar as viagens, gera um link temporário (válido por 1 hora) para a
+  // imagem de capa de cada uma, já que o armazenamento é privado.
   useEffect(() => {
     if (!trips.length) return;
     const tripsWithCover = trips.filter((t: any) => t.cover_image);
@@ -48,9 +71,12 @@ export default function Viagens() {
     });
   }, [trips]);
 
+  // Enquanto valida o login não mostra nada; se não houver usuário, manda para o login.
   if (loading) return null;
   if (!user) { navigate('/auth'); return null; }
 
+  // Cria uma nova viagem com os dados do formulário e, ao dar certo,
+  // fecha o formulário e limpa os campos.
   const handleCreate = () => {
     createTrip.mutate({
       name: form.name,
@@ -66,20 +92,23 @@ export default function Viagens() {
     });
   };
 
+  // Descobre o status (rótulo e cor) de uma viagem a partir do seu código.
   const getStatus = (s: string) => TRIP_STATUSES.find(st => st.value === s) || TRIP_STATUSES[0];
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Cabeçalho azul com título "Viagens" e a contagem de viagens cadastradas */}
       <div className="bg-gradient-to-br from-sky-500 to-blue-600 relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute -top-20 -right-20 w-72 h-72 bg-white rounded-full blur-3xl" />
         </div>
         <div className="relative container mx-auto px-4 pt-6 pb-10">
+          {/* Linha do topo: seta para voltar ao início + botão de nova viagem */}
           <div className="flex items-center justify-between mb-6">
             <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="text-white/80 hover:text-white hover:bg-white/10">
               <ArrowLeft className="w-5 h-5" />
             </Button>
+            {/* Abre o formulário de cadastro de nova viagem */}
             <Button onClick={() => setShowNew(true)} size="sm" className="bg-white/20 hover:bg-white/30 text-white border-0 gap-2">
               <Plus className="w-4 h-4" />
               Nova Viagem
@@ -96,7 +125,8 @@ export default function Viagens() {
       </div>
 
       <div className="container mx-auto px-4 py-6 space-y-4">
-        {/* Invitations */}
+        {/* Convites pendentes: só aparece se houver convites. Cada convite mostra
+            a viagem e dois botões (verde = aceitar, vermelho = recusar) */}
         {invitations.length > 0 && (
           <Card className="border-sky-200 bg-sky-50 dark:bg-sky-950/30 dark:border-sky-800">
             <CardContent className="p-4 space-y-3">
@@ -111,9 +141,11 @@ export default function Viagens() {
                     <p className="text-xs text-muted-foreground">{inv.trips?.main_destination}</p>
                   </div>
                   <div className="flex gap-2">
+                    {/* Aceitar o convite */}
                     <Button size="sm" variant="ghost" className="text-green-600 h-8 w-8 p-0" onClick={() => respond.mutate({ id: inv.id, accept: true })}>
                       <Check className="w-4 h-4" />
                     </Button>
+                    {/* Recusar o convite */}
                     <Button size="sm" variant="ghost" className="text-red-500 h-8 w-8 p-0" onClick={() => respond.mutate({ id: inv.id, accept: false })}>
                       <X className="w-4 h-4" />
                     </Button>
@@ -124,7 +156,8 @@ export default function Viagens() {
           </Card>
         )}
 
-        {/* Trip cards */}
+        {/* Área principal: 3 situações possíveis —
+            1) carregando, 2) nenhuma viagem (estado vazio), 3) lista de cartões */}
         {isLoading ? (
           <div className="text-center py-12 text-muted-foreground">Carregando...</div>
         ) : trips.length === 0 ? (
@@ -140,18 +173,20 @@ export default function Viagens() {
             </CardContent>
           </Card>
         ) : (
+          // Lista de cartões: um por viagem. Clicar abre os detalhes da viagem.
           <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
             {trips.map((trip: any) => {
               const status = getStatus(trip.status);
               const coverPublicUrl = coverUrls[trip.id] || null;
               return (
                 <motion.div key={trip.id} whileTap={{ scale: 0.98 }}>
+                  {/* Cartão clicável que leva para /viagens/{id} (tela de detalhes) */}
                   <div
                     className="cursor-pointer rounded-2xl overflow-hidden shadow hover:shadow-lg transition-shadow relative"
                     onClick={() => navigate(`/viagens/${trip.id}`)}
                     style={{ minHeight: 100 }}
                   >
-                    {/* Background cover or gradient */}
+                    {/* Fundo do cartão: usa a foto de capa se existir, senão um degradê azul */}
                     {coverPublicUrl ? (
                       <>
                         <img src={coverPublicUrl} alt={trip.name} className="absolute inset-0 w-full h-full object-cover" />
@@ -160,6 +195,7 @@ export default function Viagens() {
                     ) : (
                       <div className="absolute inset-0 bg-gradient-to-br from-sky-500 to-blue-600" />
                     )}
+                    {/* Conteúdo do cartão: nome, destino, status e (embaixo) datas e valor */}
                     <div className="relative p-4">
                       <div className="flex items-start justify-between mb-2">
                         <div>
@@ -199,7 +235,7 @@ export default function Viagens() {
         )}
       </div>
 
-      {/* New trip dialog */}
+      {/* Janela (modal) do formulário de Nova Viagem: nome, destino, datas e orçamento */}
       <Dialog open={showNew} onOpenChange={setShowNew}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -229,6 +265,8 @@ export default function Viagens() {
               <Input type="number" placeholder="0" value={form.budget} onChange={e => setForm(f => ({ ...f, budget: e.target.value }))} />
             </div>
           </div>
+          {/* Rodapé do formulário: cancelar ou criar. O botão "Criar" fica
+              desativado se não houver nome ou enquanto a criação está em andamento. */}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNew(false)}>Cancelar</Button>
             <Button onClick={handleCreate} disabled={!form.name || createTrip.isPending} className="bg-sky-500 hover:bg-sky-600">

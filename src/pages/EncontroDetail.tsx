@@ -1,3 +1,12 @@
+// ============================================================================
+// EncontroDetail  —  DETALHE DO ENCONTRO & DIVISÃO DE DESPESAS (rota /encontros/:eventId)
+// ----------------------------------------------------------------------------
+// Tela de um encontro específico com 4 abas: "Compras" (lançar despesas, produto
+// a produto ou nota inteira), "Pessoas" (participantes), "Rateio" (quem pagou,
+// quanto cada um deve e quem paga a quem) e "Timeline" (histórico de atividades).
+// Atualiza em tempo real quando alguém do grupo altera algo.
+// ============================================================================
+
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -21,10 +30,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
+// Categorias possíveis para classificar uma despesa
 const CATEGORIES = [
   'bebida', 'carne', 'mercado', 'restaurante', 'delivery', 'transporte', 'decoração', 'geral', 'outro',
 ];
 
+// Formato de cada item de uma compra "produto a produto" (nome, quantidade, preço e se o preço é unitário ou total)
 interface LineItem {
   name: string;
   quantity: string;
@@ -32,29 +43,42 @@ interface LineItem {
   price_type: 'unit' | 'total';
 }
 
+// Cria um item em branco para o formulário de compras
 const emptyLine = (): LineItem => ({ name: '', quantity: '1', price: '', price_type: 'unit' });
 
 export default function EncontroDetail() {
+  // Pega o ID do evento que está na URL (ex.: /encontros/123 -> "123")
   const { eventId } = useParams<{ eventId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
+  // Lista de amigos do usuário (para convidar como participantes)
   const { friends } = useFriendships();
+  // Hook central: traz todos os dados do encontro e as ações para alterá-los
   const {
     event, participants, expenses, timeline, adjustments, expenseSplitMap, isLoading,
     addParticipant, removeParticipant, addExpense, updateExpense, updateExpenseSplits, deleteExpense,
     addAdjustment, deleteAdjustment, invalidateAll,
   } = useGatheringDetail(eventId);
 
+  // Controla a janela de adicionar participante
   const [showAddParticipant, setShowAddParticipant] = useState(false);
+  // Guarda quais grupos de compras estão expandidos (mostrando os itens de dentro)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  // Controla a janela de transferir valor entre pessoas
   const [showTransfer, setShowTransfer] = useState(false);
+  // Dados do formulário de transferência: de quem, para quem, valor, motivo e modo (1 pessoa ou diluir entre vários)
   const [transferForm, setTransferForm] = useState({ from_id: '', to_ids: [] as string[], amount: '', description: '', mode: 'transfer' as 'transfer' | 'dilute' });
-  
+
+  // Controla a janela de adicionar/editar compra
   const [showAddExpense, setShowAddExpense] = useState(false);
+  // Guarda a despesa em edição (null = criando uma nova)
   const [editingExpense, setEditingExpense] = useState<GatheringExpense | null>(null);
+  // Trava o botão de salvar enquanto grava, para evitar clique duplo
   const [isSaving, setIsSaving] = useState(false);
+  // Dados do formulário de participante externo (nome, telefone, e-mail)
   const [pForm, setPForm] = useState({ name: '', phone: '', email: '' });
+  // Dados do formulário de despesa (tipo, categoria, quem pagou, itens, rateio, etc.)
   const [eForm, setEForm] = useState({
     expense_type: 'product',
     category: 'geral',
@@ -75,7 +99,8 @@ export default function EncontroDetail() {
     edit_total_amount: '',
   });
 
-  // Realtime
+  // Tempo real: fica "ouvindo" o banco de dados; se compras, participantes ou ajustes mudarem
+  // (inclusive por outra pessoa do grupo), recarrega os dados automaticamente
   useEffect(() => {
     if (!eventId) return;
     const channel = supabase
@@ -87,13 +112,17 @@ export default function EncontroDetail() {
     return () => { supabase.removeChannel(channel); };
   }, [eventId]);
 
+  // Enquanto os dados carregam (ou se o evento não existe), mostra "Carregando..."
   if (isLoading || !event) {
     return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Carregando...</div>;
   }
 
+  // Indica se o usuário atual é o criador do evento (tem permissões extras, ex.: remover pessoas)
   const isCreator = event.user_id === user?.id;
+  // Calcula todo o rateio: total gasto, quanto cada um pagou/deve, saldos e quem paga a quem
   const split = calculateSplit(expenses, participants, event.split_mode, event.fixed_amount_per_person, expenseSplitMap, adjustments);
 
+  // Adiciona um participante externo (não usuário do app) usando os dados do formulário
   const handleAddParticipant = async () => {
     if (!pForm.name.trim()) return;
     try {
@@ -110,6 +139,7 @@ export default function EncontroDetail() {
     } catch { toast({ title: 'Erro', variant: 'destructive' }); }
   };
 
+  // Valores iniciais/padrão do formulário de despesa (usado ao abrir para criar ou ao limpar)
   const defaultEForm = {
     expense_type: 'product', category: 'geral', location: '', paid_by_participant_id: '',
     include_in_split: true, notes: '', splitParticipantIds: [] as string[],
@@ -118,6 +148,7 @@ export default function EncontroDetail() {
     edit_description: '', edit_quantity: '1', edit_unit_price: '', edit_total_amount: '',
   };
 
+  // Abre a janela de despesa já preenchida com os dados da compra escolhida (modo edição)
   const openEditExpense = (exp: GatheringExpense) => {
     const splitIds = expenseSplitMap[exp.id] || [];
     setEditingExpense(exp);
@@ -140,43 +171,51 @@ export default function EncontroDetail() {
     setShowAddExpense(true);
   };
 
+  // Fecha a janela de despesa e limpa o formulário
   const closeExpenseDialog = () => {
     setShowAddExpense(false);
     setEditingExpense(null);
     setEForm(defaultEForm);
   };
 
+  // Altera um campo de um item específico da lista de itens
   const updateLineItem = (index: number, field: keyof LineItem, value: string) => {
     const updated = [...eForm.lineItems];
     updated[index] = { ...updated[index], [field]: value };
     setEForm({ ...eForm, lineItems: updated });
   };
 
+  // Acrescenta um novo item em branco à lista
   const addLineItem = () => {
     setEForm({ ...eForm, lineItems: [...eForm.lineItems, emptyLine()] });
   };
 
+  // Remove um item da lista (mantém sempre pelo menos um)
   const removeLineItem = (index: number) => {
     if (eForm.lineItems.length <= 1) return;
     setEForm({ ...eForm, lineItems: eForm.lineItems.filter((_, i) => i !== index) });
   };
 
+  // Calcula o subtotal de um item: se o preço for "total" usa direto, senão multiplica quantidade x preço unitário
   const getLineTotal = (line: LineItem) => {
     const qty = Number(line.quantity) || 1;
     const price = Number(line.price) || 0;
     return line.price_type === 'total' ? price : qty * price;
   };
 
+  // Salva a despesa. Trata 3 casos: editar uma existente, criar uma "nota inteira", ou criar
+  // um grupo "produto a produto" (um lançamento pai com vários itens filhos)
   const handleSaveExpense = async () => {
     if (isSaving) return;
     setIsSaving(true);
     const isReceipt = eForm.expense_type === 'receipt';
+    // Se o rateio foi limitado a algumas pessoas (nem todas), guarda a lista; senão null = todos dividem
     const splitIds = eForm.splitParticipantIds.length > 0 && eForm.splitParticipantIds.length < participants.length
       ? eForm.splitParticipantIds : null;
 
     try {
       if (editingExpense) {
-        // Editing a single expense
+        // CASO 1: editando uma despesa já existente
         const desc = isReceipt ? eForm.receipt_description : eForm.edit_description;
         if (!desc.trim()) return;
         const qty = Number(eForm.edit_quantity) || 1;
@@ -202,6 +241,7 @@ export default function EncontroDetail() {
         });
         toast({ title: 'Compra atualizada!' });
       } else if (isReceipt) {
+        // CASO 2: nova despesa do tipo "nota inteira" (um único valor total)
         if (!eForm.receipt_description.trim()) return;
         const totalAmount = Number(eForm.receipt_total) || 0;
         await addExpense.mutateAsync({
@@ -219,13 +259,16 @@ export default function EncontroDetail() {
         } as any);
         toast({ title: 'Compra adicionada!' });
       } else {
-        // Product mode: create a group parent + individual children
+        // CASO 3: novo lançamento "produto a produto" -> cria um registro pai (o grupo) + um filho para cada item
+        // Considera apenas os itens preenchidos (com nome e preço maior que zero)
         const validLines = eForm.lineItems.filter(l => (l.name || '').trim() && Number(l.price) > 0);
         if (validLines.length === 0) return;
+        // Soma de todos os itens = total do grupo
         const groupTotal = validLines.reduce((s, l) => s + getLineTotal(l), 0);
+        // Nome do grupo: usa o que foi digitado ou junta os nomes dos itens
         const groupDesc = eForm.receipt_description.trim() || validLines.map(l => l.name).join(', ');
 
-        // Create parent group expense
+        // Cria o registro pai (o grupo) diretamente no banco
         const { data: parentData, error: parentError } = await supabase
           .from('gathering_expenses')
           .insert({
@@ -247,13 +290,13 @@ export default function EncontroDetail() {
           .single();
         if (parentError) throw parentError;
 
-        // Handle splits for the parent
+        // Se o rateio do grupo é entre pessoas específicas, registra essa divisão para o pai
         if (splitIds && splitIds.length > 0) {
           const splits = splitIds.map(pid => ({ expense_id: parentData.id, participant_id: pid }));
           await supabase.from('gathering_expense_splits').insert(splits as any);
         }
 
-        // Create children
+        // Cria cada item como uma despesa filha ligada ao grupo pai
         for (const line of validLines) {
           const qty = Number(line.quantity) || 1;
           const price = Number(line.price) || 0;
@@ -282,7 +325,7 @@ export default function EncontroDetail() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Header */}
+      {/* Cabeçalho fixo: voltar, título do evento, data, local e total gasto */}
       <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border/50">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-3">
@@ -303,8 +346,10 @@ export default function EncontroDetail() {
         </div>
       </div>
 
+      {/* Área principal com as 4 abas do encontro (Compras, Pessoas, Rateio, Timeline) */}
       <div className="container mx-auto px-4 py-4">
         <Tabs defaultValue="expenses" className="space-y-4">
+          {/* Barra de navegação entre as abas */}
           <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger value="expenses" className="text-xs gap-1"><ShoppingCart className="w-3.5 h-3.5" />Compras</TabsTrigger>
             <TabsTrigger value="participants" className="text-xs gap-1"><Users className="w-3.5 h-3.5" />Pessoas</TabsTrigger>
@@ -312,7 +357,7 @@ export default function EncontroDetail() {
             <TabsTrigger value="timeline" className="text-xs gap-1"><Clock className="w-3.5 h-3.5" />Timeline</TabsTrigger>
           </TabsList>
 
-          {/* COMPRAS */}
+          {/* ABA COMPRAS: lista as despesas do evento e o botão para adicionar uma nova */}
           <TabsContent value="expenses" className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Compras & Despesas</h2>
@@ -320,6 +365,7 @@ export default function EncontroDetail() {
                 <Plus className="w-4 h-4" /> Adicionar
               </Button>
             </div>
+            {/* Se não há despesas, mostra o aviso de lista vazia */}
             {expenses.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <Receipt className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -327,7 +373,7 @@ export default function EncontroDetail() {
               </div>
             ) : (
               (() => {
-                // Group expenses: parents/groups at top level, children nested
+                // Organiza as despesas: grupos/itens avulsos ficam no topo; itens filhos ficam agrupados sob seu pai
                 const childMap: Record<string, typeof expenses> = {};
                 const topLevel: typeof expenses = [];
                 for (const exp of expenses) {
@@ -338,6 +384,7 @@ export default function EncontroDetail() {
                     topLevel.push(exp);
                   }
                 }
+                // Para cada despesa do topo, monta o cartão (descobrindo se é grupo, quem pagou e se tem rateio personalizado)
                 return topLevel.map((exp) => {
                   const children = childMap[exp.id] || [];
                   const isGroup = exp.is_group || children.length > 0;
@@ -354,6 +401,7 @@ export default function EncontroDetail() {
                       <Card className="border-border/50">
                         <CardContent className="p-3">
                           <div className="flex items-center gap-3">
+                            {/* Seta para expandir/recolher os itens de dentro do grupo */}
                             {isGroup && (
                               <button
                                 className="shrink-0 p-0.5 rounded hover:bg-muted transition-colors"
@@ -365,6 +413,7 @@ export default function EncontroDetail() {
                                 }
                               </button>
                             )}
+                            {/* Nome da despesa, etiqueta de quantidade de itens (se grupo) e aviso "Fora do rateio"; abaixo: categoria, quem pagou e local */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-sm truncate">{exp.description}</span>
@@ -379,6 +428,7 @@ export default function EncontroDetail() {
                                 {exp.location && <span>• {exp.location}</span>}
                               </div>
                             </div>
+                            {/* Valor total da despesa (e, para produto avulso com mais de 1 unidade, o "Nx preço unitário") */}
                             <div className="text-right shrink-0">
                               <span className="font-bold text-sm">
                                 {Number(exp.total_amount).toLocaleString('pt-BR', { style: 'currency', currency: event.currency || 'BRL' })}
@@ -387,6 +437,7 @@ export default function EncontroDetail() {
                                 <p className="text-[10px] text-muted-foreground">{exp.quantity}x {Number(exp.unit_price).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
                               )}
                             </div>
+                            {/* Botões de editar (lápis) e excluir (lixeira) a despesa */}
                             <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8" onClick={() => openEditExpense(exp)}>
                               <Pencil className="w-3.5 h-3.5" />
                             </Button>
@@ -394,6 +445,7 @@ export default function EncontroDetail() {
                               <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
+                          {/* Quando o rateio é só entre algumas pessoas, mostra os nomes de quem divide */}
                           {isCustomSplit && (
                             <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
                               <Users className="w-3 h-3 text-muted-foreground shrink-0" />
@@ -409,7 +461,7 @@ export default function EncontroDetail() {
                         </CardContent>
                       </Card>
 
-                      {/* Children / items inside the group */}
+                      {/* Itens de dentro do grupo (só aparecem quando o grupo está expandido) */}
                       {isGroup && isExpanded && children.length > 0 && (
                         <div className="ml-6 mt-1 space-y-1 border-l-2 border-border/30 pl-3">
                           {children.map((child) => {
@@ -462,7 +514,7 @@ export default function EncontroDetail() {
             )}
           </TabsContent>
 
-          {/* PARTICIPANTES */}
+          {/* ABA PESSOAS: lista os participantes do encontro e botão para adicionar mais */}
           <TabsContent value="participants" className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-semibold">Participantes ({participants.length})</h2>
@@ -470,6 +522,7 @@ export default function EncontroDetail() {
                 <UserPlus className="w-4 h-4" /> Adicionar
               </Button>
             </div>
+            {/* Um cartão por participante; calcula quanto essa pessoa já pagou no evento */}
             {participants.map((p) => {
               const paid = expenses.filter((e) => e.paid_by_participant_id === p.id).reduce((s, e) => s + Number(e.total_amount), 0);
               return (
@@ -485,6 +538,7 @@ export default function EncontroDetail() {
                         {paid > 0 && ` • Pagou ${paid.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}`}
                       </div>
                     </div>
+                    {/* Botão de remover: só o criador vê, e não pode remover a si mesmo */}
                     {isCreator && p.user_id !== user?.id && (
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/60" onClick={() => removeParticipant.mutate(p.id)}>
                         <XCircle className="w-4 h-4" />
@@ -496,9 +550,9 @@ export default function EncontroDetail() {
             })}
           </TabsContent>
 
-          {/* RATEIO */}
+          {/* ABA RATEIO: resumo dos gastos, saldo de cada pessoa e quem deve pagar quem */}
           <TabsContent value="split" className="space-y-4">
-            {/* Summary */}
+            {/* Resumo: total gasto, média por pessoa e nº de participantes */}
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="p-4 space-y-2">
                 <div className="flex justify-between text-sm">
@@ -516,7 +570,7 @@ export default function EncontroDetail() {
               </CardContent>
             </Card>
 
-            {/* Balances */}
+            {/* Balanço por pessoa: mostra quanto cada um pagou e deve, e o saldo (verde = a receber, vermelho = a pagar) */}
             <div>
               <h3 className="font-semibold text-sm mb-2">Balanço por pessoa</h3>
               {split.balances.map((b) => (
@@ -539,7 +593,7 @@ export default function EncontroDetail() {
               ))}
             </div>
 
-            {/* Transfer button */}
+            {/* Botão para abrir a transferência de valor entre pessoas (só com 2+ participantes) */}
             {participants.length >= 2 && (
               <Button
                 variant="outline"
@@ -554,7 +608,7 @@ export default function EncontroDetail() {
               </Button>
             )}
 
-            {/* Active adjustments */}
+            {/* Ajustes manuais: transferências de dívida já registradas (com botão de excluir cada uma) */}
             {adjustments.length > 0 && (
               <div>
                 <h3 className="font-semibold text-sm mb-2">🔄 Ajustes manuais</h3>
@@ -586,7 +640,7 @@ export default function EncontroDetail() {
               </div>
             )}
 
-            {/* Settlements */}
+            {/* Acertos: a sugestão final de quem paga quanto para quem, para zerar as dívidas */}
             {split.settlements.length > 0 && (
               <div>
                 <h3 className="font-semibold text-sm mb-2">💸 Quem paga pra quem</h3>
@@ -616,6 +670,7 @@ export default function EncontroDetail() {
               </div>
             )}
 
+            {/* Caso já tenha gasto mas ninguém deve nada, mostra mensagem de "tudo certo" */}
             {split.settlements.length === 0 && split.totalSpent > 0 && (
               <div className="text-center py-6 text-muted-foreground">
                 <Check className="w-10 h-10 mx-auto mb-2 text-primary" />
@@ -624,7 +679,7 @@ export default function EncontroDetail() {
             )}
           </TabsContent>
 
-          {/* TIMELINE */}
+          {/* ABA TIMELINE: histórico das atividades do evento (quem fez o quê e quando) */}
           <TabsContent value="timeline" className="space-y-3">
             <h2 className="font-semibold">Atividades</h2>
             {timeline.length === 0 ? (
@@ -647,7 +702,7 @@ export default function EncontroDetail() {
         </Tabs>
       </div>
 
-      {/* Add Participant Dialog */}
+      {/* Janela de adicionar participante: duas abas — convidar amigo do app ou cadastrar pessoa externa */}
       <Dialog open={showAddParticipant} onOpenChange={setShowAddParticipant}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -660,8 +715,10 @@ export default function EncontroDetail() {
               <TabsTrigger value="external" className="text-xs gap-1"><UserPlus className="w-3.5 h-3.5" />Pessoa externa</TabsTrigger>
             </TabsList>
 
+            {/* Aba "Amigos do app": lista os amigos que ainda não estão no evento */}
             <TabsContent value="friends" className="space-y-2 mt-3">
               {(() => {
+                // Filtra os amigos removendo quem já é participante
                 const participantUserIds = participants.map(p => p.user_id).filter(Boolean);
                 const availableFriends = friends.filter(f => {
                   const friendUserId = f.user_id === user?.id ? f.friend_id : f.user_id;
@@ -693,6 +750,7 @@ export default function EncontroDetail() {
                           size="sm"
                           variant="outline"
                           className="rounded-xl gap-1"
+                          // Ao clicar em "Convidar", adiciona o amigo como participante do evento
                           onClick={async () => {
                             try {
                               await addParticipant.mutateAsync({
@@ -714,6 +772,7 @@ export default function EncontroDetail() {
               })()}
             </TabsContent>
 
+            {/* Aba "Pessoa externa": formulário para cadastrar alguém que não usa o app */}
             <TabsContent value="external" className="space-y-3 mt-3">
               <div><Label>Nome *</Label><Input value={pForm.name} onChange={(e) => setPForm({ ...pForm, name: e.target.value })} placeholder="Nome" /></div>
               <div><Label>Telefone</Label><Input value={pForm.phone} onChange={(e) => setPForm({ ...pForm, phone: e.target.value })} placeholder="(00) 00000-0000" /></div>
@@ -727,7 +786,7 @@ export default function EncontroDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Add/Edit Expense Dialog */}
+      {/* Janela de adicionar/editar compra: escolhe tipo e categoria, informa os itens/valor, quem pagou e o rateio */}
       <Dialog open={showAddExpense} onOpenChange={(open) => { if (!open) closeExpenseDialog(); }}>
         <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
@@ -755,7 +814,7 @@ export default function EncontroDetail() {
               </Select>
             </div>
 
-            {/* Receipt mode OR Edit mode: single description + value */}
+            {/* Modo "nota inteira" OU edição: um único campo de descrição + valor (ou qtd x preço) */}
             {(eForm.expense_type === 'receipt' || editingExpense) ? (
               <>
                 <div>
@@ -779,7 +838,7 @@ export default function EncontroDetail() {
                 )}
               </>
             ) : (
-              /* Product mode (new): dynamic line items */
+              /* Modo "produto a produto" (nova compra): lista de itens que pode crescer/diminuir */
               <div className="space-y-2">
                 <div>
                   <Label>Nome da compra / recibo</Label>
@@ -790,6 +849,7 @@ export default function EncontroDetail() {
                     className="text-sm"
                   />
                 </div>
+                {/* Um bloco para cada item: nome, quantidade, valor, tipo do valor (unitário/total) e subtotal */}
                 <Label>Itens</Label>
                 {eForm.lineItems.map((line, idx) => (
                   <div key={idx} className="space-y-1.5 p-2.5 rounded-lg border border-border/50 bg-muted/20">
@@ -831,9 +891,11 @@ export default function EncontroDetail() {
                     </div>
                   </div>
                 ))}
+                {/* Botão para incluir mais um item na lista */}
                 <Button type="button" variant="outline" size="sm" className="w-full gap-1.5 text-xs" onClick={addLineItem}>
                   <Plus className="w-3.5 h-3.5" /> Adicionar item
                 </Button>
+                {/* Soma de todos os itens da lista */}
                 <div className="text-right text-xs font-semibold text-primary">
                   Total: {eForm.lineItems.reduce((s, l) => s + getLineTotal(l), 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </div>
@@ -849,10 +911,12 @@ export default function EncontroDetail() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Interruptor: define se esta despesa entra ou não na divisão entre as pessoas */}
             <div className="flex items-center justify-between">
               <Label>Incluir no rateio?</Label>
               <Switch checked={eForm.include_in_split} onCheckedChange={(v) => setEForm({ ...eForm, include_in_split: v })} />
             </div>
+            {/* Seletor de "dividir entre": permite escolher todos ou apenas algumas pessoas */}
             {eForm.include_in_split && participants.length > 1 && (
               <div>
                 <Label className="mb-2 block">Dividir entre</Label>
@@ -906,6 +970,7 @@ export default function EncontroDetail() {
             )}
             <div><Label>Observação</Label><Input value={eForm.notes} onChange={(e) => setEForm({ ...eForm, notes: e.target.value })} /></div>
           </div>
+          {/* Rodapé: cancelar ou salvar. O botão salvar fica desativado enquanto grava ou se faltam dados obrigatórios */}
           <DialogFooter>
             <Button variant="outline" onClick={closeExpenseDialog}>Cancelar</Button>
             <Button
@@ -926,7 +991,7 @@ export default function EncontroDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Transfer Dialog */}
+      {/* Janela de transferência: move parte da dívida de uma pessoa para outra(s), em dois modos (1 pessoa ou diluir entre vários) */}
       <Dialog open={showTransfer} onOpenChange={setShowTransfer}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -934,6 +999,7 @@ export default function EncontroDetail() {
             <DialogDescription>Transfira parte da dívida de uma pessoa para outra(s)</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            {/* Escolha do modo: transferir tudo para 1 pessoa ou diluir entre várias */}
             <div>
               <Label className="mb-1.5 block text-xs font-medium">Modo</Label>
               <div className="flex gap-2">
@@ -957,6 +1023,7 @@ export default function EncontroDetail() {
                 </Button>
               </div>
             </div>
+            {/* De quem sai o valor da dívida */}
             <div>
               <Label>De quem tirar o valor</Label>
               <Select value={transferForm.from_id} onValueChange={(v) => setTransferForm({ ...transferForm, from_id: v, to_ids: transferForm.to_ids.filter(id => id !== v) })}>
@@ -966,6 +1033,7 @@ export default function EncontroDetail() {
                 </SelectContent>
               </Select>
             </div>
+            {/* Para quem vai o valor: uma pessoa (modo transferir) ou várias selecionáveis (modo diluir) */}
             <div>
               <Label>{transferForm.mode === 'transfer' ? 'Para quem transferir' : 'Diluir entre'}</Label>
               {transferForm.mode === 'transfer' ? (
@@ -1002,6 +1070,7 @@ export default function EncontroDetail() {
                 </div>
               )}
             </div>
+            {/* Valor total a transferir; no modo diluir, mostra quanto cai para cada pessoa */}
             <div>
               <Label>Valor total a transferir</Label>
               <Input
@@ -1026,6 +1095,7 @@ export default function EncontroDetail() {
               />
             </div>
           </div>
+          {/* Rodapé: ao confirmar, registra o(s) ajuste(s) — um único no modo transferir, ou vários iguais no modo diluir */}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowTransfer(false)}>Cancelar</Button>
             <Button

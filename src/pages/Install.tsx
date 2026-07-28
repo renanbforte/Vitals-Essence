@@ -1,3 +1,11 @@
+// ============================================================================
+// Install  —  TELA DE INSTALAÇÃO DO APP (rota "/install")
+// ----------------------------------------------------------------------------
+// Convida o usuário a instalar o Vitalis Essence como aplicativo no celular
+// (PWA). Detecta se já está instalado, se é iPhone/iPad (mostra passo a passo
+// do Safari) ou Android/desktop (mostra o botão "Instalar Agora").
+// ============================================================================
+
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -5,25 +13,35 @@ import { Download, Smartphone, CheckCircle2, ArrowLeft, Heart, DollarSign, Brief
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
+// Formato do evento que o navegador dispara quando o app pode ser instalado.
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 }
 
 const Install = () => {
+  // Guarda o "convite de instalação" do navegador para dispará-lo depois.
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  // Indica se o app já está instalado no aparelho.
   const [isInstalled, setIsInstalled] = useState(false);
+  // Indica se o aparelho é iPhone/iPad (que precisa de passo a passo diferente).
   const [isIOS, setIsIOS] = useState(false);
+  // Ferramenta para navegar entre telas.
   const navigate = useNavigate();
 
+  // Ao abrir a tela: descobre o estado do aparelho e fica ouvindo o navegador.
   useEffect(() => {
+    // Se o app já está rodando em modo "aplicativo" (standalone), marca como instalado.
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true);
     }
 
+    // Verifica pelo tipo do aparelho se é um iPhone/iPad.
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
     setIsIOS(isIOSDevice);
 
+    // Quando o navegador avisa que o app pode ser instalado, guardamos o convite
+    // (e cancelamos o aviso automático para mostrarmos nosso próprio botão).
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e as BeforeInstallPromptEvent);
@@ -31,23 +49,28 @@ const Install = () => {
 
     window.addEventListener('beforeinstallprompt', handler);
 
+    // Ao sair da tela, para de ouvir o aviso do navegador (limpeza).
     return () => {
       window.removeEventListener('beforeinstallprompt', handler);
     };
   }, []);
 
+  // Acionado pelo botão "Instalar Agora": abre o convite oficial do navegador.
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
 
+    // Mostra a janela de instalação e espera a decisão do usuário.
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    
+
+    // Se o usuário aceitou, marca como instalado.
     if (outcome === 'accepted') {
       setIsInstalled(true);
     }
     setDeferredPrompt(null);
   };
 
+  // Os 4 módulos do app exibidos como ícones coloridos (Saúde, Financeiro, etc.).
   const features = [
     { icon: Heart, label: 'Saúde', color: 'from-[hsl(262,83%,58%)] to-[hsl(280,72%,40%)]' },
     { icon: DollarSign, label: 'Financeiro', color: 'from-emerald-500 to-teal-600' },
@@ -56,7 +79,9 @@ const Install = () => {
   ];
 
   return (
+    // Fundo azul em degradê que ocupa a tela inteira e centraliza o conteúdo.
     <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-400 p-4 flex flex-col items-center justify-center relative overflow-hidden">
+      {/* Círculos decorativos desfocados ao fundo (apenas enfeite visual) */}
       {/* Decorative circles */}
       <div className="absolute top-10 left-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
       <div className="absolute bottom-20 right-10 w-48 h-48 bg-white/10 rounded-full blur-3xl" />
@@ -68,6 +93,7 @@ const Install = () => {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md z-10"
       >
+        {/* Logo e título do app, com animação de entrada */}
         {/* Logo and title */}
         <div className="text-center mb-6">
           <motion.div 
@@ -82,8 +108,9 @@ const Install = () => {
           <p className="text-white/80 text-lg">Vida em funcionamento</p>
         </div>
 
+        {/* Fileira de ícones dos 4 módulos, cada um surgindo em sequência */}
         {/* Feature icons */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
@@ -105,9 +132,11 @@ const Install = () => {
           ))}
         </motion.div>
 
+        {/* Cartão branco central: seu conteúdo muda conforme a situação do aparelho */}
         {/* Main card */}
         <Card className="bg-white/95 backdrop-blur-lg border-0 shadow-2xl rounded-3xl overflow-hidden">
           <CardContent className="p-6">
+            {/* CASO 1 — App já instalado: mostra confirmação e botão "Abrir App" */}
             {isInstalled ? (
               <motion.div 
                 initial={{ opacity: 0 }}
@@ -129,8 +158,10 @@ const Install = () => {
                   Abrir App
                 </Button>
               </motion.div>
+            /* CASO 2 — iPhone/iPad: mostra o passo a passo manual pelo Safari */
             ) : isIOS ? (
               <div className="space-y-4">
+                {/* Título da instrução para iOS */}
                 <div className="text-center mb-4">
                   <Smartphone className="w-12 h-12 mx-auto text-blue-500 mb-2" />
                   <h2 className="text-lg font-bold text-gray-800">Instalar no iPhone/iPad</h2>
@@ -152,11 +183,12 @@ const Install = () => {
                   </div>
                 </div>
 
+                {/* Lista numerada dos 4 passos para instalar pelo Safari */}
                 <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-4 space-y-4">
                   {[
-                    { 
-                      step: 1, 
-                      text: 'Abra no Safari', 
+                    {
+                      step: 1,
+                      text: 'Abra no Safari',
                       highlight: 'Este app só pode ser instalado pelo Safari',
                       icon: '🌐'
                     },
@@ -200,8 +232,9 @@ const Install = () => {
                   </p>
                 </div>
 
-                <Button 
-                  onClick={() => navigate('/')} 
+                {/* Botão para voltar ao app sem instalar */}
+                <Button
+                  onClick={() => navigate('/')}
                   variant="outline"
                   className="w-full h-12 border-2 border-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-50"
                 >
@@ -209,33 +242,38 @@ const Install = () => {
                   Voltar ao App
                 </Button>
               </div>
+            /* CASO 3 — Navegador aceita instalação direta: mostra botão "Instalar Agora" */
             ) : deferredPrompt ? (
               <div className="space-y-4">
                 <div className="text-center mb-2">
                   <h2 className="text-xl font-bold text-gray-800">Instale o App</h2>
                   <p className="text-gray-500 text-sm mt-1">Acesso rápido direto da sua tela inicial</p>
                 </div>
-                <Button 
+                {/* Botão principal que dispara a instalação do app */}
+                <Button
                   onClick={handleInstallClick}
                   className="w-full h-14 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white font-bold text-lg rounded-xl shadow-lg transition-all hover:scale-[1.02]"
                 >
                   <Download className="w-6 h-6 mr-2" />
                   Instalar Agora
                 </Button>
-                <Button 
-                  onClick={() => navigate('/')} 
+                {/* Alternativa: seguir usando pelo navegador, sem instalar */}
+                <Button
+                  onClick={() => navigate('/')}
                   variant="ghost"
                   className="w-full h-12 text-gray-500 font-medium rounded-xl hover:bg-gray-100"
                 >
                   Continuar no Navegador
                 </Button>
               </div>
+            /* CASO 4 (padrão) — Android/outros: mostra passo a passo pelo menu do navegador */
             ) : (
               <div className="space-y-4">
                 <div className="text-center mb-4">
                   <Smartphone className="w-12 h-12 mx-auto text-blue-500 mb-2" />
                   <h2 className="text-lg font-bold text-gray-800">Instalar no Android</h2>
                 </div>
+                {/* Lista dos 2 passos para instalar pelo menu do navegador Android */}
                 <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-4 space-y-3">
                   {[
                     { step: 1, text: 'Toque no menu do navegador', highlight: '(⋮ três pontos)' },
@@ -264,6 +302,7 @@ const Install = () => {
           </CardContent>
         </Card>
 
+        {/* Rodapé com os benefícios do app instalado */}
         {/* Footer text */}
         <p className="text-center text-white/60 text-sm mt-6">
           Funciona offline • Atualizações automáticas

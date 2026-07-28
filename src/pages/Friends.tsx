@@ -1,3 +1,12 @@
+// ============================================================================
+// Friends  —  TELA DE AMIGOS (rota /friends)
+// ----------------------------------------------------------------------------
+// Rede social do app. O usuário vê seu perfil e código de amigo, adiciona
+// amigos (por nome ou código), aceita/recusa solicitações pendentes e pode
+// espiar o progresso diário de cada amigo (água, refeições, treino e fotos).
+// ============================================================================
+
+// Ferramentas do React para guardar estados e uma referência que persiste
 import { useState, useRef } from 'react';
 import { Users, UserPlus, Copy, Check, X, Eye, Loader2, ArrowLeft, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -22,37 +31,45 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import LifetimePremiumManager from '@/components/admin/LifetimePremiumManager';
 
+// Animação: cada item surge subindo suavemente enquanto aparece.
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 22 } },
 };
 
+// Animação: faz os itens de uma lista aparecerem em cascata (um após o outro).
 const stagger = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.08 } },
 };
 
+// Componente principal da tela de Amigos.
 export default function Friends() {
-  const { user, profile, updateProfile } = useAuth();
-  const navigate = useNavigate();
+  const { user, profile, updateProfile } = useAuth(); // usuário logado e seu perfil
+  const navigate = useNavigate();                     // para navegar entre telas
+  // Dados e ações de amizade: lista de amigos, solicitações pendentes, meu código e funções (enviar/aceitar/recusar/remover)
   const { friends, pendingRequests, loading, myFriendCode, sendFriendRequest, acceptRequest, rejectRequest, removeFriend } = useFriendships();
-  const { loading: friendDataLoading, fetchFriendData } = useFriendData();
+  const { loading: friendDataLoading, fetchFriendData } = useFriendData(); // busca o progresso diário de um amigo
 
-  const [friendCode, setFriendCode] = useState('');
-  const [sending, setSending] = useState(false);
-  const [copied, setCopied] = useState(false);
+  // --- ESTADOS relacionados a adicionar amigo por CÓDIGO ---
+  const [friendCode, setFriendCode] = useState('');   // código digitado
+  const [sending, setSending] = useState(false);      // se está enviando a solicitação
+  const [copied, setCopied] = useState(false);        // se o próprio código foi copiado (mostra o "check")
 
-  const [nameSearch, setNameSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<{ user_id: string; name: string; friend_code: string | null; avatar_url: string | null }[]>([]);
-  const [searching, setSearching] = useState(false);
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  // --- ESTADOS relacionados a buscar amigo por NOME ---
+  const [nameSearch, setNameSearch] = useState('');   // texto da busca por nome
+  const [searchResults, setSearchResults] = useState<{ user_id: string; name: string; friend_code: string | null; avatar_url: string | null }[]>([]); // resultados encontrados
+  const [searching, setSearching] = useState(false);  // se a busca está em andamento
+  const debounceRef = useRef<NodeJS.Timeout | null>(null); // "temporizador" que evita buscar a cada letra digitada
 
+  // Busca perfis por nome enquanto o usuário digita (com atraso de 300ms para não pesar o servidor)
   const handleNameSearch = (value: string) => {
     setNameSearch(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (value.trim().length < 2) { setSearchResults([]); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current); // cancela a busca anterior ainda não disparada
+    if (value.trim().length < 2) { setSearchResults([]); return; } // só busca com 2+ caracteres
     debounceRef.current = setTimeout(async () => {
       setSearching(true);
+      // Consulta perfis cujo nome contém o texto, ignorando o próprio usuário
       const { data } = await supabase
         .from('profiles')
         .select('user_id, name, friend_code, avatar_url')
@@ -64,6 +81,7 @@ export default function Friends() {
     }, 300);
   };
 
+  // Envia solicitação de amizade para um resultado da busca por nome (usa o código dele)
   const handleAddByUserId = async (friendUserId: string) => {
     const result = searchResults.find(r => r.user_id === friendUserId);
     if (!result?.friend_code) { toast.error('Este usuário não possui código de amigo'); return; }
@@ -74,19 +92,22 @@ export default function Friends() {
     else { toast.success('Solicitação enviada!'); setNameSearch(''); setSearchResults([]); }
   };
 
-  const [selectedFriend, setSelectedFriend] = useState<FriendWithProfile | null>(null);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [friendData, setFriendData] = useState<FriendDailyData | null>(null);
-  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  // --- ESTADOS da janela de "espiar o progresso" de um amigo ---
+  const [selectedFriend, setSelectedFriend] = useState<FriendWithProfile | null>(null); // amigo aberto na janela
+  const [selectedDate, setSelectedDate] = useState(new Date());  // dia escolhido para ver o progresso
+  const [friendData, setFriendData] = useState<FriendDailyData | null>(null); // dados do amigo naquele dia
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);   // se a janela de progresso está aberta
 
+  // Copia o próprio código de amigo para a área de transferência
   const handleCopyCode = async () => {
     if (!myFriendCode) return;
     await navigator.clipboard.writeText(myFriendCode);
     setCopied(true);
     toast.success('Código copiado!');
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), 2000); // volta o ícone ao normal após 2 segundos
   };
 
+  // Envia solicitação de amizade usando o código digitado manualmente
   const handleSendRequest = async () => {
     if (!friendCode.trim()) return;
     setSending(true);
@@ -96,20 +117,24 @@ export default function Friends() {
     else { toast.success('Solicitação enviada!'); setFriendCode(''); }
   };
 
+  // Aceita uma solicitação de amizade pendente
   const handleAccept = async (id: string) => {
     const { error } = await acceptRequest(id);
     if (error) { toast.error('Erro ao aceitar solicitação'); }
     else { toast.success('Amizade aceita!'); }
   };
 
+  // Recusa uma solicitação pendente
   const handleReject = async (id: string) => { await rejectRequest(id); };
 
+  // Remove um amigo já conectado
   const handleRemove = async (id: string) => {
     const { error } = await removeFriend(id);
     if (error) { toast.error('Erro ao remover amigo'); }
     else { toast.success('Amigo removido'); }
   };
 
+  // Abre a janela de progresso e carrega os dados do amigo para a data atual
   const handleViewFriend = async (friend: FriendWithProfile) => {
     setSelectedFriend(friend);
     setViewDialogOpen(true);
@@ -120,6 +145,7 @@ export default function Friends() {
     }
   };
 
+  // Ao trocar o dia dentro da janela, recarrega o progresso do amigo para a nova data
   const handleDateChange = async (date: Date) => {
     setSelectedDate(date);
     if (selectedFriend?.friend_profile?.user_id) {
@@ -128,6 +154,7 @@ export default function Friends() {
     }
   };
 
+  // Nomes das refeições em português (usados para exibir os rótulos)
   const mealLabels: Record<string, string> = {
     breakfast: 'Café da Manhã',
     morning_snack: 'Lanche da Manhã',
@@ -137,12 +164,13 @@ export default function Friends() {
     night_snack: 'Ceia',
   };
 
-  // Social/hub gradient: blue tones
+  // Cor de fundo do topo (degradê azul, identidade visual da parte social)
   const heroGradient = 'linear-gradient(135deg, hsl(var(--hub-gradient-start)), hsl(var(--hub-gradient-end)))';
 
+  // --- APARÊNCIA DA TELA (o que o usuário vê) ---
   return (
     <div className="min-h-screen bg-background relative">
-      {/* Ambient background glow */}
+      {/* Brilho suave de fundo (efeito decorativo, sem função) */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full opacity-[0.04] blur-[120px]"
           style={{ background: 'hsl(var(--hub-gradient-start))' }} />
@@ -150,10 +178,10 @@ export default function Friends() {
           style={{ background: 'hsl(var(--hub-gradient-end))' }} />
       </div>
 
-      {/* Hero Header */}
+      {/* Cabeçalho colorido (topo): botão voltar, título "Amigos" e contadores */}
       <div className="relative overflow-hidden">
         <div style={{ background: heroGradient }}>
-          {/* Decorative shapes */}
+          {/* Formas decorativas (bolhas translúcidas de fundo) */}
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute -top-24 -right-24 w-80 h-80 bg-white/[0.06] rounded-full blur-2xl" />
             <div className="absolute top-10 left-10 w-40 h-40 bg-white/[0.04] rounded-full blur-3xl" />
@@ -170,6 +198,7 @@ export default function Friends() {
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
+              {/* Título e contagem de amigos conectados */}
               <div className="flex-1">
                 <h1 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-white/15 backdrop-blur-sm flex items-center justify-center shadow-inner">
@@ -184,7 +213,7 @@ export default function Friends() {
                 </p>
               </div>
 
-              {/* Pending badge */}
+              {/* Selo de solicitações pendentes (só aparece se houver alguma) */}
               {pendingRequests.length > 0 && (
                 <div className="flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-xl px-3 py-1.5">
                   <div className="w-2 h-2 rounded-full bg-yellow-300 animate-pulse" />
@@ -195,18 +224,18 @@ export default function Friends() {
           </div>
         </div>
 
-        {/* Rounded transition */}
+        {/* Borda arredondada que faz a transição do topo colorido para o corpo da tela */}
         <div className="h-5 bg-background rounded-t-3xl -mt-5 relative z-10" />
       </div>
 
-      {/* Content */}
+      {/* Corpo da tela: sequência de cartões (perfil, código, adicionar, pendentes, amigos) */}
       <motion.div
         variants={stagger}
         initial="hidden"
         animate="show"
         className="relative z-10 container mx-auto px-4 pb-10 space-y-4 max-w-lg"
       >
-        {/* Profile Card */}
+        {/* Cartão do meu perfil: foto (clicável para trocar) e nome */}
         {user && profile && (
           <motion.div variants={fadeUp}>
             <div className="rounded-2xl bg-card/70 backdrop-blur-xl border border-border/40 p-4 shadow-lg">
@@ -229,7 +258,7 @@ export default function Friends() {
           </motion.div>
         )}
 
-        {/* Friend Code */}
+        {/* Cartão do meu código de amigo: mostra o código e um botão para copiá-lo */}
         <motion.div variants={fadeUp}>
           <div className="rounded-2xl bg-card/70 backdrop-blur-xl border border-border/40 p-4 shadow-lg">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Meu Código de Amigo</p>
@@ -253,7 +282,7 @@ export default function Friends() {
           </div>
         </motion.div>
 
-        {/* Add Friend */}
+        {/* Cartão de adicionar amigo: por nome (busca) ou pelo código */}
         <motion.div variants={fadeUp}>
           <div className="rounded-2xl bg-card/70 backdrop-blur-xl border border-border/40 p-4 shadow-lg space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
@@ -261,7 +290,7 @@ export default function Friends() {
               Adicionar Amigo
             </p>
 
-            {/* Search by name */}
+            {/* Campo de busca por nome, com resultados aparecendo logo abaixo */}
             <div className="relative">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -275,6 +304,7 @@ export default function Friends() {
                   <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
                 )}
               </div>
+              {/* Lista suspensa com os resultados da busca por nome */}
               <AnimatePresence>
                 {searchResults.length > 0 && (
                   <motion.div
@@ -284,6 +314,7 @@ export default function Friends() {
                     className="absolute z-50 w-full mt-1 bg-card/95 backdrop-blur-xl border border-border/50 rounded-xl shadow-xl max-h-60 overflow-y-auto"
                   >
                     {searchResults.map((result) => {
+                      // Verifica se esse resultado já é amigo (para mostrar "Amigo" em vez do botão de adicionar)
                       const isAlreadyFriend = friends.some(f => f.friend_profile?.user_id === result.user_id);
                       return (
                         <div key={result.user_id} className="flex items-center justify-between p-3 hover:bg-muted/40 transition-colors">
@@ -305,6 +336,7 @@ export default function Friends() {
                     })}
                   </motion.div>
                 )}
+                {/* Mensagem quando a busca não encontra ninguém */}
                 {nameSearch.trim().length >= 2 && !searching && searchResults.length === 0 && (
                   <motion.div
                     initial={{ opacity: 0 }}
@@ -318,13 +350,14 @@ export default function Friends() {
               </AnimatePresence>
             </div>
 
-            {/* Divider */}
+            {/* Separador "ou pelo código" entre as duas formas de adicionar */}
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               <div className="flex-1 h-px bg-border/50" />
               ou pelo código
               <div className="flex-1 h-px bg-border/50" />
             </div>
 
+            {/* Campo para digitar o código do amigo e botão "Adicionar" */}
             <div className="flex gap-2">
               <Input
                 value={friendCode}
@@ -340,7 +373,7 @@ export default function Friends() {
           </div>
         </motion.div>
 
-        {/* Pending Requests */}
+        {/* Cartão de solicitações pendentes: pessoas que querem ser seus amigos (aceitar/recusar) */}
         <AnimatePresence>
           {pendingRequests.length > 0 && (
             <motion.div variants={fadeUp} initial="hidden" animate="show" exit={{ opacity: 0 }}>
@@ -349,6 +382,7 @@ export default function Friends() {
                   Solicitações Pendentes
                   <span className="bg-yellow-500/15 text-yellow-600 text-xs px-1.5 py-0.5 rounded-full font-bold">{pendingRequests.length}</span>
                 </p>
+                {/* Uma linha para cada solicitação: nome + botão aceitar (check) e recusar (X) */}
                 <div className="space-y-2">
                   {pendingRequests.map((request) => (
                     <div key={request.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
@@ -372,7 +406,7 @@ export default function Friends() {
           )}
         </AnimatePresence>
 
-        {/* Friends List */}
+        {/* Cartão da lista de amigos: cada amigo com botões "Ver" (progresso) e remover */}
         <motion.div variants={fadeUp}>
           <div className="rounded-2xl bg-card/70 backdrop-blur-xl border border-border/40 p-4 shadow-lg">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -383,6 +417,7 @@ export default function Friends() {
               )}
             </p>
 
+            {/* Enquanto carrega: "esqueletos"; se não houver amigos: mensagem vazia; senão: a lista */}
             {loading ? (
               <div className="space-y-3">
                 {[1, 2].map(i => (
@@ -414,6 +449,7 @@ export default function Friends() {
                         <p className="text-xs text-muted-foreground">Amigo</p>
                       </div>
                     </div>
+                    {/* Botões por amigo: "Ver" abre o progresso; o X remove o amigo */}
                     <div className="flex gap-1.5">
                       <Button size="sm" variant="outline" className="rounded-lg h-8 gap-1.5 px-2.5" onClick={() => handleViewFriend(friend)}>
                         <Eye className="w-3.5 h-3.5" />
@@ -430,13 +466,13 @@ export default function Friends() {
           </div>
         </motion.div>
 
-        {/* Admin: Lifetime Premium Manager */}
+        {/* Ferramenta de administrador: gerencia acessos premium vitalícios (só aparece para admins) */}
         <motion.div variants={fadeUp}>
           <LifetimePremiumManager key={user?.id} />
         </motion.div>
       </motion.div>
 
-      {/* View Friend Dialog */}
+      {/* Janela "Ver amigo": mostra o progresso diário do amigo escolhido */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border-border/50 bg-card/95 backdrop-blur-xl">
           <DialogHeader>
@@ -451,8 +487,10 @@ export default function Friends() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Seletor de data: escolhe o dia cujo progresso será exibido */}
             <DateSelector selectedDate={selectedDate} onDateChange={handleDateChange} />
 
+            {/* Enquanto carrega mostra girando; sem dados mostra aviso; com dados mostra o progresso */}
             {friendDataLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
@@ -463,6 +501,7 @@ export default function Friends() {
               </div>
             ) : (
               <>
+                {/* Foto de progresso do dia (se o amigo enviou uma) */}
                 {friendData.progressPhoto && (
                   <div>
                     <h4 className="font-semibold text-sm mb-2">Foto do Dia</h4>
@@ -470,11 +509,13 @@ export default function Friends() {
                   </div>
                 )}
 
+                {/* Três indicadores rápidos do dia: água consumida, refeições feitas e treino */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-muted/50 rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold text-primary">{friendData.tracking.water_ml || 0}ml</p>
                     <p className="text-xs text-muted-foreground">Água</p>
                   </div>
+                  {/* Conta quantas das 6 refeições foram concluídas (ex.: 4/6) */}
                   <div className="bg-muted/50 rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold text-primary">
                       {[
@@ -488,6 +529,7 @@ export default function Friends() {
                     </p>
                     <p className="text-xs text-muted-foreground">Refeições</p>
                   </div>
+                  {/* Indica se o treino do dia foi feito (✓) ou não (✗) */}
                   <div className="bg-muted/50 rounded-xl p-3 text-center">
                     <p className="text-2xl font-bold text-primary">
                       {friendData.tracking.workout_completed ? '✓' : '✗'}
@@ -496,6 +538,7 @@ export default function Friends() {
                   </div>
                 </div>
 
+                {/* Galeria com as fotos das refeições enviadas pelo amigo */}
                 {friendData.mealPhotos.length > 0 && (
                   <div>
                     <h4 className="font-semibold text-sm mb-2">Fotos das Refeições</h4>
@@ -512,6 +555,7 @@ export default function Friends() {
                   </div>
                 )}
 
+                {/* Lista das 6 refeições marcando quais o amigo concluiu (riscadas + check) */}
                 <div>
                   <h4 className="font-semibold text-sm mb-2">Refeições</h4>
                   <div className="space-y-1.5">

@@ -1,3 +1,12 @@
+// ============================================================================
+// Shopping  —  LISTA DE COMPRAS (rota /compras)
+// ----------------------------------------------------------------------------
+// Tela do módulo de compras de mercado. O usuário organiza suas idas ao
+// supermercado em 4 abas: Compras (sessões em andamento/finalizadas), Templates
+// (listas-modelo reutilizáveis), Produtos (catálogo por seção) e Lugares (os
+// mercados/lojas). Ao abrir uma sessão, entra na tela de conferência de itens.
+// ============================================================================
+
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '@/components/Header';
@@ -19,34 +28,41 @@ import { motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Shopping() {
-  const navigate = useNavigate();
-  const { user, loading } = useAuth();
-  const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('sessions');
-  const [selectedSession, setSelectedSession] = useState<string | null>(null);
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const navigate = useNavigate();      // permite trocar de rota (ex.: mandar para o login)
+  const { user, loading } = useAuth();  // usuário logado e se ainda está carregando a sessão
+  const { toast } = useToast();         // mostra avisos rápidos no canto da tela
 
+  // Estados de navegação da própria tela
+  const [activeTab, setActiveTab] = useState('sessions');                       // qual aba está aberta
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);   // sessão de compra aberta (se houver)
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null); // template sendo editado (se houver)
+
+  // Campos do formulário "Novo Lugar" (cadastrar um mercado/loja)
   // New place dialog
   const [newPlaceOpen, setNewPlaceOpen] = useState(false);
   const [newPlaceName, setNewPlaceName] = useState('');
   const [newPlaceAddress, setNewPlaceAddress] = useState('');
   const [newPlaceType, setNewPlaceType] = useState('mercado');
 
+  // Campos para editar um lugar já cadastrado (guarda qual está em edição + os valores)
   // Edit place
   const [editingPlaceId, setEditingPlaceId] = useState<string | null>(null);
   const [editPlaceName, setEditPlaceName] = useState('');
   const [editPlaceAddress, setEditPlaceAddress] = useState('');
   const [editPlaceType, setEditPlaceType] = useState('mercado');
 
+  // Campos do formulário "Novo Produto" (cadastrar um item no catálogo)
   // New product dialog
   const [newProductOpen, setNewProductOpen] = useState(false);
   const [newProductName, setNewProductName] = useState('');
   const [newProductSegment, setNewProductSegment] = useState('MERCEARIA');
 
+  // Campos do formulário "Novo Template" (criar uma lista-modelo reutilizável)
   // New template dialog
   const [newTemplateOpen, setNewTemplateOpen] = useState(false);
   const [newTemplateName, setNewTemplateName] = useState('');
 
+  // Sugere um título padrão para a nova compra, no formato "COMPRA | DD - MM - AAAA"
   // New session dialog
   const getDefaultSessionTitle = () => {
     const now = new Date();
@@ -55,20 +71,24 @@ export default function Shopping() {
     const year = now.getFullYear();
     return `COMPRA | ${day} - ${month} - ${year}`;
   };
+  // Campos do formulário "Nova Compra" (título, lugar escolhido e template base)
   const [newSessionOpen, setNewSessionOpen] = useState(false);
   const [newSessionTitle, setNewSessionTitle] = useState('');
   const [newSessionPlace, setNewSessionPlace] = useState('');
   const [newSessionTemplate, setNewSessionTemplate] = useState('');
 
+  // Permite cadastrar um lugar novo sem sair do formulário de nova compra
   // Inline new place from session dialog
   const [inlinePlaceName, setInlinePlaceName] = useState('');
   const [showInlinePlaceInput, setShowInlinePlaceInput] = useState(false);
 
-  const { places, create: createPlace, update: updatePlace } = useShoppingPlaces();
-  const { products, isLoading: productsLoading, create: createProduct, seedDefaults } = useShoppingProducts();
-  const { templates, create: createTemplate, remove: removeTemplate } = useShoppingTemplates();
-  const { sessions, create: createSession, remove: removeSession } = useShoppingSessions();
+  // Conexões com o banco de dados (Supabase): cada hook traz a lista e as ações de criar/editar/remover
+  const { places, create: createPlace, update: updatePlace } = useShoppingPlaces();               // lugares (mercados)
+  const { products, isLoading: productsLoading, create: createProduct, seedDefaults } = useShoppingProducts(); // produtos do catálogo
+  const { templates, create: createTemplate, remove: removeTemplate } = useShoppingTemplates();   // listas-modelo
+  const { sessions, create: createSession, remove: removeSession } = useShoppingSessions();       // sessões de compra
 
+  // Na primeira vez do usuário (catálogo vazio), carrega automaticamente a lista de produtos padrão
   // Auto-seed default products + template for new users
   useEffect(() => {
     if (!productsLoading && products.length === 0 && user && !seedDefaults.isPending && !seedDefaults.isSuccess) {
@@ -76,17 +96,21 @@ export default function Shopping() {
     }
   }, [productsLoading, products.length, user]);
 
+  // Itens (produtos) que compõem o template atualmente aberto para edição
   // Template items for selected template
   const { items: templateItems, addItem: addTemplateItem, removeItem: removeTemplateItem } = useTemplateItems(selectedTemplate || undefined);
 
+  // Controla a janela de "Adicionar Produto" dentro de um template
   // Add product to template dialog
   const [addToTemplateOpen, setAddToTemplateOpen] = useState(false);
 
+  // Proteção de acesso: se terminou de carregar e não há usuário logado, manda para o login
   useEffect(() => {
     if (!loading && !user) navigate('/auth');
   }, [user, loading, navigate]);
 
 
+  // Enquanto verifica o login, mostra apenas um ícone de carregamento girando
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -95,6 +119,7 @@ export default function Shopping() {
     );
   }
 
+  // Se o usuário abriu uma compra, mostra a tela de conferência dessa sessão (em vez da lista de abas)
   // If viewing a session
   const currentSession = sessions.find(s => s.id === selectedSession);
   if (currentSession) {
@@ -102,12 +127,14 @@ export default function Shopping() {
       <div className="min-h-screen bg-background">
         <Header title="Lista de Compras" showBack gradientClass="gradient-shopping" />
         <div className="container mx-auto px-4 py-4 max-w-2xl">
+          {/* Tela de itens da compra; onBack volta para a lista de sessões */}
           <ShoppingSessionView session={currentSession} onBack={() => setSelectedSession(null)} />
         </div>
       </div>
     );
   }
 
+  // Salva um novo lugar (mercado) e limpa/fecha o formulário
   const handleCreatePlace = async () => {
     if (!newPlaceName.trim()) return;
     await createPlace.mutateAsync({ name: newPlaceName.trim(), place_type: newPlaceType, address: newPlaceAddress.trim() || undefined });
@@ -116,10 +143,11 @@ export default function Shopping() {
     setNewPlaceOpen(false);
   };
 
+  // Salva um novo produto no catálogo, evitando cadastrar um item repetido
   const handleCreateProduct = async () => {
     if (!newProductName.trim()) return;
-    const normalized = newProductName.trim().toUpperCase();
-    const exists = products.some(p => p.name_caps === normalized);
+    const normalized = newProductName.trim().toUpperCase();     // padroniza tudo em MAIÚSCULAS
+    const exists = products.some(p => p.name_caps === normalized); // já existe um produto com esse nome?
     if (exists) {
       toast({ title: 'Produto já existe', description: `"${normalized}" já está cadastrado.`, variant: 'destructive' });
       return;
@@ -129,6 +157,7 @@ export default function Shopping() {
     setNewProductOpen(false);
   };
 
+  // Cria uma nova lista-modelo (template) e limpa/fecha o formulário
   const handleCreateTemplate = async () => {
     if (!newTemplateName.trim()) return;
     await createTemplate.mutateAsync(newTemplateName.trim());
@@ -136,6 +165,7 @@ export default function Shopping() {
     setNewTemplateOpen(false);
   };
 
+  // Cria uma nova sessão de compra (opcionalmente ligada a um lugar e a um template) e já a abre
   const handleCreateSession = async () => {
     if (!newSessionTitle.trim()) return;
     const result = await createSession.mutateAsync({
@@ -150,6 +180,7 @@ export default function Shopping() {
     setSelectedSession(result.id);
   };
 
+  // Organiza os produtos agrupados por seção (mercearia, hortifruti, etc.) para exibir na aba Produtos
   // Group products by segment
   const productsBySegment = SEGMENTS.reduce((acc, seg) => {
     acc[seg] = products.filter(p => p.segment === seg);
@@ -158,10 +189,13 @@ export default function Shopping() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Cabeçalho com título e botão de voltar */}
       <Header title="Lista de Compras" showBack gradientClass="gradient-shopping" />
 
       <div className="container mx-auto px-4 py-4 max-w-2xl">
+        {/* Sistema de abas: Compras / Templates / Produtos / Lugares */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
+          {/* Barra superior com os 4 botões de aba */}
           <TabsList className="w-full grid grid-cols-4">
             <TabsTrigger value="sessions" className="text-xs gap-1">
               <ShoppingCart className="w-3 h-3" /> Compras
@@ -177,10 +211,13 @@ export default function Shopping() {
             </TabsTrigger>
           </TabsList>
 
+          {/* ========== ABA COMPRAS: lista de sessões de compra ========== */}
           {/* ========== SESSIONS ========== */}
           <TabsContent value="sessions" className="space-y-4">
+            {/* Janela do formulário "Nova Compra" */}
             <Dialog open={newSessionOpen} onOpenChange={setNewSessionOpen}>
               <DialogTrigger asChild>
+                {/* Botão que abre o formulário já preenchendo o título padrão */}
                 <Button className="w-full gap-2" onClick={() => { setNewSessionTitle(getDefaultSessionTitle()); setShowInlinePlaceInput(false); setInlinePlaceName(''); }}>
                   <Plus className="w-4 h-4" /> Nova Compra
                 </Button>
@@ -188,18 +225,21 @@ export default function Shopping() {
               <DialogContent>
                 <DialogHeader><DialogTitle>Nova Sessão de Compra</DialogTitle></DialogHeader>
                 <div className="space-y-3">
+                  {/* Campo do título da compra (sempre em maiúsculas) */}
                   <Input
                     placeholder="COMPRA | DD - MM - YYYY"
                     value={newSessionTitle}
                     onChange={e => setNewSessionTitle(e.target.value.toUpperCase())}
                   />
                   <div className="space-y-2">
+                    {/* Escolha do lugar entre os já cadastrados (opcional) */}
                     <Select value={newSessionPlace} onValueChange={setNewSessionPlace}>
                       <SelectTrigger><SelectValue placeholder="Lugar (opcional)" /></SelectTrigger>
                       <SelectContent>
                         {places.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    {/* Atalho para cadastrar um lugar novo aqui mesmo, sem sair da janela */}
                     {!showInlinePlaceInput ? (
                       <Button variant="ghost" size="sm" className="text-xs gap-1 text-muted-foreground" onClick={() => setShowInlinePlaceInput(true)}>
                         <Plus className="w-3 h-3" /> Adicionar novo lugar
@@ -221,6 +261,7 @@ export default function Shopping() {
                       </div>
                     )}
                   </div>
+                  {/* Opção de já iniciar a compra com os itens de um template pronto */}
                   <Select value={newSessionTemplate} onValueChange={setNewSessionTemplate}>
                     <SelectTrigger><SelectValue placeholder="Baseado em template (opcional)" /></SelectTrigger>
                     <SelectContent>
@@ -229,21 +270,25 @@ export default function Shopping() {
                   </Select>
                 </div>
                 <DialogFooter>
+                  {/* Botão que confirma a criação (desabilitado sem título) */}
                   <Button onClick={handleCreateSession} disabled={!newSessionTitle.trim()}>Criar</Button>
                 </DialogFooter>
               </DialogContent>
             </Dialog>
 
+            {/* Sem compras: mensagem de vazio. Com compras: lista de cartões clicáveis */}
             {sessions.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-8">Nenhuma compra ainda. Crie uma nova!</p>
             ) : (
               sessions.map(s => (
+                // Cartão de uma compra: clicar abre a sessão para conferir os itens
                 <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
                   <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedSession(s.id)}>
                     <CardContent className="p-4 flex items-center justify-between">
                       <div>
                         <p className="font-semibold text-sm">{s.title}</p>
                         <div className="flex items-center gap-2 mt-1">
+                          {/* Selo de situação (finalizada ou em andamento) + data de criação */}
                           <Badge variant={s.status === 'FINALIZADA' ? 'default' : 'secondary'} className="text-xs">
                             {s.status === 'FINALIZADA' ? 'Finalizada' : 'Em andamento'}
                           </Badge>
@@ -253,6 +298,7 @@ export default function Shopping() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        {/* Botão de excluir; stopPropagation evita abrir a sessão ao apagar */}
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={e => { e.stopPropagation(); removeSession.mutate(s.id); }}>
                           <Trash2 className="w-4 h-4 text-destructive" />
                         </Button>
@@ -264,8 +310,10 @@ export default function Shopping() {
             )}
           </TabsContent>
 
+          {/* ========== ABA TEMPLATES: listas-modelo reutilizáveis ========== */}
           {/* ========== TEMPLATES ========== */}
           <TabsContent value="templates" className="space-y-4">
+            {/* Sem produtos no catálogo, o template ficaria vazio: oferece carregar a lista padrão */}
             {products.length === 0 && (
               <Card className="border-dashed">
                 <CardContent className="p-4 text-center space-y-2">
@@ -297,12 +345,14 @@ export default function Shopping() {
               </Dialog>
             </div>
 
+            {/* Lista de templates: cada cartão pode ser aberto para editar seus itens */}
             {templates.map(t => (
               <Card key={t.id}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm">{t.name}</CardTitle>
                     <div className="flex gap-1">
+                      {/* Alterna entre abrir/fechar a edição deste template */}
                       <Button
                         variant="outline"
                         size="sm"
@@ -317,8 +367,10 @@ export default function Shopping() {
                     </div>
                   </div>
                 </CardHeader>
+                {/* Conteúdo expandido só aparece quando este template está aberto para edição */}
                 {selectedTemplate === t.id && (
                   <CardContent className="pt-0 space-y-2">
+                    {/* Janela para escolher quais produtos entram no template */}
                     <Dialog open={addToTemplateOpen} onOpenChange={setAddToTemplateOpen}>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1 w-full">
@@ -327,6 +379,7 @@ export default function Shopping() {
                       </DialogTrigger>
                       <DialogContent className="max-h-[80vh] overflow-y-auto">
                         <DialogHeader><DialogTitle>Adicionar ao Template</DialogTitle></DialogHeader>
+                        {/* Produtos organizados por seção, ocultando os que já estão no template */}
                         {SEGMENTS.map(seg => {
                           const prods = products.filter(p => p.segment === seg && !templateItems.some(ti => ti.product_id === p.id));
                           if (prods.length === 0) return null;
@@ -351,11 +404,13 @@ export default function Shopping() {
                       </DialogContent>
                     </Dialog>
 
+                    {/* Lista de produtos que já fazem parte deste template */}
                     {templateItems.map(ti => {
                       const product = products.find(p => p.id === ti.product_id);
                       return (
                         <div key={ti.id} className="flex items-center justify-between px-2 py-1 bg-muted/50 rounded-md">
                           <span className="text-sm">{product?.name_caps || '—'}</span>
+                          {/* Remove este produto do template */}
                           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeTemplateItem.mutate(ti.id)}>
                             <Trash2 className="w-3 h-3 text-destructive" />
                           </Button>
@@ -374,8 +429,10 @@ export default function Shopping() {
             )}
           </TabsContent>
 
+          {/* ========== ABA PRODUTOS: catálogo de itens agrupado por seção ========== */}
           {/* ========== PRODUCTS ========== */}
           <TabsContent value="products" className="space-y-4">
+            {/* Botões: novo produto e (se catálogo vazio) carregar lista padrão */}
             <div className="flex gap-2">
               <Dialog open={newProductOpen} onOpenChange={setNewProductOpen}>
                 <DialogTrigger asChild>
@@ -410,11 +467,13 @@ export default function Shopping() {
               )}
             </div>
 
+            {/* Para cada seção com produtos, mostra o selo da seção e a lista de itens */}
             {SEGMENTS.map(seg => {
               const prods = productsBySegment[seg];
               if (!prods || prods.length === 0) return null;
               return (
                 <div key={seg}>
+                  {/* Selo com o nome da seção e a quantidade de produtos nela */}
                   <Badge variant="outline" className="mb-2 text-xs">
                     <Tag className="w-3 h-3 mr-1" />{seg} ({prods.length})
                   </Badge>
@@ -436,8 +495,10 @@ export default function Shopping() {
             )}
           </TabsContent>
 
+          {/* ========== ABA LUGARES: mercados/lojas cadastrados ========== */}
           {/* ========== PLACES ========== */}
           <TabsContent value="places" className="space-y-4">
+            {/* Janela do formulário "Novo Lugar" */}
             <Dialog open={newPlaceOpen} onOpenChange={setNewPlaceOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="w-full gap-2">
@@ -474,12 +535,14 @@ export default function Shopping() {
               </DialogContent>
             </Dialog>
 
+            {/* Sem lugares: mensagem de vazio. Com lugares: um cartão para cada */}
             {places.length === 0 ? (
               <p className="text-center text-sm text-muted-foreground py-8">Nenhum lugar cadastrado.</p>
             ) : (
               places.map(p => (
                 <Card key={p.id}>
                   <CardContent className="p-4">
+                    {/* Se este lugar está em edição, mostra o formulário; senão, mostra os dados */}
                     {editingPlaceId === p.id ? (
                       <div className="space-y-2">
                         <Input
@@ -503,6 +566,7 @@ export default function Shopping() {
                           </SelectContent>
                         </Select>
                         <div className="flex gap-2">
+                          {/* Salva as alterações do lugar e fecha o modo de edição */}
                           <Button size="sm" className="gap-1" onClick={async () => {
                             await updatePlace.mutateAsync({ id: p.id, name: editPlaceName.trim(), address: editPlaceAddress.trim() || undefined, place_type: editPlaceType });
                             setEditingPlaceId(null);
@@ -513,6 +577,7 @@ export default function Shopping() {
                         </div>
                       </div>
                     ) : (
+                      /* Exibição normal do lugar: ícone, nome, endereço e tipo */
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -524,6 +589,7 @@ export default function Shopping() {
                             <p className="text-xs text-muted-foreground capitalize">{p.place_type}</p>
                           </div>
                         </div>
+                        {/* Botão de lápis: entra no modo de edição preenchendo o formulário */}
                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
                           setEditingPlaceId(p.id);
                           setEditPlaceName(p.name);

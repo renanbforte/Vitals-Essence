@@ -1,3 +1,11 @@
+// ============================================================================
+// Account  —  MINHA CONTA (PERFIL E CONFIGURAÇÕES DO USUÁRIO)
+// ----------------------------------------------------------------------------
+// Tela da rota "/conta". O usuário vê e edita seus dados pessoais: foto, nome,
+// e-mail, código de amigo (para ser adicionado por outras pessoas), troca de
+// senha e notificações. Também acessa o suporte e faz logout (sair da conta).
+// ============================================================================
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -12,15 +20,24 @@ import { ProfilePhotoUpload } from '@/components/ProfilePhotoUpload';
 import { NotificationSettings } from '@/components/NotificationSettings';
 
 export default function Account() {
+  // Permite mudar de página (voltar ao início, ir para suporte, etc.)
   const navigate = useNavigate();
+  // Dados e ações do usuário logado, vindos do contexto de autenticação
   const { user, profile, signOut, updateProfile } = useAuth();
+  // Campo de texto do nome (começa com o nome atual do perfil)
   const [name, setName] = useState(profile?.name || '');
+  // Indica se o nome está sendo salvo (mostra "Salvando...")
   const [savingName, setSavingName] = useState(false);
+  // Campo da nova senha digitada
   const [newPassword, setNewPassword] = useState('');
+  // Campo de confirmação da nova senha
   const [confirmPassword, setConfirmPassword] = useState('');
+  // Indica se a senha está sendo alterada (mostra "Alterando...")
   const [changingPassword, setChangingPassword] = useState(false);
+  // Indica se o código de amigo acabou de ser copiado (troca ícone por 2s)
   const [codeCopied, setCodeCopied] = useState(false);
 
+  // Salva o novo nome no banco de dados (tabela de perfis do Supabase)
   const handleSaveName = async () => {
     if (!user || !name.trim()) return;
     setSavingName(true);
@@ -37,6 +54,7 @@ export default function Account() {
     setSavingName(false);
   };
 
+  // Altera a senha do usuário: valida tamanho mínimo e se as duas senhas batem
   const handleChangePassword = async () => {
     if (newPassword.length < 6) {
       toast.error('A senha deve ter pelo menos 6 caracteres');
@@ -58,6 +76,7 @@ export default function Account() {
     setChangingPassword(false);
   };
 
+  // Copia o código de amigo para a área de transferência e mostra confirmação
   const copyFriendCode = () => {
     if (profile?.friend_code) {
       navigator.clipboard.writeText(profile.friend_code);
@@ -67,6 +86,7 @@ export default function Account() {
     }
   };
 
+  // Faz logout e envia o usuário de volta para a tela de login
   const handleSignOut = async () => {
     await signOut();
     navigate('/auth');
@@ -74,9 +94,10 @@ export default function Account() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
+      {/* Cabeçalho com fundo em gradiente: botão voltar, título e o perfil */}
       <div className="gradient-hub">
         <div className="container mx-auto px-5 pt-6 pb-10">
+          {/* Linha do topo: seta de voltar para o início + título "Minha Conta" */}
           <div className="flex items-center gap-3 mb-6">
             <Button
               variant="ghost"
@@ -89,7 +110,7 @@ export default function Account() {
             <h1 className="text-white text-xl font-bold">Minha Conta</h1>
           </div>
 
-          {/* Avatar + Name */}
+          {/* Foto de perfil (com upload), nome e e-mail do usuário */}
           <div className="flex flex-col items-center gap-3">
             <ProfilePhotoUpload
               userId={user?.id || ''}
@@ -104,10 +125,11 @@ export default function Account() {
         </div>
       </div>
 
+      {/* Corpo branco arredondado que sobe sobre o cabeçalho, com os cartões */}
       <div className="rounded-t-[2rem] -mt-6 bg-background relative z-10">
         <div className="container mx-auto px-5 pt-8 pb-10 space-y-6">
 
-          {/* Nome */}
+          {/* Cartão "Nome": editar e salvar o nome de exibição */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -131,7 +153,7 @@ export default function Account() {
             </div>
           </motion.div>
 
-          {/* Email */}
+          {/* Cartão "Email": apenas exibe o e-mail (não editável aqui) */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -145,7 +167,7 @@ export default function Account() {
             <p className="text-muted-foreground text-sm">{user?.email}</p>
           </motion.div>
 
-          {/* Código de Amigo */}
+          {/* Cartão "Código de Amigo": mostra e copia o código para clicar */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -159,6 +181,7 @@ export default function Account() {
             <p className="text-muted-foreground text-xs mb-3">
               Compartilhe este código para que amigos te adicionem no app.
             </p>
+            {/* Se existe código: botão que copia; senão, aviso de indisponível */}
             {profile?.friend_code ? (
               <button
                 onClick={copyFriendCode}
@@ -167,6 +190,7 @@ export default function Account() {
                 <span className="font-mono text-lg font-bold text-foreground tracking-widest flex-1 text-left">
                   {profile.friend_code}
                 </span>
+                {/* Ícone muda para "check" verde logo após copiar */}
                 {codeCopied ? (
                   <Check className="w-5 h-5 text-emerald-500" />
                 ) : (
@@ -178,7 +202,7 @@ export default function Account() {
             )}
           </motion.div>
 
-          {/* Alterar Senha */}
+          {/* Cartão "Alterar Senha": nova senha + confirmação + botão de troca */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -218,10 +242,10 @@ export default function Account() {
             </div>
           </motion.div>
 
-          {/* Notificações */}
+          {/* Preferências de notificações (componente próprio) */}
           <NotificationSettings />
 
-          {/* Suporte */}
+          {/* Botão que leva à Central de Ajuda e Suporte */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -237,7 +261,7 @@ export default function Account() {
             </Button>
           </motion.div>
 
-          {/* Sair */}
+          {/* Botão vermelho para sair da conta (logout) */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}

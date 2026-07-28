@@ -1,4 +1,14 @@
+// ============================================================================
+// Hub  —  TELA INICIAL / MENU DE MÓDULOS (rota principal "/")
+// ----------------------------------------------------------------------------
+// Vitrine do super-app. Mostra os módulos (Saúde, Financeiro, etc.) num carrossel
+// deslizável com imagem grande. O usuário arrasta para escolher, toca para entrar,
+// pode ativar teste grátis de 14 dias e alternar entre "todos" e "só os meus".
+// ============================================================================
+
+// Ferramenta para navegar entre telas
 import { useNavigate } from 'react-router-dom';
+// Ícones usados na tela
 import { Heart, DollarSign, Briefcase, Sparkles, Plane, ShoppingCart, LogOut, Lock, PartyPopper, Leaf, Info, X, Users, Flower2, Star, Crown, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -20,6 +30,9 @@ import heroLibertacao from '@/assets/hero-libertacao.png';
 import heroFeminino from '@/assets/hero-feminino.png';
 import heroAstral from '@/assets/hero-astral.png';
 
+// Lista de todos os módulos do app. Cada item define o nome, a descrição curta,
+// o ícone, a cor, a imagem de fundo, a rota de destino e o texto de detalhes.
+// Para adicionar/editar um módulo, basta alterar esta lista.
 const modules = [
   {
     id: 'saude',
@@ -133,22 +146,28 @@ const modules = [
   },
 ];
 
+// Componente principal da tela inicial (Hub).
 export default function Hub() {
-  const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const navigate = useNavigate();          // para navegar entre telas
+  const { signOut } = useAuth();           // função de sair da conta
+  // Controle de assinatura: verifica acesso, teste grátis (trial) e dias restantes
   const { hasModuleAccess, hasTrial, getTrialDaysLeft, startTrial } = useSubscription();
-  const [startingTrial, setStartingTrial] = useState(false);
+  const [startingTrial, setStartingTrial] = useState(false); // se está ativando um teste grátis
+
+  // Alternância "mostrar todos os módulos" x "só os meus" — lembra a escolha do usuário (localStorage)
   const [showAllModules, setShowAllModules] = useState(() => {
     const saved = localStorage.getItem('hub-show-all-modules');
     return saved === null ? true : saved === 'true';
   });
-  const [showInfo, setShowInfo] = useState(false);
+  const [showInfo, setShowInfo] = useState(false); // se a tela de detalhes do módulo está aberta
 
+  // Lista de módulos exibidos: todos, ou só os gratuitos/contratados/em teste
   const visibleModules = useMemo(() => {
     if (showAllModules) return modules;
     return modules.filter(m => FREE_MODULES.includes(m.id) || hasModuleAccess(m.id) || hasTrial(m.id));
   }, [showAllModules, hasModuleAccess, hasTrial]);
 
+  // Módulo atualmente selecionado no carrossel — recupera o último visto (localStorage)
   const [selectedIndex, setSelectedIndex] = useState(() => {
     const saved = localStorage.getItem('hub-selected-module');
     if (saved !== null) {
@@ -158,18 +177,21 @@ export default function Hub() {
     return 0;
   });
 
+  // Configura o carrossel deslizável (biblioteca Embla): dá loop se houver mais de um módulo
   const [emblaRef, emblaApi] = useEmblaCarousel({
     loop: visibleModules.length > 1,
     align: 'center',
     skipSnaps: false,
   });
 
+  // Quando o carrossel troca de slide: atualiza o módulo selecionado e fecha os detalhes
   const onSelect = useCallback(() => {
     if (!emblaApi) return;
     setSelectedIndex(emblaApi.selectedScrollSnap());
     setShowInfo(false);
   }, [emblaApi]);
 
+  // Ao montar/reagir: posiciona o carrossel no último módulo salvo e "escuta" as trocas de slide
   useEffect(() => {
     if (!emblaApi) return;
     const saved = localStorage.getItem('hub-selected-module');
@@ -184,17 +206,17 @@ export default function Hub() {
     return () => { emblaApi.off('select', onSelect); };
   }, [emblaApi, onSelect, visibleModules.length]);
 
-  // Persist selected module
+  // Salva o módulo selecionado, para reabrir nele na próxima visita
   useEffect(() => {
     localStorage.setItem('hub-selected-module', String(selectedIndex));
   }, [selectedIndex]);
 
-  // Persist show-all toggle
+  // Salva a preferência do botão "Todos / Meus"
   useEffect(() => {
     localStorage.setItem('hub-show-all-modules', String(showAllModules));
   }, [showAllModules]);
 
-  // Reset index when visible modules change
+  // Se a lista de módulos encolher e o índice ficar inválido, volta para o primeiro
   useEffect(() => {
     if (selectedIndex >= visibleModules.length) {
       setSelectedIndex(0);
@@ -202,12 +224,15 @@ export default function Hub() {
     }
   }, [visibleModules.length, selectedIndex, emblaApi]);
 
+  // Move o carrossel para um módulo específico
   const scrollTo = useCallback((index: number) => {
     emblaApi?.scrollTo(index);
   }, [emblaApi]);
 
+  // Módulo em destaque no momento
   const currentModule = visibleModules[selectedIndex] || visibleModules[0];
 
+  // Ao "entrar" num módulo: se não estiver liberado, leva à tela de planos; senão, abre o módulo
   const handleEnter = () => {
     if (!currentModule.active) return;
     if (!hasModuleAccess(currentModule.id)) {
@@ -217,29 +242,32 @@ export default function Hub() {
     navigate(currentModule.route);
   };
 
-  // Distinguish tap from drag on the swipe overlay
+  // Referências para distinguir um "toque" (entrar) de um "arraste" (trocar de módulo)
   const pointerStart = useRef<{ x: number; y: number; time: number } | null>(null);
   const navDrag = useRef<{ startX: number; startIndex: number; moved: boolean } | null>(null);
 
+  // Registra onde e quando o dedo/mouse tocou a tela
   const onPointerDown = (e: React.PointerEvent) => {
     pointerStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
   };
 
+  // Ao soltar: se mal se moveu e foi rápido, entende como toque e entra no módulo
   const onPointerUp = (e: React.PointerEvent) => {
     if (!pointerStart.current) return;
     const dx = Math.abs(e.clientX - pointerStart.current.x);
     const dy = Math.abs(e.clientY - pointerStart.current.y);
     const dt = Date.now() - pointerStart.current.time;
-    // If moved less than 10px and under 300ms → it's a tap
+    // Se moveu menos de 10px e durou menos de 300ms → é um toque
     if (dx < 10 && dy < 10 && dt < 300) {
       handleEnter();
     }
     pointerStart.current = null;
   };
 
+  // --- APARÊNCIA DA TELA (o que o usuário vê) ---
   return (
     <div className="h-[100dvh] bg-background relative flex flex-col overflow-hidden">
-      {/* Ambient glow */}
+      {/* Brilho de fundo que muda de cor conforme o módulo em destaque (decorativo) */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <motion.div
           key={currentModule.id + '-glow'}
@@ -251,13 +279,16 @@ export default function Hub() {
         />
       </div>
 
-      {/* Top bar - absolute on mobile to overlay the image */}
+      {/* Barra superior: logo (leva à conta) à esquerda e botões de ação à direita */}
       <div className="relative md:relative z-20 container mx-auto px-5 pt-5 pb-2 flex items-center justify-between">
+        {/* Logo + nome do app; ao clicar, abre a tela da conta */}
         <button onClick={() => navigate('/conta')} className="flex items-center gap-3 group">
            <img src={logo} alt="Vitalis Essence" className="w-10 h-10 rounded-xl shadow-lg object-cover" />
           <span className="text-muted-foreground font-bold text-xs tracking-[0.2em] uppercase group-hover:text-foreground transition-colors">Vitalis Essence</span>
         </button>
+        {/* Grupo de botões de ação da barra superior */}
         <div className="flex items-center gap-1">
+          {/* Botão que alterna entre mostrar "Todos" os módulos ou só os "Meus" */}
           <Button
             variant="ghost"
             size="sm"
@@ -268,6 +299,7 @@ export default function Hub() {
             {showAllModules ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
             {showAllModules ? 'Todos' : 'Meus'}
           </Button>
+          {/* Botão coroa: abre a tela de planos/assinatura */}
           <Button
             variant="ghost"
             size="icon"
@@ -276,6 +308,7 @@ export default function Hub() {
           >
             <Crown className="w-4 h-4" />
           </Button>
+          {/* Botão amigos: abre a tela de Amigos */}
           <Button
             variant="ghost"
             size="icon"
@@ -284,6 +317,7 @@ export default function Hub() {
           >
             <Users className="w-4 h-4" />
           </Button>
+          {/* Botão sair: encerra a sessão (logout) */}
           <Button
             variant="ghost"
             size="icon"
@@ -295,7 +329,7 @@ export default function Hub() {
         </div>
       </div>
 
-      {/* Hero image - fullscreen on mobile, contained on desktop */}
+      {/* Área da imagem grande do módulo (ocupa a tela no celular, contida no desktop) */}
       <div className="flex-1 relative z-10 flex flex-col min-h-0">
         <div
           className="flex-1 relative mx-3 md:mx-auto md:max-w-2xl md:w-full rounded-3xl overflow-hidden group shadow-2xl"
@@ -303,6 +337,7 @@ export default function Hub() {
             boxShadow: `0 20px 60px -15px ${currentModule.color}50`,
           }}
         >
+          {/* Imagem do módulo em destaque, com transição suave ao trocar */}
           <AnimatePresence mode="wait">
             <motion.img
               key={currentModule.id}
@@ -316,10 +351,10 @@ export default function Hub() {
             />
           </AnimatePresence>
 
-          {/* Gradient overlay at bottom */}
+          {/* Escurecimento na parte de baixo da imagem, para o texto ficar legível */}
           <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
 
-          {/* Greeting + Module info overlay */}
+          {/* Sobre a imagem: nome do módulo, selos de status e sua descrição curta */}
           <div className="absolute bottom-0 inset-x-0 p-6">
             <AnimatePresence mode="wait">
               <motion.div
@@ -333,18 +368,21 @@ export default function Hub() {
                   <h2 className="text-white text-2xl md:text-3xl font-extrabold tracking-tight">
                     {currentModule.title}
                   </h2>
+                  {/* Selo "Em breve" quando o módulo ainda não está disponível */}
                   {!currentModule.active && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-white/60 bg-white/10 backdrop-blur-sm px-2 py-0.5 rounded-full">
                       <Lock className="w-3 h-3" />
                       Em breve
                     </span>
                   )}
+                  {/* Selo com os dias restantes quando o módulo está em período de teste */}
                   {currentModule.active && !FREE_MODULES.includes(currentModule.id) && hasTrial(currentModule.id) && (
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-amber-300 bg-amber-400/20 backdrop-blur-sm px-3 py-1 rounded-full">
                       <Clock className="w-3 h-3" />
                       {getTrialDaysLeft(currentModule.id)} dias restantes
                     </span>
                   )}
+                  {/* Botão "14 dias grátis": ativa o teste quando o módulo é pago e ainda não foi liberado */}
                   {currentModule.active && !hasModuleAccess(currentModule.id) && !FREE_MODULES.includes(currentModule.id) && (
                     <button
                       onClick={async (e) => {
@@ -373,7 +411,7 @@ export default function Hub() {
             </AnimatePresence>
           </div>
 
-          {/* Info button */}
+          {/* Botão "i" (canto superior esquerdo): abre/fecha os detalhes do módulo */}
           <button
             onClick={(e) => { e.stopPropagation(); setShowInfo(v => !v); }}
             className="absolute top-4 left-4 z-20 w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-white hover:bg-white/30 transition-all"
@@ -381,7 +419,7 @@ export default function Hub() {
             {showInfo ? <X className="w-4 h-4" /> : <Info className="w-4 h-4" />}
           </button>
 
-          {/* Info overlay */}
+          {/* Tela de detalhes (sobreposta): ícone, título e descrição completa do módulo */}
           <AnimatePresence>
             {showInfo && (
               <motion.div
@@ -411,7 +449,7 @@ export default function Hub() {
             )}
           </AnimatePresence>
 
-          {/* Tap to enter */}
+          {/* Etiqueta "Acessar →" / "Testar grátis →" que aparece ao passar o mouse (desktop) */}
           {currentModule.active && !showInfo && (
             <div className="absolute top-4 right-4 px-3 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-white text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               {hasModuleAccess(currentModule.id) ? 'Acessar →' : 'Testar grátis →'}
@@ -419,7 +457,7 @@ export default function Hub() {
           )}
         </div>
 
-        {/* Embla swipe overlay — tap enters, drag switches */}
+        {/* Camada invisível sobre a imagem que captura os gestos: toque entra, arraste troca de módulo */}
         <div
           className="absolute inset-0 z-10 cursor-pointer"
           ref={emblaRef}
@@ -435,7 +473,7 @@ export default function Hub() {
         </div>
       </div>
 
-      {/* Rotary icon navigation — draggable */}
+      {/* Navegação inferior por ícones (estilo "carrossel giratório"): mostra os módulos em fila e pode ser arrastada */}
       <div className="relative z-20 py-4 pb-8 overflow-hidden">
         <div
           className="relative flex items-center justify-center h-20 touch-none select-none"
@@ -464,6 +502,7 @@ export default function Hub() {
           }}
           onPointerCancel={() => { navDrag.current = null; }}
         >
+          {/* Para cada módulo, calcula sua posição, tamanho e transparência conforme a distância do centro */}
           {visibleModules.map((mod, index) => {
             const isActive = index === selectedIndex;
             const total = visibleModules.length;

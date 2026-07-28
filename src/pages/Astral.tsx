@@ -1,3 +1,11 @@
+// ============================================================================
+// Astral  —  TELA DO MÓDULO DE ASTROLOGIA / ESPIRITUALIDADE (rota /astral)
+// ----------------------------------------------------------------------------
+// Guia cósmico pessoal do usuário. Ao entrar pela primeira vez ele faz um
+// cadastro (onboarding com data/hora de nascimento); depois navega por 5 abas:
+// Hoje, Universo, Oráculos, Conexões e Eu, tudo sobre um fundo de céu estrelado.
+// ============================================================================
+
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft } from 'lucide-react';
@@ -15,6 +23,8 @@ import synastryImg from '@/assets/astral-synastry.png';
 import moonImg from '@/assets/astral-moon.png';
 import journalImg from '@/assets/astral-journal.png';
 
+// Lista das 5 abas do rodapé: cada uma tem um id interno, o rótulo mostrado,
+// a imagem/emoji do ícone e a cor do brilho quando a aba está selecionada.
 const tabs = [
   {
     id: 'today',
@@ -53,9 +63,13 @@ const tabs = [
   },
 ];
 
+// Fundo decorativo de céu estrelado: desenha 80 estrelinhas em posições,
+// tamanhos e cores aleatórios que piscam suavemente, mais alguns brilhos de
+// nebulosa. É só enfeite visual (não recebe cliques).
 function StarField() {
   return (
     <div className="fixed inset-0 overflow-hidden pointer-events-none">
+      {/* Gera 80 pontinhos (estrelas) com posição/cor aleatória que piscam em loop */}
       {Array.from({ length: 80 }).map((_, i) => (
         <motion.div
           key={i}
@@ -93,14 +107,22 @@ function StarField() {
   );
 }
 
+// Componente principal da tela Astral.
 export default function Astral() {
   const navigate = useNavigate();
+  // Busca no banco (Supabase) o perfil astral do usuário e indica se ainda carrega.
   const { profile, isLoading } = useAstral();
+  // Aba atualmente selecionada (começa em "Hoje").
   const [activeTab, setActiveTab] = useState('today');
+  // Marca que o usuário acabou de concluir o cadastro inicial nesta sessão.
   const [onboardingDone, setOnboardingDone] = useState(false);
+  // Indica se estamos dentro de uma subtela (ex.: leitura de tarô aberta).
   const [isInSubView, setIsInSubView] = useState(false);
+  // Guarda uma função para "voltar" de dentro de uma subtela sem sair da aba.
   const resetSubViewRef = useRef<(() => void) | null>(null);
 
+  // Botão voltar: se estiver numa subtela, apenas fecha a subtela;
+  // caso contrário, volta para a tela inicial do app ("/").
   const handleBack = () => {
     if (isInSubView && resetSubViewRef.current) {
       resetSubViewRef.current();
@@ -108,9 +130,12 @@ export default function Astral() {
       navigate('/');
     }
   };
+  // Considera que o usuário já tem cadastro se existe perfil no banco
+  // OU se ele acabou de concluir o onboarding agora.
   const hasProfile = !!profile || onboardingDone;
-  
 
+
+  // Decide qual conteúdo mostrar de acordo com a aba selecionada.
   const renderTab = () => {
     switch (activeTab) {
       case 'today': return <AstralTodayTab />;
@@ -122,6 +147,8 @@ export default function Astral() {
     }
   };
 
+  // Enquanto o perfil ainda está sendo carregado, mostra uma tela "esqueleto"
+  // (blocos cinza pulsando) no lugar do conteúdo real, para não ficar em branco.
   if (isLoading) {
     return (
       <div className="h-dvh flex flex-col" style={{ background: 'linear-gradient(160deg, #080616 0%, #0f0b2a 40%, #12082e 70%, #080616 100%)' }}>
@@ -155,15 +182,18 @@ export default function Astral() {
     );
   }
 
+  // Tela normal (já carregada): fundo escuro em degradê ocupando a altura toda.
   return (
     <div
       className="h-dvh flex flex-col overflow-hidden relative"
       style={{ background: 'linear-gradient(160deg, #080616 0%, #0f0b2a 40%, #12082e 70%, #080616 100%)' }}
     >
+      {/* Céu estrelado de fundo */}
       <StarField />
 
-      {/* Header */}
+      {/* Cabeçalho: botão voltar + título "Astral" com subtítulo */}
       <div className="relative z-10 flex items-center gap-3 px-4 pt-safe pt-4 pb-3">
+        {/* Botão de voltar (seta para a esquerda) */}
         <button
           onClick={handleBack}
           className="w-9 h-9 rounded-xl flex items-center justify-center"
@@ -183,9 +213,10 @@ export default function Astral() {
         
       </div>
 
-      {/* Content */}
+      {/* Conteúdo principal: mostra o onboarding OU as abas, conforme o cadastro */}
       <div className="relative z-10 flex-1 flex flex-col overflow-hidden">
         <AnimatePresence mode="wait">
+          {/* SEM cadastro ainda -> tela de boas-vindas + fluxo de onboarding */}
           {!hasProfile ? (
             <motion.div
               key="onboarding"
@@ -207,9 +238,11 @@ export default function Astral() {
                   As estrelas sussurram seu nome. Vamos descobrir o que elas dizem.
                 </p>
               </div>
+              {/* Formulário de cadastro inicial; ao concluir, libera as abas */}
               <AstralOnboarding onComplete={() => setOnboardingDone(true)} />
             </motion.div>
           ) : (
+            /* COM cadastro -> conteúdo da aba selecionada + barra de abas embaixo */
             <motion.div
               key="main"
               initial={{ opacity: 0 }}
@@ -217,7 +250,7 @@ export default function Astral() {
               exit={{ opacity: 0 }}
               className="flex-1 flex flex-col overflow-hidden"
             >
-              {/* Tab content */}
+              {/* Área da aba ativa, com transição suave ao trocar de aba */}
               <AnimatePresence mode="wait">
                 <motion.div
                   key={activeTab}
@@ -231,7 +264,7 @@ export default function Astral() {
                 </motion.div>
               </AnimatePresence>
 
-              {/* Tab bar — image-based */}
+              {/* Barra de abas na parte de baixo, com ícones em imagem */}
               <div
                 className="relative z-10 flex items-end justify-around px-3 pb-safe pb-5 pt-2 border-t"
                 style={{
@@ -240,9 +273,11 @@ export default function Astral() {
                   backdropFilter: 'blur(24px)',
                 }}
               >
+                {/* Cria um botão para cada aba da lista "tabs" */}
                 {tabs.map(tab => {
                   const isActive = activeTab === tab.id;
                   return (
+                    // Ao clicar: seleciona a aba e limpa qualquer subtela aberta
                     <button
                       key={tab.id}
                       onClick={() => { setActiveTab(tab.id); setIsInSubView(false); resetSubViewRef.current = null; }}

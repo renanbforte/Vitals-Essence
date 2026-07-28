@@ -1,14 +1,27 @@
+// ============================================================================
+// Terms  —  TELA DE TERMOS DE USO E POLÍTICA DE PRIVACIDADE
+// ----------------------------------------------------------------------------
+// Página estática (rota /termos) que apenas exibe o texto legal do app:
+// termos de uso, LGPD, dados coletados, direitos do usuário, etc.
+// O usuário só lê e pode voltar para a tela anterior pelo botão de seta.
+// ============================================================================
+
+// Ícone da seta de "voltar" e ferramenta de navegação entre telas.
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
 export default function Terms() {
+  // Permite voltar para a tela anterior ao clicar na seta.
   const navigate = useNavigate();
 
   return (
+    // Container geral que ocupa a tela inteira com o fundo padrão do app.
     <div className="min-h-screen bg-background">
+      {/* Cabeçalho fixo no topo: seta de voltar + título da página */}
       <div className="sticky top-0 z-10 bg-card/80 backdrop-blur-md border-b border-border px-4 py-3">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
+          {/* Botão de voltar: navigate(-1) retorna à tela anterior */}
           <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="rounded-xl">
             <ArrowLeft className="w-5 h-5" />
           </Button>
@@ -16,9 +29,13 @@ export default function Terms() {
         </div>
       </div>
 
+      {/* Corpo do documento legal: apenas texto (títulos, parágrafos e listas).
+          As classes "prose" cuidam da tipografia/leitura. Todo o conteúdo abaixo
+          é fixo — não há lógica, botões ou dados dinâmicos. */}
       <div className="max-w-3xl mx-auto px-4 py-8 prose prose-sm dark:prose-invert prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
         <p className="text-xs text-muted-foreground">Última atualização: 21 de fevereiro de 2026</p>
 
+        {/* Seções 1 a 4: aceitação, descrição do serviço, cadastro e conteúdo do usuário */}
         <h2>1. Aceitação dos Termos</h2>
         <p>
           Ao criar uma conta e utilizar o aplicativo <strong>Vitalis Essence</strong> ("Aplicativo"), você ("Usuário") concorda integralmente com os presentes Termos de Uso e Política de Privacidade ("Termos"). O uso do Aplicativo está condicionado à aceitação destes Termos. Caso não concorde, não utilize o Aplicativo.
@@ -48,6 +65,8 @@ export default function Terms() {
           O Usuário concede ao Vitalis Essence uma <strong>licença limitada, não exclusiva, revogável e intransferível</strong> para armazenar, processar e exibir o Conteúdo do Usuário exclusivamente para fins de prestação do serviço contratado. O Vitalis Essence <strong>não utilizará</strong> o Conteúdo do Usuário para fins publicitários, comerciais ou de marketing sem autorização expressa e prévia do Usuário.
         </p>
 
+        {/* Seção 5 e 6: bloco central da LGPD — quais dados são coletados,
+            para quê, base legal, compartilhamento, direitos e dados sensíveis */}
         <h2>5. Proteção de Dados Pessoais (LGPD)</h2>
         <p>
           Em conformidade com a <strong>Lei Geral de Proteção de Dados (Lei nº 13.709/2018 — LGPD)</strong>, informamos:
@@ -112,6 +131,8 @@ export default function Terms() {
           Reconhecemos que o Aplicativo pode tratar <strong>dados pessoais sensíveis</strong> (dados de saúde, vida sexual), conforme definido no art. 5º, II da LGPD. O tratamento desses dados ocorre <strong>exclusivamente com o consentimento específico e destacado do titular</strong> (art. 11, I da LGPD), mediante a aceitação destes Termos.
         </p>
 
+        {/* Seções 7 a 10: segurança, propriedade intelectual, isenção de
+            responsabilidade e indenização */}
         <h2>7. Segurança dos Dados</h2>
         <p>
           Empregamos medidas técnicas e administrativas adequadas para proteger os dados pessoais contra acessos não autorizados, destruição, perda, alteração ou vazamento, incluindo:
@@ -150,6 +171,8 @@ export default function Terms() {
           <li>Uso indevido do Aplicativo.</li>
         </ul>
 
+        {/* Seções 11 a 19: planos e pagamentos, conduta, menores, alterações,
+            rescisão, cookies, foro, disposições gerais e contato */}
         <h2>11. Planos e Pagamentos</h2>
         <p>
           O Aplicativo pode oferecer planos gratuitos e pagos. Para planos pagos:
@@ -208,6 +231,7 @@ export default function Terms() {
           Para dúvidas, sugestões ou exercício de direitos relativos aos seus dados pessoais, entre em contato através das configurações do Aplicativo ou pelo canal de atendimento disponibilizado.
         </p>
 
+        {/* Aviso final destacado: reforça que criar conta = aceitar os termos */}
         <div className="mt-8 p-4 rounded-xl bg-muted/50 border border-border">
           <p className="text-xs text-muted-foreground text-center">
             Ao criar uma conta no Vitalis Essence, você declara ter lido, compreendido e aceitado integralmente estes Termos de Uso e Política de Privacidade.

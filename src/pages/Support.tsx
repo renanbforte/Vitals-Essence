@@ -1,3 +1,12 @@
+// ============================================================================
+// Support  —  CENTRAL DE AJUDA / SUPORTE (rota /suporte)
+// ----------------------------------------------------------------------------
+// Tela de ajuda do app. O usuário navega pelas Perguntas Frequentes (FAQ)
+// filtradas por categoria (Geral, Saúde, Financeiro, etc.), abrindo cada
+// pergunta para ver a resposta, e pode preencher um formulário para falar com
+// o suporte por e-mail. Nada é salvo em banco: só leitura de FAQ e envio de e-mail.
+// ============================================================================
+
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -11,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 
+// Formato de cada pergunta do FAQ: a pergunta, a resposta, um ícone e a categoria à qual pertence
 interface FAQItem {
   question: string;
   answer: string;
@@ -18,6 +28,7 @@ interface FAQItem {
   category: string;
 }
 
+// Lista completa das perguntas frequentes, agrupadas por categoria (é o "conteúdo" da tela)
 const faqItems: FAQItem[] = [
   // Geral
   {
@@ -224,37 +235,45 @@ const faqItems: FAQItem[] = [
   },
 ];
 
+// Extrai a lista de categorias únicas a partir das perguntas (usadas nos botões de filtro)
 const categories = [...new Set(faqItems.map(item => item.category))];
 
 export default function Support() {
-  const navigate = useNavigate();
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>('Geral');
-  const [contactName, setContactName] = useState('');
-  const [contactEmail, setContactEmail] = useState('');
-  const [contactSubject, setContactSubject] = useState('');
-  const [contactMessage, setContactMessage] = useState('');
-  const [sending, setSending] = useState(false);
+  const navigate = useNavigate();  // permite voltar para a tela de conta
 
+  // Estados que controlam a tela
+  const [openIndex, setOpenIndex] = useState<number | null>(null);        // qual pergunta está aberta (mostrando a resposta)
+  const [activeCategory, setActiveCategory] = useState<string>('Geral');  // categoria de FAQ selecionada
+  const [contactName, setContactName] = useState('');                     // campo Nome do formulário de contato
+  const [contactEmail, setContactEmail] = useState('');                   // campo E-mail
+  const [contactSubject, setContactSubject] = useState('');               // campo Assunto
+  const [contactMessage, setContactMessage] = useState('');               // campo Mensagem
+  const [sending, setSending] = useState(false);                          // indica envio em andamento
+
+  // Mostra apenas as perguntas da categoria escolhida
   const filteredFAQ = faqItems.filter(item => item.category === activeCategory);
 
+  // Ao enviar: valida os campos obrigatórios e abre o app de e-mail do usuário já com o texto pronto
   const handleSendEmail = () => {
     if (!contactName.trim() || !contactEmail.trim() || !contactMessage.trim()) {
       toast.error('Preencha todos os campos obrigatórios');
       return;
     }
 
+    // Monta o assunto e o corpo do e-mail (encodeURIComponent deixa o texto seguro para a URL)
     const subject = encodeURIComponent(contactSubject || 'Suporte Vitalis Essence');
     const body = encodeURIComponent(
       `Nome: ${contactName}\nEmail: ${contactEmail}\n\n${contactMessage}`
     );
 
+    // Abre o programa de e-mail padrão já preenchido para o endereço de suporte
     window.open(`mailto:suporte@vitalisessence.com?subject=${subject}&body=${body}`, '_blank');
     toast.success('Redirecionando para o seu app de email...');
   };
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Cabeçalho colorido com botão de voltar, título "Suporte" e subtítulo */}
       {/* Header */}
       <div className="gradient-hub">
         <div className="container mx-auto px-5 pt-6 pb-10">
@@ -275,9 +294,11 @@ export default function Support() {
         </div>
       </div>
 
+      {/* Corpo da página (cartão branco arredondado que sobe sobre o cabeçalho) */}
       <div className="rounded-t-[2rem] -mt-6 bg-background relative z-10">
         <div className="container mx-auto px-5 pt-8 pb-10 space-y-6">
 
+          {/* SEÇÃO 1 — Perguntas Frequentes (FAQ) */}
           {/* FAQ Section */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -289,6 +310,7 @@ export default function Support() {
               <h2 className="font-bold text-foreground text-lg">Perguntas Frequentes</h2>
             </div>
 
+            {/* Botões-pílula de categoria: clicar filtra as perguntas e fecha a que estava aberta */}
             {/* Category pills */}
             <div className="flex flex-wrap gap-2 mb-5">
               {categories.map(cat => (
@@ -306,11 +328,12 @@ export default function Support() {
               ))}
             </div>
 
+            {/* Lista das perguntas da categoria escolhida (cada uma abre/fecha ao clicar) */}
             {/* FAQ Items */}
             <div className="space-y-2">
               {filteredFAQ.map((item, idx) => {
-                const globalIdx = faqItems.indexOf(item);
-                const isOpen = openIndex === globalIdx;
+                const globalIdx = faqItems.indexOf(item);  // posição na lista geral, usada como identificador
+                const isOpen = openIndex === globalIdx;    // esta pergunta está aberta?
                 return (
                   <motion.div
                     key={globalIdx}
@@ -319,6 +342,7 @@ export default function Support() {
                     transition={{ delay: idx * 0.03 }}
                     className="rounded-2xl bg-card/80 backdrop-blur-xl border border-border/40 shadow-sm overflow-hidden"
                   >
+                    {/* Linha da pergunta: clicar alterna entre abrir e fechar a resposta */}
                     <button
                       onClick={() => setOpenIndex(isOpen ? null : globalIdx)}
                       className="w-full flex items-center gap-3 p-4 text-left"
@@ -327,11 +351,13 @@ export default function Support() {
                       <span className="text-sm font-medium text-foreground flex-1">
                         {item.question}
                       </span>
+                      {/* Seta para cima quando aberta, para baixo quando fechada */}
                       {isOpen
                         ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
                         : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
                       }
                     </button>
+                    {/* Resposta: só aparece quando a pergunta está aberta */}
                     {isOpen && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
@@ -349,6 +375,7 @@ export default function Support() {
             </div>
           </motion.div>
 
+          {/* SEÇÃO 2 — Formulário "Fale com o Suporte" (envia por e-mail) */}
           {/* Contact Section */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
@@ -364,6 +391,7 @@ export default function Support() {
               Não encontrou sua resposta? Envie uma mensagem e responderemos o mais breve possível.
             </p>
 
+            {/* Campos do formulário: Nome e E-mail são obrigatórios (marcados com *) */}
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-muted-foreground font-medium">Nome *</label>
@@ -404,6 +432,7 @@ export default function Support() {
                   className="resize-none"
                 />
               </div>
+              {/* Botão de enviar: fica desabilitado até Nome, E-mail e Mensagem estarem preenchidos */}
               <Button
                 onClick={handleSendEmail}
                 disabled={!contactName.trim() || !contactEmail.trim() || !contactMessage.trim()}
@@ -415,6 +444,7 @@ export default function Support() {
             </div>
           </motion.div>
 
+          {/* Rodapé com e-mail de contato e prazo de resposta */}
           {/* Footer info */}
           <motion.div
             initial={{ opacity: 0 }}

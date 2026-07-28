@@ -1,3 +1,12 @@
+// ============================================================================
+// Finance  —  TELA DO MÓDULO FINANCEIRO (rota /financeiro)
+// ----------------------------------------------------------------------------
+// Centro financeiro do usuário. Mostra saldo real, reserva de emergência e
+// resumo do mês; e organiza tudo em 3 abas: "Visão Geral" (apresentação dos
+// recursos), "Fluxo" (entradas/saídas do mês) e "Investir" (patrimônio).
+// ============================================================================
+
+// Importações do React (ferramentas para guardar estados e reagir a mudanças)
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowUpDown, Shield, TrendingUp, Target, Compass, BarChart3, Plus, Settings2 } from 'lucide-react';
@@ -23,16 +32,21 @@ import { supabase } from '@/integrations/supabase/client';
 import { endOfMonth, format } from 'date-fns';
 import type { FinancialTransaction } from '@/hooks/useFinancialFlow';
 
+// Configurações de animação: "stagger" faz os itens de uma lista aparecerem
+// em sequência (um logo depois do outro), criando um efeito em cascata.
 const stagger = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
+// "fadeUp": cada item surge subindo suavemente (de baixo para cima) enquanto aparece.
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 20 } },
 };
 
+// Cartão de apresentação usado na aba "Visão Geral": mostra um ícone, um título
+// e um texto explicando um recurso do módulo (ainda sem dados, só descritivo).
 function PlaceholderBlock({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
   return (
     <Card className="border-dashed border-2 border-[hsl(var(--finance))]/20 bg-[hsl(var(--finance-light))]">
@@ -51,48 +65,58 @@ function PlaceholderBlock({ icon: Icon, title, description }: { icon: React.Elem
   );
 }
 
+// Formata um número como moeda brasileira (ex.: 1500 vira "R$ 1.500,00").
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
+// Componente principal da tela Financeiro.
 export default function Finance() {
-  const [activeTab, setActiveTab] = useState('flow');
-  const [selectedMonth, setSelectedMonth] = useState(new Date());
-  const [formOpen, setFormOpen] = useState(false);
-  const [formType, setFormType] = useState<'income' | 'expense'>('expense');
-  const [costCenterManagerOpen, setCostCenterManagerOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<import('@/hooks/useFinancialFlow').FinancialTransaction | null>(null);
+  // --- ESTADOS (memória da tela: valores que mudam com a interação) ---
+  const [activeTab, setActiveTab] = useState('flow');            // aba ativa (começa em "Fluxo")
+  const [selectedMonth, setSelectedMonth] = useState(new Date()); // mês selecionado para ver os lançamentos
+  const [formOpen, setFormOpen] = useState(false);               // se o formulário de lançamento está aberto
+  const [formType, setFormType] = useState<'income' | 'expense'>('expense'); // tipo do lançamento: entrada ou saída
+  const [costCenterManagerOpen, setCostCenterManagerOpen] = useState(false);  // se o gerenciador de centros de custo está aberto
+  const [editingTransaction, setEditingTransaction] = useState<import('@/hooks/useFinancialFlow').FinancialTransaction | null>(null); // lançamento em edição (ou nenhum)
 
-  const { user } = useAuth();
+  // --- DADOS (vindos do Supabase, através dos "hooks") ---
+  const { user } = useAuth(); // usuário logado
+  // Fluxo financeiro do mês: lista de lançamentos, centros de custo, bancos salvos e as funções para criar/editar/apagar.
   const { transactions, costCenters, savedBanks, loading, addTransaction, updateTransaction, deleteTransaction, togglePaid, addCostCenter, updateCostCenter, deleteCostCenter, uploadAttachment, searchAllTransactions } = useFinancialFlow(selectedMonth);
-  const { totalInvested } = useInvestments();
-  const { bankBalances, upsertBankBalance } = useBankBalances();
-  const { manualReserve, autoReserve, totalReserve, reservaCenterIds, updateManualReserve } = useFinancialReserve(transactions, costCenters);
+  const { totalInvested } = useInvestments();               // total investido (patrimônio)
+  const { bankBalances, upsertBankBalance } = useBankBalances(); // saldos por banco
+  const { manualReserve, autoReserve, totalReserve, reservaCenterIds, updateManualReserve } = useFinancialReserve(transactions, costCenters); // reserva de emergência
 
-  // Identify the "Investimentos" cost center to separate its transactions
+  // Descobre quais centros de custo são "Investimentos" para separá-los do fluxo comum
   const investmentCostCenterIds = useMemo(
     () => costCenters.filter(cc => cc.name === 'Investimentos').map(cc => cc.id),
     [costCenters]
   );
+  // Lançamentos do "Fluxo": tudo que NÃO é investimento (entradas/saídas do dia a dia)
   const flowTransactions = useMemo(
     () => transactions.filter(t => !t.cost_center_id || !investmentCostCenterIds.includes(t.cost_center_id)),
     [transactions, investmentCostCenterIds]
   );
+  // Lançamentos de investimento (aparecem na aba "Investir")
   const investTransactions = useMemo(
     () => transactions.filter(t => t.cost_center_id && investmentCostCenterIds.includes(t.cost_center_id)),
     [transactions, investmentCostCenterIds]
   );
+  // Resumo do mês: soma as entradas, soma as saídas e calcula o saldo (entradas - saídas)
   const flowSummary = useMemo(() => {
     const income = flowTransactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
     const expense = flowTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
     return { income, expense, balance: income - expense };
   }, [flowTransactions]);
 
-  // Fetch ALL paid transactions up to end of selected month for cumulative real balance
+  // Busca TODOS os lançamentos já pagos até o fim do mês escolhido, para calcular o saldo real acumulado
   const [allPaidTransactions, setAllPaidTransactions] = useState<FinancialTransaction[]>([]);
   const fetchAllPaid = useCallback(async () => {
     if (!user) return;
+    // Última data do mês selecionado (para pegar tudo que foi pago até lá)
     const monthEnd = format(endOfMonth(selectedMonth), 'yyyy-MM-dd');
+    // Consulta ao banco: lançamentos pagos deste usuário, com data até o fim do mês
     const { data } = await supabase
       .from('financial_transactions')
       .select('*')
@@ -105,15 +129,17 @@ export default function Finance() {
     }
   }, [user, selectedMonth]);
 
+  // Ao abrir a tela ou trocar de mês, refaz a busca dos lançamentos pagos
   useEffect(() => {
     fetchAllPaid();
   }, [fetchAllPaid]);
 
-  // Refetch all paid when transactions change
+  // Sempre que os lançamentos do mês mudarem, atualiza também o saldo real
   useEffect(() => {
     if (!loading) fetchAllPaid();
   }, [transactions, loading]);
 
+  // Cria um novo lançamento e, se o usuário anexou arquivos (comprovantes), envia cada um
   const handleAddTransaction = async (input: import('@/hooks/useFinancialFlow').TransactionInput, files?: File[]) => {
     const txnId = await addTransaction(input);
     if (txnId && files && files.length > 0) {
@@ -123,24 +149,28 @@ export default function Finance() {
     }
   };
 
+  // Abre o formulário para criar um novo lançamento (entrada ou saída)
   const openForm = (type: 'income' | 'expense') => {
     setEditingTransaction(null);
     setFormType(type);
     setFormOpen(true);
   };
 
+  // Abre o formulário já preenchido para editar um lançamento existente
   const handleEdit = (t: import('@/hooks/useFinancialFlow').FinancialTransaction) => {
     setEditingTransaction(t);
     setFormType(t.type);
     setFormOpen(true);
   };
 
+  // --- APARÊNCIA DA TELA (o que o usuário vê) ---
   return (
     <div className="min-h-screen bg-background">
+      {/* Cabeçalho da tela, com título "Financeiro" e botão de voltar */}
       <Header title="Financeiro" showBack gradientClass="gradient-finance" />
 
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-3xl">
-        {/* Real Balance */}
+        {/* Cartão de Saldo Real: dinheiro efetivamente disponível nas contas */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <RealBalanceCard
             transactions={allPaidTransactions}
@@ -151,7 +181,7 @@ export default function Finance() {
           />
         </motion.div>
 
-        {/* Reserve */}
+        {/* Cartão de Reserva: reserva de emergência (parte manual + parte automática) */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <ReserveCard
             manualReserve={manualReserve}
@@ -160,6 +190,7 @@ export default function Finance() {
             onUpdateManual={updateManualReserve}
             bankBalances={bankBalances}
             savedBanks={savedBanks}
+            // Ao guardar dinheiro na reserva: cria uma "saída" (PIX) e marca como paga
             onCreateExpense={async (amount, bankName) => {
               const txId = await addTransaction({
                 type: 'expense',
@@ -175,6 +206,7 @@ export default function Finance() {
                 await supabase.from('financial_transactions').update({ paid: true }).eq('id', txId);
               }
             }}
+            // Ao retirar da reserva: cria uma "entrada" (PIX) e marca como paga
             onCreateIncome={async (amount, bankName) => {
               const txId = await addTransaction({
                 type: 'income',
@@ -193,12 +225,13 @@ export default function Finance() {
           />
         </motion.div>
 
-        {/* Quick Stats */}
+        {/* Estatísticas rápidas: dois cartões lado a lado (Saldo do Mês e Patrimônio) */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="grid grid-cols-2 gap-3"
         >
+          {/* Cartão 1: saldo do mês (verde se positivo, vermelho se negativo) */}
           <Card className="bg-[hsl(var(--finance-light))] border-[hsl(var(--finance))]/20">
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground font-medium">Saldo do Mês</p>
@@ -210,6 +243,7 @@ export default function Finance() {
               )}
             </CardContent>
           </Card>
+          {/* Cartão 2: patrimônio (total investido); mostra "—" se não houver investimentos */}
           <Card className="bg-[hsl(var(--finance-light))] border-[hsl(var(--finance))]/20">
             <CardContent className="p-4">
               <p className="text-xs text-muted-foreground font-medium">Patrimônio</p>
@@ -223,7 +257,9 @@ export default function Finance() {
           </Card>
         </motion.div>
 
+        {/* Sistema de ABAS: alterna entre "Visão Geral", "Fluxo" e "Investir" */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          {/* Barra com os três botões de aba */}
           <TabsList className="grid w-full grid-cols-3 h-14 rounded-2xl bg-card border border-border p-1.5 shadow-sm">
             <TabsTrigger
               value="overview"
@@ -249,7 +285,7 @@ export default function Finance() {
           </TabsList>
 
           <AnimatePresence mode="wait">
-            {/* Overview Tab */}
+            {/* CONTEÚDO DA ABA "VISÃO GERAL": cartões que apresentam os recursos do módulo */}
             <TabsContent value="overview" className="mt-6" key="overview">
               <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
                 <motion.div variants={fadeUp}>
@@ -277,18 +313,20 @@ export default function Finance() {
               </motion.div>
             </TabsContent>
 
-            {/* Flow Tab */}
+            {/* CONTEÚDO DA ABA "FLUXO": entradas e saídas do mês selecionado */}
             <TabsContent value="flow" className="mt-6" key="flow">
               <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
+                {/* Seletor de mês (setas para navegar entre meses) */}
                 <motion.div variants={fadeUp}>
                   <MonthSelector selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
                 </motion.div>
 
+                {/* Resumo do mês: total de entradas, saídas e saldo */}
                 <motion.div variants={fadeUp}>
                   <FlowSummary income={flowSummary.income} expense={flowSummary.expense} balance={flowSummary.balance} />
                 </motion.div>
 
-                {/* Action buttons */}
+                {/* Botões de ação: registrar Entrada (verde) ou Saída (vermelho) */}
                 <motion.div variants={fadeUp} className="grid grid-cols-2 gap-2">
                   <Button
                     onClick={() => openForm('income')}
@@ -308,7 +346,7 @@ export default function Finance() {
                   </Button>
                 </motion.div>
 
-                {/* Manage cost centers */}
+                {/* Link para abrir o gerenciador de centros de custo (categorias de gasto) */}
                 <motion.div variants={fadeUp}>
                   <button
                     onClick={() => setCostCenterManagerOpen(true)}
@@ -319,6 +357,7 @@ export default function Finance() {
                   </button>
                 </motion.div>
 
+                {/* Lista de lançamentos do mês (enquanto carrega, mostra "esqueletos" cinzas) */}
                 <motion.div variants={fadeUp}>
                   {loading ? (
                     <div className="space-y-3">
@@ -332,7 +371,7 @@ export default function Finance() {
               </motion.div>
             </TabsContent>
 
-            {/* Invest Tab */}
+            {/* CONTEÚDO DA ABA "INVESTIR": patrimônio investido e aportes do mês */}
             <TabsContent value="invest" className="mt-6" key="invest">
               <InvestTab monthlyIncome={flowSummary.income} monthlyExpenses={flowSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} />
             </TabsContent>
@@ -340,6 +379,7 @@ export default function Finance() {
         </Tabs>
       </main>
 
+      {/* Formulário (janela) para criar ou editar um lançamento */}
       <TransactionForm
         open={formOpen}
         onOpenChange={(open) => { setFormOpen(open); if (!open) setEditingTransaction(null); }}
@@ -352,6 +392,7 @@ export default function Finance() {
         savedBanks={savedBanks}
       />
 
+      {/* Janela para gerenciar centros de custo (criar, renomear e apagar categorias) */}
       <CostCenterManager
         open={costCenterManagerOpen}
         onOpenChange={setCostCenterManagerOpen}

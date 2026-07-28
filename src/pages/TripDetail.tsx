@@ -1,13 +1,27 @@
+// ============================================================================
+// TripDetail  —  DETALHES DE UMA VIAGEM (rota /viagens/:tripId)
+// ----------------------------------------------------------------------------
+// Tela que abre uma viagem específica. No topo mostra a capa e o resumo; abaixo
+// há abas: Itens (destinos, voos, hospedagens, transporte, agenda, alimentação,
+// documentos), Timeline, Custos, Checklist e Dicas. O usuário pode editar a
+// viagem, trocar a foto de capa, excluir a viagem e gerenciar cada item.
+// ============================================================================
+
+// Ferramentas do React e leitura do id da viagem que está na URL.
 import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+// Hooks que buscam/gravam a viagem e seus itens no banco (Supabase).
 import { useTrips } from '@/hooks/useTrips';
 import { useTripItems } from '@/hooks/useTripItems';
+// Lista de status e os "tipos" (formato dos dados) de cada categoria de item.
 import { TRIP_STATUSES, type TripDestination, type TripFlight, type TripAccommodation, type TripTransport, type TripEvent, type TripDocument, type TripExpense, type TripMeal, type TripSplitParticipant } from '@/types/trips';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 
 /** Parse ISO/timestamp string preserving wall-clock time (no UTC→local shift) */
+// Converte texto de data/hora em data local mantendo a hora exata digitada
+// (evita que o fuso horário mude o horário mostrado, ex.: em voos).
 function parseLocal(dateStr: string): Date {
   const s = dateStr.substring(0, 16);
   const [datePart, timePart] = s.split('T');
@@ -37,6 +51,7 @@ import TripChecklist from '@/components/travel/TripChecklist';
 import TripRecommendations from '@/components/travel/TripRecommendations';
 import { toast } from 'sonner';
 
+// Imagens ilustrativas de cada seção de itens e a capa padrão da viagem.
 import imgDestinos from '@/assets/trip-destinos.png';
 import imgVoos from '@/assets/trip-voos.png';
 import imgHospedagem from '@/assets/trip-hospedagem.png';
@@ -47,12 +62,16 @@ import imgDocumentos from '@/assets/trip-documentos.png';
 import heroViagens from '@/assets/hero-viagens.png';
 
 export default function TripDetail() {
+  // Pega o id da viagem que está na URL (ex.: /viagens/123).
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  // Ações de atualizar/excluir viagem e a viagem atual (encontrada pelo id).
   const { trips, updateTrip, deleteTrip } = useTrips();
   const trip = trips.find((t: any) => t.id === tripId);
 
+  // Cada linha abaixo carrega uma categoria de itens da viagem do banco.
+  // Cada uma já traz a lista (items) e as ações de criar/editar/remover.
   const destinations = useTripItems<TripDestination>('trip_destinations', tripId!);
   const flights = useTripItems<TripFlight>('trip_flights', tripId!);
   const accommodations = useTripItems<TripAccommodation>('trip_accommodations', tripId!);
@@ -63,13 +82,18 @@ export default function TripDetail() {
   const meals = useTripItems<TripMeal>('trip_meals', tripId!);
   const splitParticipants = useTripItems<TripSplitParticipant>('trip_split_participants', tripId!);
 
+  // editTrip: se o formulário de editar viagem está aberto.
+  // tripForm: dados digitados nesse formulário.
+  // coverUploading: se uma nova foto de capa está sendo enviada.
+  // coverUrl: link temporário da foto de capa atual.
   const [editTrip, setEditTrip] = useState(false);
   const [tripForm, setTripForm] = useState<any>({});
   const [coverUploading, setCoverUploading] = useState(false);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
-  // Fetch trip member profiles
+  // Guarda os nomes das pessoas que participam da viagem (dono + membros aceitos).
   const [tripMemberProfiles, setTripMemberProfiles] = useState<{ user_id: string; name: string }[]>([]);
+  // Busca no banco os participantes da viagem e seus nomes para exibir depois.
   useEffect(() => {
     if (!tripId) return;
     const fetchProfiles = async () => {
@@ -86,7 +110,8 @@ export default function TripDetail() {
     fetchProfiles();
   }, [tripId]);
 
-  // Resolve cover image URL (bucket is private, use signed URL)
+  // Gera o link temporário da foto de capa (o armazenamento é privado, então
+  // é preciso um link assinado válido por 1 hora para conseguir exibir a imagem).
   useEffect(() => {
     if (!trip?.cover_image) { setCoverUrl(null); return; }
     supabase.storage.from('trip-files').createSignedUrl(trip.cover_image, 3600).then(({ data }) => {
@@ -95,7 +120,8 @@ export default function TripDetail() {
   }, [trip?.cover_image]);
 
 
-  // Build unified participant list for paid_by selectors
+  // Monta uma lista única de "quem pagou" para os seletores de despesa,
+  // juntando os membros da viagem com participantes externos (só para dividir contas).
   const paidByParticipants = useMemo(() => {
     const list: { id: string; label: string; type: 'member' | 'external'; userId?: string; externalId?: string }[] = [];
     tripMemberProfiles.forEach(m => {
@@ -107,19 +133,26 @@ export default function TripDetail() {
     return list;
   }, [tripMemberProfiles, splitParticipants.items]);
 
+  // isOwner: se o usuário logado é o dono da viagem (pode excluí-la).
   const isOwner = trip?.user_id === user?.id;
+  // status: rótulo e cor do estado atual da viagem.
   const status = TRIP_STATUSES.find(s => s.value === trip?.status) || TRIP_STATUSES[0];
 
+  // Calcula o custo de um item: se for "por unidade", multiplica valor x quantidade.
   const getTotal = (e: any) => {
     const amount = Number(e.amount || e.cost) || 0;
     return e.cost_mode === 'unit' ? amount * (Number(e.quantity) || 1) : amount;
   };
+  // Soma o custo total da viagem: despesas avulsas + custos de voos, hospedagens,
+  // transporte, eventos e alimentação.
   const totalSpent = useMemo(() => {
     const expTotal = expenses.items.reduce((s, e) => s + getTotal(e), 0);
     const itemTotal = [...flights.items, ...accommodations.items, ...transport.items, ...events.items, ...meals.items].reduce((s, i) => s + getTotal(i), 0);
     return expTotal + itemTotal;
   }, [expenses.items, flights.items, accommodations.items, transport.items, events.items, meals.items]);
 
+  // Envia a nova foto de capa: faz upload para o armazenamento, salva o caminho
+  // na viagem e avisa com um "toast" de sucesso ou erro.
   const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || !trip) return;
@@ -139,6 +172,8 @@ export default function TripDetail() {
     }
   };
 
+  // Sem id na URL não há o que mostrar. Enquanto a viagem não foi encontrada
+  // (ainda carregando), mostra uma tela simples de "Carregando" com botão voltar.
   if (!tripId) return null;
   if (!trip) return (
     <div className="min-h-screen bg-background flex items-center justify-center">
@@ -149,6 +184,7 @@ export default function TripDetail() {
     </div>
   );
 
+  // Abre o formulário de edição já preenchido com os dados atuais da viagem.
   const openEditTrip = () => {
     setTripForm({
       name: trip.name, main_destination: trip.main_destination || '',
@@ -158,22 +194,25 @@ export default function TripDetail() {
     setEditTrip(true);
   };
 
+  // Salva as alterações da viagem e fecha o formulário.
   const saveTrip = () => {
     updateTrip.mutate({ id: trip.id, ...tripForm });
     setEditTrip(false);
   };
 
+  // Exclui a viagem (e todos os itens) após confirmação, voltando para a lista.
   const handleDelete = () => {
     if (confirm('Excluir esta viagem e todos os itens?')) {
       deleteTrip.mutate(trip.id, { onSuccess: () => navigate('/viagens') });
     }
   };
 
+  // Imagem de fundo do topo: a capa da viagem, ou a imagem padrão se não houver.
   const bgImage = coverUrl || heroViagens;
 
   return (
     <div className="min-h-screen bg-background pb-8">
-      {/* Hero Header with cover */}
+      {/* Topo com a foto de capa, botões de ação e o resumo da viagem por cima */}
       <div className="relative overflow-hidden" style={{ minHeight: 180 }}>
         <img src={bgImage} alt={trip.name} className="absolute inset-0 w-full h-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/40 to-black/70" />
@@ -182,8 +221,9 @@ export default function TripDetail() {
             <Button variant="ghost" size="icon" onClick={() => navigate('/viagens')} className="text-white/80 hover:text-white hover:bg-white/10">
               <ArrowLeft className="w-5 h-5" />
             </Button>
+            {/* Botões do topo (direita): trocar capa, editar e (só o dono) excluir */}
             <div className="flex gap-2">
-              {/* Cover upload button */}
+              {/* Trocar a foto de capa: o clique abre o seletor de arquivo escondido */}
               <label className="cursor-pointer">
                 <input type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} disabled={coverUploading} />
                 <Button size="sm" variant="ghost" className="text-white/80 hover:text-white hover:bg-white/10 pointer-events-none" asChild>
@@ -192,9 +232,11 @@ export default function TripDetail() {
                   </span>
                 </Button>
               </label>
+              {/* Editar dados da viagem */}
               <Button size="sm" variant="ghost" onClick={openEditTrip} className="text-white/80 hover:text-white hover:bg-white/10">
                 <Edit2 className="w-4 h-4" />
               </Button>
+              {/* Excluir a viagem — só aparece para o dono */}
               {isOwner && (
                 <Button size="sm" variant="ghost" onClick={handleDelete} className="text-white/80 hover:text-red-300 hover:bg-white/10">
                   <Trash2 className="w-4 h-4" />
@@ -202,6 +244,7 @@ export default function TripDetail() {
               )}
             </div>
           </div>
+          {/* Resumo por cima da capa: nome, status, destino, datas e custo total */}
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
             <div className="flex items-center gap-2 mb-1">
               <h1 className="text-white text-xl font-bold uppercase drop-shadow-lg">{trip.name}</h1>
@@ -224,8 +267,10 @@ export default function TripDetail() {
         </div>
       </div>
 
+      {/* Abas da viagem: Itens, Timeline, Custos, Checklist e Dicas */}
       <div className="container mx-auto px-4 py-6 space-y-4">
         <Tabs defaultValue="items" className="w-full">
+          {/* Barra que troca entre as abas */}
           <TabsList className="w-full grid grid-cols-5 mb-4">
             <TabsTrigger value="items" className="text-xs">Itens</TabsTrigger>
             <TabsTrigger value="timeline" className="text-xs">Timeline</TabsTrigger>
@@ -234,11 +279,14 @@ export default function TripDetail() {
             <TabsTrigger value="recommendations" className="text-xs">✨ Dicas</TabsTrigger>
           </TabsList>
 
+          {/* ABA ITENS: cartão de compartilhamento + os blocos de cada categoria.
+              Cada <TripItemBlock> é uma seção que lista itens e permite adicionar,
+              editar e apagar, com os campos definidos em "fields". */}
           <TabsContent value="items" className="space-y-3 mt-0">
-            {/* Sharing */}
+            {/* Compartilhar a viagem com outras pessoas (convidar membros) */}
             <TripSharingCard tripId={tripId!} isOwner={isOwner} />
 
-            {/* Destinations */}
+            {/* Destinos: os lugares que serão visitados */}
             <TripItemBlock
               title="Destinos" sectionImage={imgDestinos} color="sky"
               tripId={tripId!} parentType="destination"
@@ -262,7 +310,7 @@ export default function TripDetail() {
               )}
             />
 
-            {/* Flights */}
+            {/* Voos: ida e volta, companhia, horários, localizador e custo */}
             <TripItemBlock
               title="Voos" sectionImage={imgVoos} color="blue"
               tripId={tripId!} parentType="flight"
@@ -312,7 +360,7 @@ export default function TripDetail() {
               )}
             />
 
-            {/* Accommodations */}
+            {/* Hospedagens: hotéis/estadias com check-in, check-out e reserva */}
             <TripItemBlock
               title="Hospedagens" sectionImage={imgHospedagem} color="amber"
               tripId={tripId!} parentType="accommodation"
@@ -345,7 +393,7 @@ export default function TripDetail() {
               )}
             />
 
-            {/* Transport */}
+            {/* Transporte local: carros, transfers, trem, metrô, Uber, etc. */}
             <TripItemBlock
               title="Transporte Local" sectionImage={imgTransporte} color="emerald"
               tripId={tripId!} parentType="transport"
@@ -382,7 +430,7 @@ export default function TripDetail() {
               )}
             />
 
-            {/* Events / Agenda */}
+            {/* Programação/Agenda: passeios e compromissos, com prioridade e horário */}
             <TripItemBlock
               title="Programação / Agenda" sectionImage={imgAgenda} color="violet"
               tripId={tripId!} parentType="event"
@@ -417,7 +465,7 @@ export default function TripDetail() {
               )}
             />
 
-            {/* Meals / Food */}
+            {/* Alimentação/Mercado: refeições e compras, com data e custo */}
             <TripItemBlock
               title="Alimentação / Mercado" sectionImage={imgAlimentacao} color="rose"
               tripId={tripId!} parentType="meal"
@@ -446,7 +494,7 @@ export default function TripDetail() {
               )}
             />
 
-            {/* Documents */}
+            {/* Documentação: passaporte, visto, seguro, etc., com validade e anexo */}
             <TripItemBlock
               title="Documentação" sectionImage={imgDocumentos} color="orange"
               tripId={tripId!} parentType="document"
@@ -489,6 +537,7 @@ export default function TripDetail() {
             />
           </TabsContent>
 
+          {/* ABA TIMELINE: mostra voos, hospedagens, eventos e transporte em ordem de tempo */}
           <TabsContent value="timeline" className="mt-0">
             <TripTimeline
               flights={flights.items}
@@ -498,10 +547,13 @@ export default function TripDetail() {
             />
           </TabsContent>
 
+          {/* ABA CHECKLIST: lista de tarefas/itens a levar ou providenciar */}
           <TabsContent value="checklist" className="mt-0">
             <TripChecklist tripId={tripId!} />
           </TabsContent>
 
+          {/* ABA DICAS: sugestões (restaurantes, passeios) que podem ser adicionadas
+              direto à viagem como refeição ou evento */}
           <TabsContent value="recommendations" className="mt-0">
             <TripRecommendations
               tripId={tripId!}
@@ -515,7 +567,10 @@ export default function TripDetail() {
             />
           </TabsContent>
 
+          {/* ABA CUSTOS: resumo de gastos vs. orçamento e divisão de contas entre pessoas */}
           <TabsContent value="costs" className="mt-0 space-y-4">
+            {/* Resumo de despesas: soma tudo, compara com o orçamento e permite
+                marcar itens como pagos */}
             <TripExpenseSummary
               expenses={expenses.items}
               flights={flights.items}
@@ -541,6 +596,7 @@ export default function TripDetail() {
                 if (hook) hook.update.mutate({ id, paid });
               }}
             />
+            {/* Divisão de contas: calcula quanto cada participante deve/recebe */}
             <TripExpenseSplit
               tripId={tripId!}
               expenses={expenses.items}
@@ -556,7 +612,7 @@ export default function TripDetail() {
         </Tabs>
       </div>
 
-      {/* Edit trip dialog */}
+      {/* Janela (modal) de editar viagem: nome, destino, datas, orçamento, status e notas */}
       <Dialog open={editTrip} onOpenChange={setEditTrip}>
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Editar Viagem</DialogTitle></DialogHeader>
