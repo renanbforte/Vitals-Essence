@@ -1,0 +1,1 @@
+ALTER TABLE public.investments ADD COLUMN operating_capital numeric DEFAULT 0 NOT NULL;

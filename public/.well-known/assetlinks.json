@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "br.com.vitalisessence.twa",
+    "sha256_cert_fingerprints": ["AE:D5:85:83:48:35:61:7C:BC:98:9B:2F:57:36:9A:F1:02:0E:9F:18:20:11:6A:1E:35:4A:6C:30:7E:3D:3C:06"]
+  }
+}]

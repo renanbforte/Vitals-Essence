@@ -1,0 +1,1 @@
+ALTER TABLE public.trip_flights ADD COLUMN direction text DEFAULT 'outbound';

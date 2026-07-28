@@ -1,0 +1,290 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design System - Operação Nutrição - Premium Purple */
+
+@layer base {
+  :root {
+    --background: 240 20% 97%;
+    --foreground: 240 24% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 24% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 24% 10%;
+
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 280 60% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 15% 94%;
+    --muted-foreground: 240 10% 46%;
+
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 12% 90%;
+    --input: 240 12% 90%;
+    --ring: 262 83% 58%;
+
+    --radius: 1rem;
+
+    /* Feature colors — violet progression (light → dark) */
+    --water: 270 70% 72%;
+    --water-light: 270 60% 96%;
+    --water-dark: 270 70% 62%;
+    
+    --meals: 268 75% 64%;
+    --meals-light: 268 65% 95%;
+    --meals-dark: 268 75% 54%;
+    
+    --workout: 265 80% 56%;
+    --workout-light: 265 70% 94%;
+    --workout-dark: 265 80% 46%;
+
+    --weight: 262 83% 48%;
+    --weight-light: 262 73% 93%;
+    --weight-dark: 262 83% 38%;
+
+    --medications: 260 85% 42%;
+    --medications-light: 260 75% 93%;
+    --medications-dark: 260 85% 32%;
+
+    --activities: 258 88% 34%;
+    --activities-light: 258 78% 92%;
+    --activities-dark: 258 88% 24%;
+
+    /* Tasks tokens */
+    --tasks-gradient-start: 330 80% 55%;
+    --tasks-gradient-end: 350 75% 42%;
+
+    /* Financial tokens */
+    --finance: 152 68% 42%;
+    --finance-light: 152 55% 95%;
+    --finance-dark: 152 68% 32%;
+    --finance-gradient-start: 152 68% 42%;
+    --finance-gradient-end: 168 60% 34%;
+
+    /* Hub gradient */
+    --hub-gradient-start: 220 80% 50%;
+    --hub-gradient-end: 240 70% 40%;
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5% 26%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 15% 94%;
+    --sidebar-accent-foreground: 240 24% 10%;
+    --sidebar-border: 240 12% 90%;
+    --sidebar-ring: 262 83% 58%;
+  }
+
+  .dark {
+    --background: 240 20% 6%;
+    --foreground: 240 10% 96%;
+
+    --card: 240 20% 9%;
+    --card-foreground: 240 10% 96%;
+
+    --popover: 240 20% 9%;
+    --popover-foreground: 240 10% 96%;
+
+    --primary: 262 83% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 280 60% 58%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 15% 16%;
+    --muted-foreground: 240 10% 60%;
+
+    --accent: 262 83% 65%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 240 10% 96%;
+
+    --border: 240 15% 16%;
+    --input: 240 15% 16%;
+    --ring: 262 83% 65%;
+
+    --water: 270 70% 78%;
+    --water-light: 270 50% 14%;
+    --water-dark: 270 70% 68%;
+    
+    --meals: 268 75% 70%;
+    --meals-light: 268 50% 14%;
+    --meals-dark: 268 75% 60%;
+
+    --workout: 265 80% 62%;
+    --workout-light: 265 50% 14%;
+    --workout-dark: 265 80% 52%;
+    
+    --weight: 262 83% 55%;
+    --weight-light: 262 50% 14%;
+    --weight-dark: 262 83% 45%;
+
+    --medications: 260 85% 48%;
+    --medications-light: 260 50% 14%;
+    --medications-dark: 260 85% 38%;
+
+    --activities: 258 88% 40%;
+    --activities-light: 258 50% 14%;
+    --activities-dark: 258 88% 30%;
+
+    --tasks-gradient-start: 330 80% 60%;
+    --tasks-gradient-end: 350 75% 48%;
+
+    --finance: 152 68% 50%;
+    --finance-light: 152 40% 14%;
+    --finance-dark: 152 68% 40%;
+    --finance-gradient-start: 152 68% 50%;
+    --finance-gradient-end: 168 60% 42%;
+
+    --hub-gradient-start: 220 80% 55%;
+    --hub-gradient-end: 240 70% 45%;
+
+    --sidebar-background: 240 20% 9%;
+    --sidebar-foreground: 240 10% 96%;
+    --sidebar-primary: 262 83% 65%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 15% 16%;
+    --sidebar-accent-foreground: 240 10% 96%;
+    --sidebar-border: 240 15% 16%;
+    --sidebar-ring: 262 83% 65%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-hub {
+    background: linear-gradient(135deg, hsl(var(--hub-gradient-start)), hsl(var(--hub-gradient-end)));
+  }
+
+  .gradient-water {
+    @apply bg-gradient-to-br from-[hsl(var(--water))] to-[hsl(var(--water-dark))];
+  }
+  
+  .gradient-meals {
+    @apply bg-gradient-to-br from-[hsl(var(--meals))] to-[hsl(var(--meals-dark))];
+  }
+  
+  .gradient-weight {
+    @apply bg-gradient-to-br from-[hsl(var(--accent))] to-[hsl(var(--weight-dark))];
+  }
+
+  .gradient-workout {
+    @apply bg-gradient-to-br from-[hsl(var(--workout))] to-[hsl(var(--workout-dark))];
+  }
+
+  .gradient-medications {
+    @apply bg-gradient-to-br from-[hsl(var(--medications))] to-[hsl(var(--medications-dark))];
+  }
+
+  .gradient-activities {
+    @apply bg-gradient-to-br from-[hsl(var(--activities))] to-[hsl(var(--activities-dark))];
+  }
+
+  .gradient-finance {
+    background: linear-gradient(135deg, hsl(var(--finance-gradient-start)), hsl(var(--finance-gradient-end)));
+  }
+
+  .gradient-health {
+    background: linear-gradient(135deg, hsl(262 83% 52%), hsl(280 72% 40%));
+  }
+
+  .gradient-shopping {
+    background: linear-gradient(135deg, hsl(25 95% 53%), hsl(38 92% 50%));
+  }
+
+  .gradient-tasks {
+    background: linear-gradient(135deg, hsl(var(--tasks-gradient-start)), hsl(var(--tasks-gradient-end)));
+  }
+
+  .card-water {
+    @apply bg-[hsl(var(--water-light))] border-[hsl(var(--water))]/20;
+  }
+
+  .card-meals {
+    @apply bg-[hsl(var(--meals-light))] border-[hsl(var(--meals))]/20;
+  }
+
+  .card-weight {
+    @apply bg-[hsl(var(--weight-light))] border-[hsl(var(--accent))]/20;
+  }
+
+  .text-water {
+    @apply text-[hsl(var(--water))];
+  }
+
+  .text-meals {
+    @apply text-[hsl(var(--meals))];
+  }
+
+  .text-weight {
+    @apply text-[hsl(var(--accent))];
+  }
+
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-xl border border-border/50 shadow-lg;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { 
+      opacity: 0; 
+      transform: translateY(16px); 
+    }
+    to { 
+      opacity: 1; 
+      transform: translateY(0); 
+    }
+  }
+
+  @keyframes scaleIn {
+    from { 
+      opacity: 0; 
+      transform: scale(0.92); 
+    }
+    to { 
+      opacity: 1; 
+      transform: scale(1); 
+    }
+  }
+}

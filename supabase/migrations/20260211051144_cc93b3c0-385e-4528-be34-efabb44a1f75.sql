@@ -1,0 +1,1 @@
+ALTER TABLE public.exam_uploads ADD COLUMN image_description text NULL;

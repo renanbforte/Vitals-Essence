@@ -1,0 +1,1 @@
+ALTER TABLE public.trade_sessions ADD COLUMN bank_name TEXT NULL;

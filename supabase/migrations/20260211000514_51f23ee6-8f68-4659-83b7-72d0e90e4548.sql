@@ -1,0 +1,1 @@
+ALTER TABLE public.trip_accommodations ADD COLUMN email text DEFAULT NULL;

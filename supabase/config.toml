@@ -1,0 +1,16 @@
+project_id = "xbhtersrqrfdsoaavpxs"
+
+[functions.analyze-exam]
+verify_jwt = false
+
+[functions.send-push]
+verify_jwt = false
+
+[functions.get-vapid-key]
+verify_jwt = false
+
+[functions.notification-cron]
+verify_jwt = false
+
+[functions.cryptoingest]
+verify_jwt = false

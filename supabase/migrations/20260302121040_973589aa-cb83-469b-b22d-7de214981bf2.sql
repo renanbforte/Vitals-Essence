@@ -1,0 +1,1 @@
+ALTER TABLE public.investments ADD COLUMN IF NOT EXISTS target_mode text NOT NULL DEFAULT 'total';
