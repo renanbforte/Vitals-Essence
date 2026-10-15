@@ -1,3 +1,9 @@
+// ============================================================================
+// ShoppingSessionView — Tela de uma lista de compras aberta.
+// Deixa escolher o mercado, adicionar/criar produtos, ordenar os itens,
+// compartilhar a lista com amigos e ver os totais (carrinho, estimado e geral).
+// No fim, permite finalizar a compra, que grava os precos no historico.
+// ============================================================================
 import { useState, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +27,7 @@ interface Props {
 type SortMode = 'segment' | 'az';
 
 export function ShoppingSessionView({ session, onBack }: Props) {
+  // Usuario logado, avisos na tela e dados vindos do banco (itens, produtos, lugares, amigos).
   const { user } = useAuth();
   const { toast } = useToast();
   const { items, addItem, updateItem, removeItem } = useSessionItems(session.id);
@@ -28,17 +35,25 @@ export function ShoppingSessionView({ session, onBack }: Props) {
   const { places } = useShoppingPlaces();
   const { updateSession, finalize } = useShoppingSessions();
   const { friends } = useFriendships();
+  // Controla se a janela de "adicionar produto" esta aberta.
   const [addProductOpen, setAddProductOpen] = useState(false);
+  // Modo de ordenacao dos itens: por segmento/categoria ou em ordem alfabetica.
   const [sortMode, setSortMode] = useState<SortMode>('segment');
+  // Controla se a janela de "compartilhar lista" esta aberta.
   const [shareOpen, setShareOpen] = useState(false);
+  // Campos para criar um produto novo direto na lista (nome e segmento).
   const [newInlineProductName, setNewInlineProductName] = useState('');
   const [newInlineProductSegment, setNewInlineProductSegment] = useState('MERCEARIA');
+  // Texto digitado para filtrar/buscar produtos.
   const [searchFilter, setSearchFilter] = useState('');
 
+  // Ids dos produtos ja na lista e de todos os produtos cadastrados.
   const productIds = useMemo(() => items.map(i => i.product_id), [items]);
   const allProductIds = useMemo(() => products.map(p => p.id), [products]);
+  // Busca os melhores precos de cada produto para o lugar escolhido.
   const { data: bestPrices } = useBestPrices(allProductIds, session.place_id);
 
+  // Cria um "dicionario" que liga o id do produto aos seus dados (busca rapida por id).
   const productsMap = useMemo(() => {
     const m: Record<string, ShoppingProduct> = {};
     products.forEach(p => { m[p.id] = p; });

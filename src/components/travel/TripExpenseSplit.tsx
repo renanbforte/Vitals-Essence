@@ -1,3 +1,10 @@
+// ============================================================================
+// TripExpenseSplit (Rateio de Despesas da Viagem)
+// Componente que divide os gastos da viagem entre os participantes. Junta
+// despesas manuais e itens com custo (voos, hospedagem, transporte, etc),
+// permite dizer quem pagou e qual a parte de cada um, e por fim calcula o
+// saldo de cada pessoa e o "acerto de contas" (quem paga quanto a quem).
+// ============================================================================
 import { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,6 +21,8 @@ import { useFriendships } from '@/hooks/useFriendships';
 import type { TripExpense, TripSplitParticipant, TripExpenseSplitEntry, TripFlight, TripAccommodation, TripTransport, TripEvent, TripMeal } from '@/types/trips';
 
 
+// Dados que o componente recebe de fora: a viagem, as varias listas de gastos
+// (despesas, voos, hospedagens, etc), a moeda e uma funcao para atualizar despesa.
 interface Props {
   tripId: string;
   expenses: TripExpense[];
@@ -26,6 +35,8 @@ interface Props {
   onUpdateExpense: (id: string, data: Record<string, any>) => void;
 }
 
+// Formato de um participante do rateio, que pode ser um "membro" da viagem
+// (usuario do app) ou uma pessoa "externa" cadastrada so para dividir contas.
 interface MemberInfo {
   id: string;
   type: 'member' | 'external';
@@ -37,16 +48,26 @@ interface MemberInfo {
 }
 
 export default function TripExpenseSplit({ tripId, expenses, flights = [], accommodations = [], transport = [], events = [], meals = [], currency, onUpdateExpense }: Props) {
+  // Usuario logado.
   const { user } = useAuth();
+  // Lista de amigos conectados (para adicionar rapidamente ao rateio).
   const { friends } = useFriendships();
+  // Pessoas externas cadastradas no rateio (dados do banco, com criar/remover).
   const splitParticipants = useTripItems<TripSplitParticipant>('trip_split_participants', tripId);
+  // Registros de divisao: quanto cada pessoa deve/pagou em cada despesa.
   const splitEntries = useTripItems<TripExpenseSplitEntry>('trip_expense_splits', tripId);
 
+  // Membros da viagem (usuarios do app) com seus nomes.
   const [tripMembers, setTripMembers] = useState<{ user_id: string; name: string }[]>([]);
+  // Controla a janela de "adicionar pessoa ao rateio".
   const [showAddPerson, setShowAddPerson] = useState(false);
+  // Dados do formulario de nova pessoa externa (nome, telefone, email).
   const [personForm, setPersonForm] = useState({ name: '', phone: '', email: '' });
+  // Guarda o id da despesa cujo rateio esta sendo editado (ou null se fechado).
   const [showExpenseSplit, setShowExpenseSplit] = useState<string | null>(null);
+  // Valores que cada participante deve pagar na despesa em edicao.
   const [editingShares, setEditingShares] = useState<Record<string, number>>({});
+  // Quem efetivamente pagou a despesa em edicao.
   const [paidBy, setPaidBy] = useState<string>('');
 
   // Fetch trip members with names
@@ -114,6 +135,7 @@ export default function TripExpenseSplit({ tripId, expenses, flights = [], accom
       }));
   }, [friends, tripMembers, splitParticipants.items, user?.id]);
 
+  // Adiciona um amigo conectado como participante externo do rateio.
   const handleAddFriend = (friendName: string) => {
     splitParticipants.create.mutate({
       name: friendName,
@@ -122,8 +144,10 @@ export default function TripExpenseSplit({ tripId, expenses, flights = [], accom
     });
   };
 
+  // Formata um numero como valor monetario na moeda da viagem (ex: R$ 100,00).
   const fmt = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency });
 
+  // Calcula o custo de um item; se for "por unidade", multiplica pela quantidade.
   const getItemCost = (item: any): number => {
     const cost = Number(item.cost || item.amount) || 0;
     const mode = item.cost_mode || 'total';
@@ -131,6 +155,7 @@ export default function TripExpenseSplit({ tripId, expenses, flights = [], accom
     return mode === 'unit' ? cost * qty : cost;
   };
 
+  // Calcula o total de uma despesa manual (tambem respeita o modo unitario).
   const getExpenseTotal = (e: TripExpense) => {
     const amount = Number(e.amount) || 0;
     const mode = (e as any).cost_mode || 'total';

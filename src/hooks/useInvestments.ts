@@ -34,6 +34,14 @@ export interface Investment {
   recurrence_type: string | null;
   notes: string | null;
   category_id: string | null;
+  // Real x simulação (planejamento), data de início do real e aporte recorrente ligado.
+  is_simulated: boolean;
+  start_date: string | null;
+  recurring_tx_id: string | null;
+  // Moeda estrangeira: moeda, valor na moeda e cotação usada (current_value fica em BRL).
+  currency: string;
+  foreign_amount: number | null;
+  exchange_rate: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -52,6 +60,12 @@ export interface InvestmentInput {
   recurring_amount?: number | null;
   recurrence_type?: string | null;
   notes?: string | null;
+  is_simulated?: boolean;
+  start_date?: string | null;
+  recurring_tx_id?: string | null;
+  currency?: string;
+  foreign_amount?: number | null;
+  exchange_rate?: number | null;
 }
 
 // Categoria opcional para agrupar investimentos (com icone e cor).
@@ -151,6 +165,11 @@ export function useInvestments() {
       priority: maxPriority,
       current_value: input.current_value || 0,
       operating_capital: input.operating_capital || 0,
+      is_simulated: input.is_simulated || false,
+      start_date: input.start_date || null,
+      currency: input.currency || 'BRL',
+      foreign_amount: input.foreign_amount ?? null,
+      exchange_rate: input.exchange_rate ?? null,
     };
     // Grava no banco; avisa em caso de erro ou recarrega a lista em caso de sucesso.
     const { error } = await supabase.from('investments').insert(row);
@@ -237,9 +256,12 @@ export function useInvestments() {
     await Promise.all(updates);
   };
 
-  // Total ja investido: soma o valor atual + o capital em operacao de todos os itens.
+  // Total ja investido: soma valor atual + capital em operacao — SOMENTE dos reais
+  // (as simulacoes nao entram no patrimonio).
   const totalInvested = useMemo(
-    () => investments.reduce((sum, i) => sum + Number(i.current_value) + Number(i.operating_capital), 0),
+    () => investments
+      .filter(i => !i.is_simulated)
+      .reduce((sum, i) => sum + Number(i.current_value) + Number(i.operating_capital), 0),
     [investments]
   );
 

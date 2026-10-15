@@ -13,7 +13,9 @@ import { useArenaGroups } from '@/hooks/useArena';
 import { CreateGroupDialog } from '@/components/arena/CreateGroupDialog';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, Lock, Globe, Shield, ChevronRight, Swords, Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Plus, Lock, Globe, Shield, ChevronRight, Swords, Loader2, KeyRound } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 // Ícone usado conforme o tipo do grupo: privado (cadeado), público (globo), híbrido (escudo)
@@ -23,15 +25,26 @@ export default function Arena() {
   // Permite navegar para a página de detalhes de um grupo
   const navigate = useNavigate();
   // Busca os grupos do usuário, o estado de carregamento e a ação de criar grupo
-  const { groups, isLoading, createGroup } = useArenaGroups();
+  const { groups, isLoading, createGroup, joinByCode } = useArenaGroups();
   // Controla se o diálogo de criação de grupo está aberto
   const [showCreate, setShowCreate] = useState(false);
+  // Diálogo de entrar por código e o código digitado
+  const [showJoin, setShowJoin] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
 
   // Cria o grupo no banco, fecha o diálogo e abre a tela do novo grupo criado
   const handleCreate = async (data: any) => {
     const result = await createGroup.mutateAsync(data);
     setShowCreate(false);
     if (result?.id) navigate(`/arena/${result.id}`);
+  };
+
+  // Entra num desafio pelo código e abre a tela do grupo.
+  const handleJoin = async () => {
+    const groupId = await joinByCode.mutateAsync(joinCode);
+    setShowJoin(false);
+    setJoinCode('');
+    if (groupId) navigate(`/arena/${groupId}`);
   };
 
   return (
@@ -46,9 +59,14 @@ export default function Arena() {
             <h2 className="text-xl font-extrabold">Seus Grupos</h2>
             <p className="text-sm text-muted-foreground">Compita com amigos</p>
           </div>
-          <Button onClick={() => setShowCreate(true)} className="gap-1.5 rounded-xl">
-            <Plus className="w-4 h-4" /> Criar
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowJoin(true)} className="gap-1.5 rounded-xl">
+              <KeyRound className="w-4 h-4" /> Entrar
+            </Button>
+            <Button onClick={() => setShowCreate(true)} className="gap-1.5 rounded-xl">
+              <Plus className="w-4 h-4" /> Criar
+            </Button>
+          </div>
         </div>
 
         {/* Três situações: carregando, sem grupos, ou a lista de grupos */}
@@ -115,6 +133,35 @@ export default function Arena() {
 
       {/* Diálogo (pop-up) do formulário para criar um novo grupo */}
       <CreateGroupDialog open={showCreate} onOpenChange={setShowCreate} onSubmit={handleCreate} />
+
+      {/* Diálogo de entrar num desafio pelo código de convite */}
+      <Dialog open={showJoin} onOpenChange={setShowJoin}>
+        <DialogContent className="rounded-2xl max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-primary" /> Entrar num desafio
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Digite o código de convite que um amigo compartilhou.</p>
+            <Input
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase())}
+              onKeyDown={e => { if (e.key === 'Enter' && joinCode.trim()) handleJoin(); }}
+              placeholder="Ex.: K3X9Q2"
+              className="text-center text-lg font-extrabold tracking-widest uppercase"
+              maxLength={10}
+            />
+            <Button
+              onClick={handleJoin}
+              disabled={!joinCode.trim() || joinByCode.isPending}
+              className="w-full rounded-xl h-11 gradient-health text-white font-bold border-0"
+            >
+              {joinByCode.isPending ? 'Entrando…' : 'Entrar no desafio'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1,3 +1,9 @@
+// ============================================================================
+// CryptoTab (Aba Cripto)
+// Painel que acompanha a carteira de criptomoedas do usuario. Mostra "snapshots"
+// (fotos do saldo em um momento) com equity, lucro/prejuizo (P&L) e cotacao do
+// dolar, e organiza tudo em 4 sub-abas: Conta, Movimentacao, Metodologia e Aportes.
+// ============================================================================
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -13,21 +19,29 @@ import { CryptoDepositsSubTab } from './CryptoDepositsSubTab';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// Animacao: cada item surge de baixo para cima com leve efeito de mola.
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 20 } },
 };
 
+// Animacao: faz os filhos aparecerem em sequencia (um apos o outro).
 const stagger = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.08 } },
 };
 
+// Formata um numero como valor em dolar (ex: "$ 1,234.56").
 function formatUsd(v: number) { return `$ ${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
+// Formata um numero como valor em real brasileiro (ex: "R$ 1.234,56").
 function formatBrl(v: number) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); }
 
+// Cartao de um snapshot: mostra o resumo da conta cripto e, ao clicar, expande
+// para exibir todos os detalhes (saldo, margem, posicoes, P&L, etc.).
 function SnapshotCard({ snapshot, onDelete }: { snapshot: CryptoSnapshot; onDelete: (id: string) => void }) {
+  // Controla se o cartao esta expandido (mostrando os detalhes) ou recolhido.
   const [expanded, setExpanded] = useState(false);
+  // Lucro/prejuizo em dolar; e converte equity e P&L para reais usando a cotacao.
   const pnl = Number(snapshot.total_pnl_usd);
   const equityBrl = Number(snapshot.equity_usd) * Number(snapshot.usd_brl_rate);
   const pnlBrl = pnl * Number(snapshot.usd_brl_rate);
@@ -89,10 +103,16 @@ function SnapshotCard({ snapshot, onDelete }: { snapshot: CryptoSnapshot; onDele
   );
 }
 
+// Sub-aba "Conta": lista os snapshots salvos, mostra um resumo no topo
+// (equity total, P&L total e cotacao media) e permite adicionar novos snapshots.
 function ContaSubTab() {
+  // Busca no banco os snapshots e os totais ja calculados (equity, P&L, cotacao,
+  // ultimo por corretora) alem das funcoes para adicionar e excluir.
   const { snapshots, loading, latestByExchange, totalEquityUsd, totalPnlUsd, avgRate, addSnapshot, deleteSnapshot } = useCryptoSnapshots();
+  // Controla se o formulario de "Novo Snapshot" esta aberto.
   const [formOpen, setFormOpen] = useState(false);
 
+  // Enquanto os dados carregam, mostra "esqueletos" cinzas no lugar do conteudo.
   if (loading) {
     return <div className="space-y-4"><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-40 rounded-2xl" /></div>;
   }
@@ -165,6 +185,8 @@ function ContaSubTab() {
   );
 }
 
+// Componente principal da aba Cripto: monta as 4 sub-abas e liga cada uma
+// ao seu respectivo conteudo (Conta, Movimentacao, Metodologia e Aportes).
 export function CryptoTab() {
   return (
     <div className="space-y-4">

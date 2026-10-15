@@ -39,6 +39,9 @@ export interface ArenaGroup {
   calendar_show_daily_score: boolean;
   calendar_members_only: boolean;
   status: string;
+  scoring_mode: string;      // 'pillars' (padrão) | 'distance' | 'duration'
+  invite_code: string | null;
+  is_team_based: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -51,6 +54,7 @@ export interface ArenaMember {
   user_id: string;
   role: string;
   status: string;
+  team_id: string | null;
   joined_at: string | null;
   created_at: string;
   profile?: { name: string; avatar_url: string | null; user_id: string };
@@ -71,8 +75,18 @@ export interface ArenaDailyScore {
   photo_url: string | null;
 }
 
+// Um comentário em um post do feed (com o perfil de quem comentou).
+export interface ArenaFeedComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  text: string;
+  created_at: string;
+  profile?: { name: string; avatar_url: string | null };
+}
+
 // Formato de um post no feed do grupo (comentário, foto ou registro de score),
-// com o perfil de quem postou e as reações (emojis) que recebeu.
+// com o perfil de quem postou, as reações (emojis) e os comentários que recebeu.
 export interface ArenaFeedPost {
   id: string;
   group_id: string;
@@ -87,6 +101,7 @@ export interface ArenaFeedPost {
   created_at: string;
   profile?: { name: string; avatar_url: string | null };
   reactions?: { emoji: string; user_id: string }[];
+  comments?: ArenaFeedComment[];
 }
 
 // Hook da lista de grupos: traz todos os grupos do usuário (que ele criou ou
@@ -137,9 +152,11 @@ export function useArenaGroups() {
   // Cria um grupo novo e já adiciona o criador como primeiro membro (aceito).
   const createGroup = useMutation({
     mutationFn: async (group: Partial<ArenaGroup>) => {
+      // Código de convite curto para compartilhar (ex.: "K3X9Q2").
+      const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
       const { data, error } = await supabase
         .from('arena_groups')
-        .insert({ ...group, creator_id: user!.id } as any)
+        .insert({ ...group, creator_id: user!.id, invite_code: inviteCode } as any)
         .select()
         .single();
       if (error) throw error;
@@ -162,7 +179,21 @@ export function useArenaGroups() {
     onError: () => toast.error('Erro ao criar grupo'),
   });
 
-  return { groups, isLoading, createGroup };
+  // Entrar num desafio pelo código de convite (via função segura no banco).
+  const joinByCode = useMutation({
+    mutationFn: async (code: string) => {
+      const { data, error } = await supabase.rpc('join_arena_by_code', { p_code: code.trim() });
+      if (error) throw error;
+      return data as string; // id do grupo
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['arena-groups'] });
+      toast.success('Você entrou no desafio!');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Código inválido'),
+  });
+
+  return { groups, isLoading, createGroup, joinByCode };
 }
 
 // Formato usado para mostrar as fotos (progresso e treino) de um membro num dia.
@@ -259,22 +290,39 @@ export function useArenaGroupDetail(groupId: string | undefined) {
         .select('user_id, name, avatar_url')
         .in('user_id', userIds);
 
-      // Busca as reações de todos os posts carregados de uma vez só.
+      // Busca reações e comentários de todos os posts carregados de uma vez só.
       const postIds = (posts || []).map(p => p.id);
       let reactions: any[] = [];
+      let comments: any[] = [];
       if (postIds.length > 0) {
-        const { data: r } = await supabase
-          .from('arena_feed_reactions')
-          .select('*')
-          .in('post_id', postIds);
+        const [{ data: r }, { data: c }] = await Promise.all([
+          supabase.from('arena_feed_reactions').select('*').in('post_id', postIds),
+          supabase.from('arena_feed_comments').select('*').in('post_id', postIds).order('created_at', { ascending: true }),
+        ]);
         reactions = r || [];
+        comments = c || [];
       }
 
-      // Monta cada post final juntando o perfil do autor e suas reações.
+      // Perfis de quem comentou (podem ser diferentes dos autores dos posts).
+      const commenterIds = [...new Set(comments.map(c => c.user_id))];
+      const missingIds = commenterIds.filter(id => !userIds.includes(id));
+      let commenterProfiles = profiles || [];
+      if (missingIds.length > 0) {
+        const { data: extra } = await supabase
+          .from('profiles')
+          .select('user_id, name, avatar_url')
+          .in('user_id', missingIds);
+        commenterProfiles = [...commenterProfiles, ...(extra || [])];
+      }
+
+      // Monta cada post final juntando perfil do autor, reações e comentários.
       return (posts || []).map(p => ({
         ...p,
         profile: (profiles || []).find(pr => pr.user_id === p.user_id),
         reactions: reactions.filter(r => r.post_id === p.id),
+        comments: comments
+          .filter(c => c.post_id === p.id)
+          .map(c => ({ ...c, profile: commenterProfiles.find(pr => pr.user_id === c.user_id) })),
       })) as ArenaFeedPost[];
     },
     enabled: !!groupId,
@@ -372,6 +420,27 @@ export function useArenaGroupDetail(groupId: string | undefined) {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['arena-feed', groupId] }),
   });
 
+  // Ação de comentar em um post do feed.
+  const addComment = useMutation({
+    mutationFn: async ({ postId, text }: { postId: string; text: string }) => {
+      const { error } = await supabase
+        .from('arena_feed_comments')
+        .insert({ post_id: postId, user_id: user!.id, text } as any);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['arena-feed', groupId] }),
+    onError: () => toast.error('Erro ao comentar'),
+  });
+
+  // Ação de apagar o próprio comentário.
+  const deleteComment = useMutation({
+    mutationFn: async (commentId: string) => {
+      const { error } = await supabase.from('arena_feed_comments').delete().eq('id', commentId);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['arena-feed', groupId] }),
+  });
+
   // Ação de convidar um amigo para o grupo: cria o membro com status "pendente"
   // até que ele aceite o convite.
   const inviteMember = useMutation({
@@ -447,6 +516,8 @@ export function useArenaGroupDetail(groupId: string | undefined) {
     submitDailyScore,
     addFeedPost,
     toggleReaction,
+    addComment,
+    deleteComment,
     inviteMember,
     updateGroup,
     fetchMemberPhotosForDate,

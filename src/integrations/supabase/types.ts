@@ -14,6 +14,18 @@ export type Database = {
   }
   public: {
     Tables: {
+      arena_chat_messages: {
+        Row: { id: string; group_id: string; user_id: string; text: string; created_at: string }
+        Insert: { id?: string; group_id: string; user_id: string; text: string; created_at?: string }
+        Update: { id?: string; group_id?: string; user_id?: string; text?: string; created_at?: string }
+        Relationships: []
+      }
+      arena_teams: {
+        Row: { id: string; group_id: string; name: string; created_at: string }
+        Insert: { id?: string; group_id: string; name: string; created_at?: string }
+        Update: { id?: string; group_id?: string; name?: string; created_at?: string }
+        Relationships: []
+      }
       arena_daily_scores: {
         Row: {
           created_at: string
@@ -66,6 +78,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      arena_feed_comments: {
+        Row: {
+          id: string
+          post_id: string
+          user_id: string
+          text: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          post_id: string
+          user_id: string
+          text: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          post_id?: string
+          user_id?: string
+          text?: string
+          created_at?: string
+        }
+        Relationships: []
       }
       arena_feed_posts: {
         Row: {
@@ -1102,36 +1138,45 @@ export type Database = {
       }
       financial_goals: {
         Row: {
+          annual_rate: number
           completed: boolean
           created_at: string
           current_amount: number
           deadline: string | null
           id: string
           investment_id: string | null
+          linked_to_portfolio: boolean
+          monthly_contribution: number
           target_amount: number
           title: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          annual_rate?: number
           completed?: boolean
           created_at?: string
           current_amount?: number
           deadline?: string | null
           id?: string
           investment_id?: string | null
+          linked_to_portfolio?: boolean
+          monthly_contribution?: number
           target_amount: number
           title: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          annual_rate?: number
           completed?: boolean
           created_at?: string
           current_amount?: number
           deadline?: string | null
           id?: string
           investment_id?: string | null
+          linked_to_portfolio?: boolean
+          monthly_contribution?: number
           target_amount?: number
           title?: string
           updated_at?: string
@@ -1750,10 +1795,14 @@ export type Database = {
         Row: {
           category_id: string | null
           created_at: string
+          currency: string
           current_value: number
+          exchange_rate: number | null
+          foreign_amount: number | null
           id: string
           investment_type: string | null
           is_recurring_contribution: boolean
+          is_simulated: boolean
           name: string
           notes: string | null
           objective: string | null
@@ -1761,6 +1810,8 @@ export type Database = {
           priority: number
           recurrence_type: string | null
           recurring_amount: number | null
+          recurring_tx_id: string | null
+          start_date: string | null
           target_mode: string
           target_value: number
           tracking_mode: string
@@ -1770,10 +1821,14 @@ export type Database = {
         Insert: {
           category_id?: string | null
           created_at?: string
+          currency?: string
           current_value?: number
+          exchange_rate?: number | null
+          foreign_amount?: number | null
           id?: string
           investment_type?: string | null
           is_recurring_contribution?: boolean
+          is_simulated?: boolean
           name: string
           notes?: string | null
           objective?: string | null
@@ -1781,6 +1836,8 @@ export type Database = {
           priority?: number
           recurrence_type?: string | null
           recurring_amount?: number | null
+          recurring_tx_id?: string | null
+          start_date?: string | null
           target_mode?: string
           target_value?: number
           tracking_mode?: string
@@ -1790,10 +1847,14 @@ export type Database = {
         Update: {
           category_id?: string | null
           created_at?: string
+          currency?: string
           current_value?: number
+          exchange_rate?: number | null
+          foreign_amount?: number | null
           id?: string
           investment_type?: string | null
           is_recurring_contribution?: boolean
+          is_simulated?: boolean
           name?: string
           notes?: string | null
           objective?: string | null
@@ -1801,6 +1862,8 @@ export type Database = {
           priority?: number
           recurrence_type?: string | null
           recurring_amount?: number | null
+          recurring_tx_id?: string | null
+          start_date?: string | null
           target_mode?: string
           target_value?: number
           tracking_mode?: string

@@ -1,3 +1,10 @@
+// ============================================================================
+// SUB-ABA "MOVIMENTAÇÕES DIÁRIAS CRIPTO" (operações de compra/venda do dia)
+// Lista cada operação de cripto com o lucro ou prejuízo (P&L) do dia. Cada
+// cartão pode ser expandido para mostrar os detalhes das posições LONG (aposta
+// que sobe) e SHORT (aposta que cai). Os dados chegam via N8N; aqui o dono só
+// visualiza, expande os detalhes e pode excluir uma movimentação.
+// ============================================================================
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,15 +15,20 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useState } from 'react';
 
+// Animação de entrada dos cartões (surgem subindo suavemente)
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 20 } },
 };
 
+// Formata um número como dinheiro em Dólar (ex.: $ 1,234.56)
 function formatUsd(v: number) { return `$ ${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`; }
 
+// Cartão de uma única movimentação diária (recebe os dados e a função de excluir)
 function MoveCard({ move, onDelete }: { move: CryptoDailyMove; onDelete: (id: string) => void }) {
+  // Controla se os detalhes (LONG/SHORT) estão abertos ou fechados
   const [expanded, setExpanded] = useState(false);
+  // Lucro/prejuízo total do dia; usado para colorir de verde (ganho) ou vermelho (perda)
   const totalPnl = Number(move.total_pnl_coin_usdt || 0);
 
   return (
@@ -28,6 +40,7 @@ function MoveCard({ move, onDelete }: { move: CryptoDailyMove; onDelete: (id: st
               {totalPnl >= 0 ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
             </div>
             <div>
+              {/* Nome da moeda + corretora, e abaixo a data/hora/metodologia */}
               <p className="font-semibold text-sm">{move.coin} <span className="text-muted-foreground text-xs font-normal">• {move.exchange}</span></p>
               <p className="text-xs text-muted-foreground">
                 {format(new Date(move.date + 'T12:00:00'), "dd MMM yyyy", { locale: ptBR })}
@@ -45,16 +58,18 @@ function MoveCard({ move, onDelete }: { move: CryptoDailyMove; onDelete: (id: st
                 Val: {formatUsd(Number(move.total_value_coin_usdt || 0))}
               </p>
             </div>
+            {/* Seta que abre/fecha os detalhes da movimentação */}
             <button onClick={() => setExpanded(!expanded)} className="p-1 hover:bg-muted rounded">
               {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
             </button>
           </div>
         </div>
 
+        {/* Bloco de detalhes: só aparece quando o cartão está expandido */}
         {expanded && (
           <div className="mt-4 space-y-3 border-t pt-3">
             <div className="grid grid-cols-2 gap-4">
-              {/* LONG */}
+              {/* Coluna LONG: posição que ganha quando o preço sobe */}
               <div className="space-y-1">
                 <p className="text-[10px] font-bold text-emerald-600">📈 LONG</p>
                 <div className="text-xs space-y-0.5">

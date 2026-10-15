@@ -6,12 +6,13 @@
 // botões de reação por emoji. Se não houver posts, exibe um estado vazio.
 // ============================================================================
 import { useState } from 'react';
-import { ArenaFeedPost, ArenaGroup } from '@/hooks/useArena';
+import { ArenaFeedPost, ArenaFeedComment, ArenaGroup } from '@/hooks/useArena';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
-import { Droplets, Utensils, Dumbbell, Send, Flame } from 'lucide-react';
+import { Droplets, Utensils, Dumbbell, Send, Flame, MessageCircle, Trash2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion } from 'framer-motion';
@@ -22,12 +23,14 @@ interface ArenaFeedProps {
   group: ArenaGroup;
   onPost: (data: { post_type: string; content?: string; photo_url?: string }) => void;
   onReact: (postId: string, emoji: string) => void;
+  onComment: (postId: string, text: string) => void;
+  onDeleteComment: (commentId: string) => void;
 }
 
 // Emojis disponíveis para reagir aos posts
 const EMOJIS = ['🔥', '💪', '👏', '🎯', '⭐'];
 
-export function ArenaFeed({ posts, group, onPost, onReact }: ArenaFeedProps) {
+export function ArenaFeed({ posts, group, onPost, onReact, onComment, onDeleteComment }: ArenaFeedProps) {
   // Usuário logado (usado para destacar as reações que ele mesmo deu)
   const { user } = useAuth();
   // Texto que o usuário está digitando no campo de novo post
@@ -133,6 +136,14 @@ export function ArenaFeed({ posts, group, onPost, onReact }: ArenaFeedProps) {
                 );
               })}
             </div>
+
+            {/* Comentários */}
+            <CommentSection
+              comments={post.comments || []}
+              currentUserId={user?.id}
+              onComment={(text) => onComment(post.id, text)}
+              onDelete={onDeleteComment}
+            />
           </Card>
         </motion.div>
       ))}
@@ -144,6 +155,73 @@ export function ArenaFeed({ posts, group, onPost, onReact }: ArenaFeedProps) {
           <p className="text-xs">Seja o primeiro a compartilhar!</p>
         </div>
       )}
+    </div>
+  );
+}
+
+// Lista de comentários de um post + campo para comentar. Cada comentário mostra
+// autor, texto e tempo; o próprio autor pode apagar o seu.
+function CommentSection({ comments, currentUserId, onComment, onDelete }: {
+  comments: ArenaFeedComment[];
+  currentUserId?: string;
+  onComment: (text: string) => void;
+  onDelete: (commentId: string) => void;
+}) {
+  const [text, setText] = useState('');
+
+  const submit = () => {
+    const t = text.trim();
+    if (!t) return;
+    onComment(t);
+    setText('');
+  };
+
+  return (
+    <div className="pt-1 border-t border-border/50 space-y-2">
+      {comments.map(c => (
+        <div key={c.id} className="flex items-start gap-2 group">
+          <Avatar className="w-6 h-6 mt-0.5 shrink-0">
+            <AvatarImage src={c.profile?.avatar_url || ''} />
+            <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
+              {(c.profile?.name || '?')[0]}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs">
+              <span className="font-bold">{c.profile?.name || 'Usuário'}</span>{' '}
+              <span className="text-muted-foreground">{c.text}</span>
+            </p>
+            <p className="text-[9px] text-muted-foreground/70">
+              {formatDistanceToNow(new Date(c.created_at), { addSuffix: true, locale: ptBR })}
+            </p>
+          </div>
+          {c.user_id === currentUserId && (
+            <button
+              onClick={() => onDelete(c.id)}
+              className="text-muted-foreground/40 hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+              aria-label="Apagar comentário"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
+      ))}
+
+      <div className="flex items-center gap-2">
+        <MessageCircle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <Input
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); }}
+          placeholder="Comentar..."
+          className="h-8 text-xs border-0 bg-muted/50 rounded-lg focus-visible:ring-1"
+        />
+        {text.trim() && (
+          <Button size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-primary" onClick={submit}>
+            <Send className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

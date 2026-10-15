@@ -58,12 +58,6 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const supabaseClient = createClient(
-    Deno.env.get("SUPABASE_URL") ?? "",
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
-  );
-
   try {
     logStep("Function started");
 
@@ -73,6 +67,16 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) throw new Error("No authorization header provided");
 
+    // Cliente com service role: bypassa RLS para ler status de assinatura de forma
+    // confiável. A identidade do usuário vem de getUser(token) abaixo, validada
+    // pelo Auth — não dependemos do JWT do usuário nas consultas (evita problemas
+    // de clock skew como "JWT issued at future").
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      { auth: { persistSession: false } }
+    );
+
     const token = authHeader.replace("Bearer ", "");
     const { data: userData, error: userError } = await supabaseClient.auth.getUser(token);
     if (userError) throw new Error(`Authentication error: ${userError.message}`);
@@ -81,11 +85,12 @@ serve(async (req) => {
     logStep("User authenticated", { userId: user.id, email: user.email });
 
     // --- Check lifetime premium (não depende do Stripe) ---
-    const { data: lifetimeData } = await supabaseClient
+    const { data: lifetimeData, error: lifetimeError } = await supabaseClient
       .from("lifetime_premium_users")
       .select("user_id")
       .eq("user_id", user.id)
       .maybeSingle();
+    if (lifetimeError) logStep("Lifetime lookup error", { message: lifetimeError.message });
 
     if (lifetimeData) {
       logStep("User has lifetime premium");

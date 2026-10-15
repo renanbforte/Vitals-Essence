@@ -1,3 +1,10 @@
+// ============================================================================
+// TransactionForm — Formulário para criar ou editar um lançamento financeiro
+// (uma entrada ou saída de dinheiro). Permite definir valor, data, centro de
+// custo, forma de pagamento, banco, recorrência/parcelamento e anexos. Também
+// trata a edição de lançamentos recorrentes (aplicar só a este ou a partir de
+// uma data).
+// ============================================================================
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,34 +37,59 @@ interface TransactionFormProps {
 }
 
 export function TransactionForm({ open, onOpenChange, costCenters, onSubmit, onAddCostCenter, initialType = 'expense', editTransaction, onUpdate, savedBanks = [] }: TransactionFormProps) {
+  // Tipo do lançamento: entrada (income) ou saída (expense).
   const [type, setType] = useState<'income' | 'expense'>(initialType);
+  // Descrição/nome do lançamento (ex: "Salário", "Aluguel").
   const [description, setDescription] = useState('');
+  // Valor digitado (mantido como texto para o campo de entrada).
   const [amount, setAmount] = useState('');
+  // Data do lançamento; começa com a data de hoje.
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  // Centro de custo selecionado ("none" = sem centro de custo).
   const [costCenterId, setCostCenterId] = useState<string>('none');
+  // Se o lançamento se repete no tempo (recorrente).
   const [isRecurring, setIsRecurring] = useState(false);
+  // Modo da recorrência: parcelado (nº fixo) ou contínuo (mensal indefinido).
   const [recurrenceMode, setRecurrenceMode] = useState<'installments' | 'continuous'>('installments');
+  // Unidade de tempo da recorrência: dias, semanas, meses ou anos.
   const [recurrenceType, setRecurrenceType] = useState<string>('months');
+  // A cada quantas unidades ele se repete (ex: a cada 2 meses).
   const [recurrenceInterval, setRecurrenceInterval] = useState('1');
+  // Número de parcelas quando é parcelado (2 a 12).
   const [installments, setInstallments] = useState('2');
+  // Se o valor informado deve ser dividido entre as parcelas.
   const [splitTotal, setSplitTotal] = useState(false);
+  // Observações adicionais (opcional).
   const [notes, setNotes] = useState('');
+  // Forma de pagamento (pix, boleto, dinheiro, cartão) ou "none".
   const [paymentMethod, setPaymentMethod] = useState<string>('none');
+  // Nome do banco/cartão associado ao lançamento.
   const [cardBank, setCardBank] = useState('');
+  // Se o usuário está digitando um banco novo em vez de escolher um salvo.
   const [isAddingNewBank, setIsAddingNewBank] = useState(false);
+  // Se o campo para criar um novo centro de custo está visível.
   const [showNewCostCenter, setShowNewCostCenter] = useState(false);
+  // Nome do novo centro de custo sendo digitado.
   const [newCostCenterName, setNewCostCenterName] = useState('');
+  // Lista de arquivos anexados ao lançamento.
   const [files, setFiles] = useState<File[]>([]);
+  // Referência ao campo de arquivo escondido (para abrir o seletor via botão).
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Recurring edit dialog
+  // Estados do diálogo de confirmação ao editar um lançamento recorrente.
   const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+  // Data a partir da qual aplicar a alteração da recorrência.
   const [recurringFromDate, setRecurringFromDate] = useState('');
+  // Guarda temporariamente os dados a salvar enquanto o usuário confirma o escopo.
   const [pendingInput, setPendingInput] = useState<TransactionInput | null>(null);
 
+  // Verdadeiro quando estamos editando um lançamento existente (e não criando).
   const isEditing = !!editTransaction;
+  // Verdadeiro quando o lançamento editado faz parte de uma recorrência.
   const isRecurringEdit = isEditing && (editTransaction?.is_recurring || !!editTransaction?.parent_transaction_id);
 
+  // Ao abrir o formulário: preenche os campos com o lançamento (se estiver
+  // editando) ou zera tudo para um novo lançamento em branco.
   useEffect(() => {
     if (open && editTransaction) {
       setType(editTransaction.type);
@@ -98,6 +130,8 @@ export function TransactionForm({ open, onOpenChange, costCenters, onSubmit, onA
     }
   }, [open, editTransaction, initialType]);
 
+  // Calcula o valor de cada parcela: se o usuário optou por dividir o total,
+  // divide o valor pelo número de parcelas; senão usa o valor cheio.
   const computedAmount = (() => {
     if (isRecurring && recurrenceMode === 'installments' && splitTotal && amount) {
       const total = parseFloat(amount);

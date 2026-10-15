@@ -1,3 +1,9 @@
+// ============================================================================
+// TradeTab — Aba de "Sessões de Trade" do módulo de Finanças.
+// Mostra um resumo (sessões, resultado, acerto, disciplina) e a lista de
+// sessões de day trade. Cada sessão começa como "pré-trade" (planejamento antes
+// de operar) e depois é finalizada com os resultados do dia (pós-trade).
+// ============================================================================
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, TrendingUp, ChevronDown, ChevronUp, Trash2, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
@@ -11,29 +17,38 @@ import { PostTradeForm } from './PostTradeForm';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// Animação de entrada: cada item surge de baixo para cima suavemente.
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 20 } },
 };
 
+// Animação do container: faz os filhos aparecerem um após o outro (efeito cascata).
 const stagger = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { staggerChildren: 0.08 } },
 };
 
+// Formata um número como moeda em Real brasileiro (ex: 1234.5 -> "R$ 1.234,50").
 function formatCurrency(v: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 }
 
+// Cartão de uma única sessão de trade. Mostra data, mercado e resultado, e ao
+// expandir revela os detalhes de planejamento (pré) e do fechamento (pós).
 function TradeSessionCard({ session, onComplete, onDelete, savedBanks }: {
   session: TradeSession;
   onComplete: (id: string, input: PostTradeInput) => void;
   onDelete: (id: string) => void;
   savedBanks: string[];
 }) {
+  // Controla se os detalhes do cartão estão abertos ou fechados.
   const [expanded, setExpanded] = useState(false);
+  // Controla a abertura do formulário de finalização do dia (pós-trade).
   const [postFormOpen, setPostFormOpen] = useState(false);
+  // Verdadeiro quando a sessão ainda está apenas planejada (não finalizada).
   const isPre = session.status === 'pre';
+  // Resultado financeiro da sessão (positivo = ganho, negativo = perda).
   const result = Number(session.financial_result) || 0;
 
   return (
@@ -133,12 +148,18 @@ function TradeSessionCard({ session, onComplete, onDelete, savedBanks }: {
   );
 }
 
+// Componente principal da aba: junta o resumo, o botão de nova sessão e a lista.
 export function TradeTab() {
+  // Busca as sessões e as estatísticas agregadas do banco de dados (Supabase).
   const { sessions, loading, totalSessions, totalResult, avgWinRate, disciplineRate, createPreTrade, completePostTrade, deleteSession } = useTradeSessions();
+  // Busca os saldos por banco (usado para sugerir bancos já cadastrados).
   const { bankBalances } = useBankBalances();
+  // Lista somente os nomes dos bancos já salvos.
   const savedBanks = bankBalances.map(b => b.bank_name);
+  // Controla a abertura do formulário de planejamento (pré-trade).
   const [preFormOpen, setPreFormOpen] = useState(false);
 
+  // Enquanto os dados carregam, mostra "esqueletos" cinza no lugar do conteúdo.
   if (loading) {
     return <div className="space-y-4"><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-40 rounded-2xl" /></div>;
   }

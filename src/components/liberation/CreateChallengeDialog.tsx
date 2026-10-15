@@ -1,3 +1,11 @@
+// ============================================================================
+// CreateChallengeDialog (Módulo Libertação / vícios)
+// Janela (pop-up) em 3 passos que ajuda a pessoa a criar um "desafio" para
+// reduzir ou largar um vício. Passo 0: escolher o vício (de uma lista ou
+// escrevendo o seu). Passo 1: definir a intenção. Passo 2: marcar os gatilhos
+// que costumam despertar a vontade. Ao final, envia os dados para quem chamou.
+// ============================================================================
+
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
@@ -7,6 +15,7 @@ import { ArrowRight, ArrowLeft, Check, Search } from 'lucide-react';
 import { VICE_STRATEGIES, getVicesByCategory } from '@/lib/viceStrategies';
 import { getViceImage } from '@/lib/viceImages';
 
+// Opções de intenção mostradas no passo 1 (o que a pessoa deseja fazer com o vício)
 const intentionOptions = [
   { value: 'reduce', label: 'Quero reduzir', icon: '📉', desc: 'Diminuir a frequência ou intensidade' },
   { value: 'pause', label: 'Quero pausar', icon: '⏸️', desc: 'Dar um tempo e observar' },
@@ -14,6 +23,7 @@ const intentionOptions = [
   { value: 'understanding', label: 'Ainda estou entendendo', icon: '🔍', desc: 'Quero me conhecer melhor' },
 ];
 
+// Gatilhos oferecidos no passo 2, separados entre emoções e situações do dia a dia
 const triggerCategories = [
   { type: 'emotion', values: ['Ansiedade', 'Tédio', 'Estresse', 'Tristeza', 'Cansaço', 'Solidão'] },
   { type: 'situation', values: ['Hábito automático', 'Pressão social', 'Celebração', 'Fim do dia', 'Madrugada'] },
@@ -26,17 +36,27 @@ interface Props {
 }
 
 export default function CreateChallengeDialog({ open, onOpenChange, onSubmit }: Props) {
+  // Passo atual do assistente (0, 1 ou 2)
   const [step, setStep] = useState(0);
+  // Nome do desafio / vício escolhido
   const [title, setTitle] = useState('');
+  // Emoji que representa o desafio
   const [icon, setIcon] = useState('🌱');
+  // Identificador da estratégia de vício pré-cadastrada (se veio da lista)
   const [viceStrategyId, setViceStrategyId] = useState<string | undefined>();
+  // Intenção escolhida (reduzir, pausar, largar, entender)
   const [intention, setIntention] = useState('');
+  // Lista de gatilhos que a pessoa marcou
   const [selectedTriggers, setSelectedTriggers] = useState<{ type: string; value: string }[]>([]);
+  // Texto digitado na busca da lista de vícios
   const [searchQuery, setSearchQuery] = useState('');
+  // Indica se a pessoa optou por escrever o próprio vício em vez de escolher na lista
   const [useCustom, setUseCustom] = useState(false);
 
+  // Zera todos os campos, deixando o assistente pronto para um novo desafio
   const reset = () => { setStep(0); setTitle(''); setIcon('🌱'); setIntention(''); setSelectedTriggers([]); setSearchQuery(''); setUseCustom(false); setViceStrategyId(undefined); };
 
+  // Marca ou desmarca um gatilho na lista de selecionados
   const toggleTrigger = (type: string, value: string) => {
     setSelectedTriggers(prev => {
       const exists = prev.find(t => t.type === type && t.value === value);
@@ -45,12 +65,14 @@ export default function CreateChallengeDialog({ open, onOpenChange, onSubmit }: 
     });
   };
 
+  // Envia o desafio montado para quem chamou o componente, limpa e fecha a janela
   const handleSubmit = () => {
     onSubmit({ title, intention_level: intention, icon, vice_strategy_id: viceStrategyId, triggers: selectedTriggers });
     reset();
     onOpenChange(false);
   };
 
+  // Preenche os campos ao escolher um vício da lista e já avança para o passo 1
   const handleSelectVice = (vice: typeof VICE_STRATEGIES[0]) => {
     setTitle(vice.label);
     setIcon(vice.icon);
@@ -59,6 +81,7 @@ export default function CreateChallengeDialog({ open, onOpenChange, onSubmit }: 
     setStep(1);
   };
 
+  // Ativa o modo "escrever o meu", limpando o vício pré-selecionado
   const handleCustom = () => {
     setUseCustom(true);
     setViceStrategyId(undefined);
@@ -66,8 +89,10 @@ export default function CreateChallengeDialog({ open, onOpenChange, onSubmit }: 
     setIcon('🌱');
   };
 
+  // Define se o botão "Continuar" pode ser habilitado em cada passo
   const canNext = step === 0 ? title.trim().length > 0 : step === 1 ? !!intention : true;
 
+  // Vícios agrupados por categoria e, em seguida, filtrados pelo texto de busca
   const categories = getVicesByCategory();
   const filteredCategories = Object.entries(categories).reduce((acc, [cat, vices]) => {
     const filtered = searchQuery ? vices.filter(v => v.label.toLowerCase().includes(searchQuery.toLowerCase())) : vices;
@@ -75,8 +100,10 @@ export default function CreateChallengeDialog({ open, onOpenChange, onSubmit }: 
     return acc;
   }, {} as Record<string, typeof VICE_STRATEGIES>);
 
+  // Cor de destaque (verde-azulado) usada nos botões e barras do assistente
   const teal = 'hsl(170, 60%, 42%)';
 
+  // Monta a janela: barra de progresso no topo, conteúdo do passo atual e botões de navegação
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
       <DialogContent className="max-w-md p-0 overflow-hidden bg-gradient-to-b from-[hsl(170,30%,97%)] to-background border-none rounded-3xl max-h-[85vh]">

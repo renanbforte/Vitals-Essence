@@ -9,7 +9,7 @@
 import { useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { MessageSquare, Trophy, Calendar, BarChart3, Settings } from 'lucide-react';
+import { MessageSquare, Trophy, Calendar, BarChart3, Settings, MessagesSquare } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { useArenaGroupDetail } from '@/hooks/useArena';
 import { ArenaFeed } from '@/components/arena/ArenaFeed';
@@ -17,6 +17,7 @@ import { ArenaRanking } from '@/components/arena/ArenaRanking';
 import { ArenaCalendar } from '@/components/arena/ArenaCalendar';
 import { ArenaStats } from '@/components/arena/ArenaStats';
 import { ArenaSettings } from '@/components/arena/ArenaSettings';
+import { ArenaChat } from '@/components/arena/ArenaChat';
 import { ArenaCheckIn } from '@/components/arena/ArenaCheckIn';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
@@ -40,6 +41,8 @@ export default function ArenaGroup() {
     submitDailyScore,
     addFeedPost,
     toggleReaction,
+    addComment,
+    deleteComment,
     inviteMember,
     fetchMemberPhotosForDate,
   } = useArenaGroupDetail(groupId);
@@ -52,6 +55,9 @@ export default function ArenaGroup() {
     const channel = supabase
       .channel(`arena-${groupId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'arena_feed_posts', filter: `group_id=eq.${groupId}` }, () => {
+        queryClient.invalidateQueries({ queryKey: ['arena-feed', groupId] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'arena_feed_comments' }, () => {
         queryClient.invalidateQueries({ queryKey: ['arena-feed', groupId] });
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'arena_daily_scores', filter: `group_id=eq.${groupId}` }, () => {
@@ -95,7 +101,7 @@ export default function ArenaGroup() {
         {/* Abas de navegação dentro do grupo */}
         <Tabs value={tab} onValueChange={setTab}>
           {/* Barra com os 5 botões de aba (Feed, Ranking, Calendário, Stats, Config) */}
-          <TabsList className="grid w-full grid-cols-5 h-12 rounded-2xl bg-card border border-border p-1">
+          <TabsList className="grid w-full grid-cols-6 h-12 rounded-2xl bg-card border border-border p-1">
             <TabsTrigger value="feed" className="gap-1 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <MessageSquare className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Feed</span>
@@ -103,6 +109,10 @@ export default function ArenaGroup() {
             <TabsTrigger value="ranking" className="gap-1 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Trophy className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Ranking</span>
+            </TabsTrigger>
+            <TabsTrigger value="chat" className="gap-1 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <MessagesSquare className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Chat</span>
             </TabsTrigger>
             <TabsTrigger value="calendar" className="gap-1 rounded-xl text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Calendar className="w-3.5 h-3.5" />
@@ -125,12 +135,19 @@ export default function ArenaGroup() {
               group={group}
               onPost={(data) => addFeedPost.mutateAsync(data)}
               onReact={(postId, emoji) => toggleReaction.mutateAsync({ postId, emoji })}
+              onComment={(postId, text) => addComment.mutateAsync({ postId, text })}
+              onDeleteComment={(commentId) => deleteComment.mutateAsync(commentId)}
             />
           </TabsContent>
 
           {/* Aba Ranking: classificação dos membros por pontuação */}
           <TabsContent value="ranking" className="mt-4">
             <ArenaRanking group={group} members={members} scores={scores} />
+          </TabsContent>
+
+          {/* Aba Chat: conversa em grupo em tempo real */}
+          <TabsContent value="chat" className="mt-4">
+            <ArenaChat groupId={groupId!} />
           </TabsContent>
 
           {/* Aba Calendário: histórico diário; ao tocar um dia, mostra as fotos */}

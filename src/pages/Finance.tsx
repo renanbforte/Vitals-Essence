@@ -9,11 +9,10 @@
 // Importações do React (ferramentas para guardar estados e reagir a mudanças)
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowUpDown, Shield, TrendingUp, Target, Compass, BarChart3, Plus, Settings2 } from 'lucide-react';
+import { ArrowUpDown, TrendingUp, Plus, Settings2 } from 'lucide-react';
 import { InvestTab } from '@/components/finance/InvestTab';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Header } from '@/components/Header';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +23,10 @@ import { useFinancialReserve } from '@/hooks/useFinancialReserve';
 import { MonthSelector } from '@/components/finance/MonthSelector';
 import { FlowSummary } from '@/components/finance/FlowSummary';
 import { RealBalanceCard } from '@/components/finance/RealBalanceCard';
+import { FinanceHero } from '@/components/finance/FinanceHero';
+import { BankConnectCard } from '@/components/finance/BankConnectCard';
 import { ReserveCard } from '@/components/finance/ReserveCard';
+import { computeRealBalance } from '@/lib/finance';
 import { TransactionList } from '@/components/finance/TransactionList';
 import { TransactionForm } from '@/components/finance/TransactionForm';
 import { CostCenterManager } from '@/components/finance/CostCenterManager';
@@ -45,31 +47,6 @@ const fadeUp = {
   show: { opacity: 1, y: 0, transition: { type: 'spring' as const, stiffness: 260, damping: 20 } },
 };
 
-// Cartão de apresentação usado na aba "Visão Geral": mostra um ícone, um título
-// e um texto explicando um recurso do módulo (ainda sem dados, só descritivo).
-function PlaceholderBlock({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) {
-  return (
-    <Card className="border-dashed border-2 border-[hsl(var(--finance))]/20 bg-[hsl(var(--finance-light))]">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-3 text-lg">
-          <div className="w-10 h-10 rounded-xl gradient-finance flex items-center justify-center shadow-md">
-            <Icon className="w-5 h-5 text-white" />
-          </div>
-          {title}
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-// Formata um número como moeda brasileira (ex.: 1500 vira "R$ 1.500,00").
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-}
-
 // Componente principal da tela Financeiro.
 export default function Finance() {
   // --- ESTADOS (memória da tela: valores que mudam com a interação) ---
@@ -79,6 +56,7 @@ export default function Finance() {
   const [formType, setFormType] = useState<'income' | 'expense'>('expense'); // tipo do lançamento: entrada ou saída
   const [costCenterManagerOpen, setCostCenterManagerOpen] = useState(false);  // se o gerenciador de centros de custo está aberto
   const [editingTransaction, setEditingTransaction] = useState<import('@/hooks/useFinancialFlow').FinancialTransaction | null>(null); // lançamento em edição (ou nenhum)
+  const [addBankSignal, setAddBankSignal] = useState(0); // incrementa para pedir ao card de contas que abra "adicionar banco"
 
   // --- DADOS (vindos do Supabase, através dos "hooks") ---
   const { user } = useAuth(); // usuário logado
@@ -139,6 +117,12 @@ export default function Finance() {
     if (!loading) fetchAllPaid();
   }, [transactions, loading]);
 
+  // Saldo real total (bancos + pagos/recebidos, fora a reserva) para o hero de topo
+  const realBalance = useMemo(
+    () => computeRealBalance(allPaidTransactions, bankBalances, reservaCenterIds),
+    [allPaidTransactions, bankBalances, reservaCenterIds]
+  );
+
   // Cria um novo lançamento e, se o usuário anexou arquivos (comprovantes), envia cada um
   const handleAddTransaction = async (input: import('@/hooks/useFinancialFlow').TransactionInput, files?: File[]) => {
     const txnId = await addTransaction(input);
@@ -163,26 +147,55 @@ export default function Finance() {
     setFormOpen(true);
   };
 
+  // Agenda um aporte mensal recorrente (saída pendente) no fluxo, na categoria
+  // "Investimentos". Usado quando um investimento vira real. Retorna o id do pai.
+  const scheduleAporte = useCallback(async (name: string, amount: number, startDate: string) => {
+    const investCC = costCenters.find(cc => cc.name === 'Investimentos');
+    return await addTransaction({
+      type: 'expense',
+      description: `Aporte - ${name}`,
+      amount,
+      date: startDate,
+      cost_center_id: investCC?.id ?? null,
+      is_recurring: true,
+      recurrence_type: 'months',
+      recurrence_interval: 1,
+    });
+  }, [costCenters, addTransaction]);
+
   // --- APARÊNCIA DA TELA (o que o usuário vê) ---
   return (
     <div className="min-h-screen bg-background">
       {/* Cabeçalho da tela, com título "Financeiro" e botão de voltar */}
       <Header title="Financeiro" showBack gradientClass="gradient-finance" />
 
-      <main className="container mx-auto px-4 py-6 space-y-6 max-w-3xl">
-        {/* Cartão de Saldo Real: dinheiro efetivamente disponível nas contas */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <main className="container mx-auto px-4 py-6 space-y-5 max-w-3xl">
+        {/* Hero: saldo real em destaque + chips de mês, patrimônio e reserva */}
+        <FinanceHero
+          realBalance={realBalance}
+          monthBalance={flowSummary.balance}
+          patrimony={totalInvested}
+          reserve={totalReserve}
+        />
+
+        {/* Conectar banco (Open Finance) — ponto de entrada da conexão automática */}
+        <BankConnectCard onAddManual={() => setAddBankSignal(s => s + 1)} />
+
+        {/* Minhas contas: saldos por banco (editar/adicionar); o total fica no hero */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <RealBalanceCard
             transactions={allPaidTransactions}
             bankBalances={bankBalances}
             savedBanks={savedBanks}
             onUpsertBalance={upsertBankBalance}
             excludeCostCenterIds={reservaCenterIds}
+            compact
+            requestAddBank={addBankSignal}
           />
         </motion.div>
 
         {/* Cartão de Reserva: reserva de emergência (parte manual + parte automática) */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <ReserveCard
             manualReserve={manualReserve}
             autoReserve={autoReserve}
@@ -225,93 +238,27 @@ export default function Finance() {
           />
         </motion.div>
 
-        {/* Estatísticas rápidas: dois cartões lado a lado (Saldo do Mês e Patrimônio) */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-2 gap-3"
-        >
-          {/* Cartão 1: saldo do mês (verde se positivo, vermelho se negativo) */}
-          <Card className="bg-[hsl(var(--finance-light))] border-[hsl(var(--finance))]/20">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground font-medium">Saldo do Mês</p>
-              <p className={`text-xl font-bold tabular-nums truncate ${flowSummary.balance >= 0 ? 'text-[hsl(var(--finance))]' : 'text-destructive'}`}>
-                {flowTransactions.length > 0 ? formatCurrency(flowSummary.balance) : '—'}
-              </p>
-              {flowTransactions.length === 0 && (
-                <p className="text-[10px] text-muted-foreground mt-1">Nenhum lançamento</p>
-              )}
-            </CardContent>
-          </Card>
-          {/* Cartão 2: patrimônio (total investido); mostra "—" se não houver investimentos */}
-          <Card className="bg-[hsl(var(--finance-light))] border-[hsl(var(--finance))]/20">
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground font-medium">Patrimônio</p>
-              <p className={`text-xl font-bold tabular-nums truncate ${totalInvested > 0 ? 'text-[hsl(var(--finance))]' : 'text-muted-foreground'}`}>
-                {totalInvested > 0 ? formatCurrency(totalInvested) : '—'}
-              </p>
-              {totalInvested === 0 && (
-                <p className="text-[10px] text-muted-foreground mt-1">Nenhum investimento</p>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
-
-        {/* Sistema de ABAS: alterna entre "Visão Geral", "Fluxo" e "Investir" */}
+        {/* Sistema de ABAS: alterna entre "Fluxo" e "Investir" (Metas foi unificada em Investir) */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          {/* Barra com os três botões de aba */}
-          <TabsList className="grid w-full grid-cols-3 h-14 rounded-2xl bg-card border border-border p-1.5 shadow-sm">
-            <TabsTrigger
-              value="overview"
-              className="gap-2 rounded-xl font-bold text-sm data-[state=active]:gradient-finance data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
-            >
-              <BarChart3 className="w-4 h-4" />
-              Visão Geral
-            </TabsTrigger>
+          {/* Barra com os dois botões de aba */}
+          <TabsList className="grid w-full grid-cols-2 h-14 rounded-2xl bg-card border border-border p-1.5 shadow-sm">
             <TabsTrigger
               value="flow"
-              className="gap-2 rounded-xl font-bold text-sm data-[state=active]:gradient-finance data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
+              className="gap-1.5 rounded-xl font-bold text-sm data-[state=active]:gradient-finance data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
             >
-              <ArrowUpDown className="w-4 h-4" />
-              Fluxo
+              <ArrowUpDown className="w-4 h-4 shrink-0" />
+              <span className="truncate">Fluxo</span>
             </TabsTrigger>
             <TabsTrigger
               value="invest"
-              className="gap-2 rounded-xl font-bold text-sm data-[state=active]:gradient-finance data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
+              className="gap-1.5 rounded-xl font-bold text-sm data-[state=active]:gradient-finance data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
             >
-              <TrendingUp className="w-4 h-4" />
-              Investir
+              <TrendingUp className="w-4 h-4 shrink-0" />
+              <span className="truncate">Investir</span>
             </TabsTrigger>
           </TabsList>
 
           <AnimatePresence mode="wait">
-            {/* CONTEÚDO DA ABA "VISÃO GERAL": cartões que apresentam os recursos do módulo */}
-            <TabsContent value="overview" className="mt-6" key="overview">
-              <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-4">
-                <motion.div variants={fadeUp}>
-                  <PlaceholderBlock
-                    icon={ArrowUpDown}
-                    title="Fluxo Financeiro"
-                    description="Registre suas entradas e saídas com recorrência automática. Saiba exatamente para onde seu dinheiro vai."
-                  />
-                </motion.div>
-                <motion.div variants={fadeUp}>
-                  <PlaceholderBlock icon={Shield} title="Segurança Financeira" description="Descubra por quantos meses você consegue viver sem renda." />
-                </motion.div>
-                <motion.div variants={fadeUp}>
-                  <PlaceholderBlock icon={TrendingUp} title="Investimentos" description="Acompanhe seu patrimônio investido por categoria." />
-                </motion.div>
-                <motion.div variants={fadeUp}>
-                  <PlaceholderBlock icon={BarChart3} title="Crescimento Patrimonial" description="Evolução do patrimônio ao longo do tempo." />
-                </motion.div>
-                <motion.div variants={fadeUp}>
-                  <PlaceholderBlock icon={Target} title="Metas de Investimento" description="Defina metas com prazo e valor alvo." />
-                </motion.div>
-                <motion.div variants={fadeUp}>
-                  <PlaceholderBlock icon={Compass} title="Liberdade Financeira" description="Quanto do seu futuro já está comprometido?" />
-                </motion.div>
-              </motion.div>
-            </TabsContent>
 
             {/* CONTEÚDO DA ABA "FLUXO": entradas e saídas do mês selecionado */}
             <TabsContent value="flow" className="mt-6" key="flow">
@@ -371,9 +318,9 @@ export default function Finance() {
               </motion.div>
             </TabsContent>
 
-            {/* CONTEÚDO DA ABA "INVESTIR": patrimônio investido e aportes do mês */}
+            {/* CONTEÚDO DA ABA "INVESTIR": investimentos, metas e simulador (unificados) */}
             <TabsContent value="invest" className="mt-6" key="invest">
-              <InvestTab monthlyIncome={flowSummary.income} monthlyExpenses={flowSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} />
+              <InvestTab monthlyIncome={flowSummary.income} monthlyExpenses={flowSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} />
             </TabsContent>
           </AnimatePresence>
         </Tabs>

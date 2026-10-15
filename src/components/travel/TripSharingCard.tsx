@@ -1,3 +1,9 @@
+// ============================================================================
+// TripSharingCard (Cartão de Participantes da Viagem)
+// Mostra quem participa de uma viagem e permite ao dono convidar mais pessoas,
+// seja escolhendo entre os amigos já cadastrados ou digitando o "código de amigo".
+// Cada participante aparece com o status "Ativo" (aceitou) ou "Pendente" (convidado).
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,15 +23,24 @@ interface Props {
 }
 
 export default function TripSharingCard({ tripId, isOwner }: Props) {
+  // Usuário logado no momento.
   const { user } = useAuth();
+  // Lista de participantes da viagem e a ação de convidar alguém.
   const { members, invite } = useTripMembers(tripId);
+  // Lista de amigos do usuário.
   const { friends } = useFriendships();
+  // Controla se a janela (modal) de convite está aberta.
   const [showInvite, setShowInvite] = useState(false);
+  // Guarda o código de amigo digitado na busca.
   const [friendCode, setFriendCode] = useState('');
+  // Guarda o amigo encontrado ao buscar por código (ou null se não achou).
   const [foundFriend, setFoundFriend] = useState<any>(null);
+  // Indica se a busca por código está em andamento.
   const [searching, setSearching] = useState(false);
+  // Aba ativa no modal: "friends" (meus amigos) ou "code" (por código).
   const [tab, setTab] = useState<'friends' | 'code'>('friends');
 
+  // Busca no banco um perfil cujo código de amigo seja igual ao digitado.
   const searchFriend = async () => {
     if (!friendCode.trim()) return;
     setSearching(true);
@@ -38,6 +53,7 @@ export default function TripSharingCard({ tripId, isOwner }: Props) {
     setSearching(false);
   };
 
+  // Envia o convite para o amigo encontrado pela busca por código.
   const handleInvite = () => {
     if (!foundFriend) return;
     invite.mutate(foundFriend.user_id, {
@@ -45,23 +61,26 @@ export default function TripSharingCard({ tripId, isOwner }: Props) {
     });
   };
 
+  // Envia o convite para um amigo escolhido na lista "Meus amigos".
   const handleInviteFriend = (friendUserId: string) => {
     invite.mutate(friendUserId, {
       onSuccess: () => { setShowInvite(false); }
     });
   };
 
-  // Check which friends are already members/invited
+  // Lista de IDs de quem já participa/foi convidado (para não convidar de novo).
   const memberUserIds = members.map((m: any) => m.user_id);
 
-  // Get available friends (accepted, not already invited, not self)
+  // Filtra apenas os amigos que ainda não estão na viagem, disponíveis para convite.
   const availableFriends = friends.filter(f => {
     const friendUserId = f.user_id === user?.id ? f.friend_id : f.user_id;
     return !memberUserIds.includes(friendUserId);
   });
 
+  // Guarda o nome de cada participante, indexado pelo ID do usuário.
   const [memberProfiles, setMemberProfiles] = useState<Record<string, string>>({});
 
+  // Sempre que a lista de participantes muda, busca os nomes deles no banco.
   useEffect(() => {
     if (members.length === 0) return;
     const ids = members.map((m: any) => m.user_id);
@@ -74,10 +93,12 @@ export default function TripSharingCard({ tripId, isOwner }: Props) {
     });
   }, [members]);
 
+  // Se o usuário não é o dono e não há participantes, não mostra nada.
   if (!isOwner && members.length === 0) return null;
 
   return (
     <>
+      {/* Cartão que lista os participantes e (para o dono) o botão de convidar */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-3">

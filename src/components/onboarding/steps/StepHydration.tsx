@@ -1,3 +1,9 @@
+// ============================================================================
+// TELA DE HIDRATAÇÃO (Onboarding)
+// Esta etapa deixa o usuário montar sua rotina de beber água ao longo do dia.
+// Ele pode escolher um modelo pronto (2L, 3L ou 4L) ou personalizar os
+// horários e quantidades. A meta diária é recalculada conforme os horários.
+// ============================================================================
 import { useState } from 'react';
 import { Droplets, Plus, Trash2, Clock, Info } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -11,6 +17,8 @@ interface StepHydrationProps {
   updateData: (updates: Partial<OnboardingData>) => void;
 }
 
+// Modelos prontos de hidratação: cada um traz a meta total (em ml) e uma
+// lista de horários com quantidade e um rótulo (ex.: "Manhã", "Almoço").
 const presetSchedules = [
   {
     name: 'Básico (2L)',
@@ -58,9 +66,13 @@ const presetSchedules = [
 ];
 
 export default function StepHydration({ data, updateData }: StepHydrationProps) {
+  // Controla se o painel de personalização de horários está aberto ou não.
   const [customMode, setCustomMode] = useState(false);
+  // Guarda os dados do novo horário que o usuário está digitando para adicionar.
   const [newEntry, setNewEntry] = useState({ time: '12:00', amount: 250, label: '' });
 
+  // Aplica um modelo pronto: define a meta e a lista de horários, e fecha
+  // o modo de personalização.
   const selectPreset = (preset: typeof presetSchedules[0]) => {
     updateData({
       hydrationGoal: preset.total,
@@ -69,6 +81,8 @@ export default function StepHydration({ data, updateData }: StepHydrationProps) 
     setCustomMode(false);
   };
 
+  // Adiciona um horário personalizado à lista, mantém os horários em ordem
+  // e recalcula a meta diária somando todas as quantidades.
   const addCustomEntry = () => {
     if (!newEntry.label) return;
     const updated = [...data.hydrationSchedule, newEntry].sort((a, b) => 
@@ -81,6 +95,7 @@ export default function StepHydration({ data, updateData }: StepHydrationProps) 
     setNewEntry({ time: '12:00', amount: 250, label: '' });
   };
 
+  // Remove um horário da lista (pela posição) e recalcula a meta diária.
   const removeEntry = (index: number) => {
     const updated = data.hydrationSchedule.filter((_, i) => i !== index);
     updateData({ 

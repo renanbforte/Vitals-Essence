@@ -1,3 +1,11 @@
+// ============================================================================
+// GoalsTab (Módulo Vida / Metas)
+// Aba onde a pessoa cadastra e acompanha suas metas de vida (viagem, carreira,
+// saúde, etc.). Permite criar, editar, ver detalhes, concluir e excluir metas,
+// além de filtrar por status/categoria e ordenar por prazo ou mais recentes.
+// Os dados vêm e vão para o banco através do hook useLifeGoals.
+// ============================================================================
+
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Check, Trash2, Pencil, Target, Calendar, ArrowUpDown } from 'lucide-react';
@@ -19,6 +27,7 @@ import {
   useLifeGoals, type LifeGoal, type GoalStatus, type GoalCategory, type GoalPriority, type GoalInput,
 } from '@/hooks/useLifeGoals';
 
+// Nomes amigáveis (em português) para cada categoria de meta
 const CATEGORIES: Record<GoalCategory, string> = {
   viagem: 'Viagem',
   carreira: 'Carreira',
@@ -28,6 +37,7 @@ const CATEGORIES: Record<GoalCategory, string> = {
   outro: 'Outro',
 };
 
+// Cores da etiqueta de cada categoria
 const CATEGORY_COLOR: Record<GoalCategory, string> = {
   viagem: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
   carreira: 'bg-violet-500/15 text-violet-600 dark:text-violet-400',
@@ -37,30 +47,35 @@ const CATEGORY_COLOR: Record<GoalCategory, string> = {
   outro: 'bg-muted/60 text-muted-foreground',
 };
 
+// Nomes amigáveis para cada status da meta
 const STATUS_LABEL: Record<GoalStatus, string> = {
   nao_iniciada: 'Não iniciada',
   em_andamento: 'Em andamento',
   concluida: 'Concluída',
 };
 
+// Cores da etiqueta de cada status
 const STATUS_COLOR: Record<GoalStatus, string> = {
   nao_iniciada: 'bg-slate-500/15 text-slate-600 dark:text-slate-400',
   em_andamento: 'bg-orange-500/15 text-orange-600 dark:text-orange-400',
   concluida: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
 };
 
+// Nomes amigáveis para cada nível de prioridade
 const PRIORITY_LABEL: Record<NonNullable<GoalPriority>, string> = {
   baixa: 'Baixa',
   media: 'Média',
   alta: 'Alta',
 };
 
+// Cores da etiqueta de cada nível de prioridade
 const PRIORITY_COLOR: Record<NonNullable<GoalPriority>, string> = {
   baixa: 'bg-sky-500/15 text-sky-600 dark:text-sky-400',
   media: 'bg-amber-500/15 text-amber-600 dark:text-amber-400',
   alta: 'bg-rose-500/15 text-rose-600 dark:text-rose-400',
 };
 
+// Valores iniciais do formulário ao criar uma nova meta
 const EMPTY_FORM: GoalInput = {
   title: '',
   description: '',
@@ -70,6 +85,8 @@ const EMPTY_FORM: GoalInput = {
   priority: null,
 };
 
+// Transforma a data-limite em um texto amigável e escolhe a cor conforme a urgência
+// (atrasada, hoje, dentro de 7 dias ou mais distante)
 function formatDeadline(d: string) {
   const date = parseISO(d);
   const days = differenceInDays(date, new Date());
@@ -81,20 +98,31 @@ function formatDeadline(d: string) {
 }
 
 export default function GoalsTab() {
+  // Hook que traz as metas do banco e as funções para criar/editar/excluir/concluir
   const { goals, loading, addGoal, updateGoal, deleteGoal, toggleComplete } = useLifeGoals();
 
+  // Controla se a janela de criar/editar está aberta
   const [dialogOpen, setDialogOpen] = useState(false);
+  // Meta que está sendo editada (null quando é criação de uma nova)
   const [editing, setEditing] = useState<LifeGoal | null>(null);
+  // Dados atuais do formulário de meta
   const [form, setForm] = useState<GoalInput>(EMPTY_FORM);
+  // Indica se está salvando (para desabilitar o botão e evitar clique duplo)
   const [saving, setSaving] = useState(false);
 
+  // Meta aberta na janela de detalhes (null quando nenhuma está sendo vista)
   const [viewing, setViewing] = useState<LifeGoal | null>(null);
+  // Meta escolhida para exclusão, exibida na confirmação (null quando nenhuma)
   const [deleteTarget, setDeleteTarget] = useState<LifeGoal | null>(null);
 
+  // Filtro por status selecionado ('todas' mostra tudo)
   const [filterStatus, setFilterStatus] = useState<'todas' | GoalStatus>('todas');
+  // Filtro por categoria selecionado ('todas' mostra tudo)
   const [filterCategory, setFilterCategory] = useState<'todas' | GoalCategory>('todas');
+  // Modo de ordenação da lista: por prazo ou por mais recentes
   const [sortMode, setSortMode] = useState<'deadline' | 'created'>('deadline');
 
+  // Aplica filtros e ordenação à lista de metas; recalcula só quando algo muda
   const filtered = useMemo(() => {
     let list = [...goals];
     if (filterStatus !== 'todas') list = list.filter(g => g.status === filterStatus);
@@ -112,12 +140,14 @@ export default function GoalsTab() {
     return list;
   }, [goals, filterStatus, filterCategory, sortMode]);
 
+  // Abre a janela em branco para cadastrar uma nova meta
   const openNew = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
     setDialogOpen(true);
   };
 
+  // Abre a janela já preenchida com os dados da meta escolhida para edição
   const openEdit = (g: LifeGoal) => {
     setEditing(g);
     setForm({
@@ -132,6 +162,7 @@ export default function GoalsTab() {
     setDialogOpen(true);
   };
 
+  // Valida o título e salva a meta: atualiza a existente ou cria uma nova
   const handleSave = async () => {
     if (!form.title.trim()) {
       toast.error('Dê um título para sua meta');
@@ -156,6 +187,7 @@ export default function GoalsTab() {
     setDialogOpen(false);
   };
 
+  // Confirma e efetua a exclusão da meta escolhida, fechando as janelas envolvidas
   const confirmDelete = async () => {
     if (!deleteTarget) return;
     await deleteGoal(deleteTarget.id);
@@ -164,6 +196,8 @@ export default function GoalsTab() {
     setViewing(null);
   };
 
+  // Monta a tela: cabeçalho com contagem, filtros, a lista de metas e as três
+  // janelas (criar/editar, ver detalhes e confirmar exclusão)
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
       <div className="rounded-2xl bg-card/70 backdrop-blur-xl border border-border/40 p-4 shadow-lg">

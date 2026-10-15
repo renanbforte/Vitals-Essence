@@ -1,3 +1,11 @@
+// ============================================================================
+// IntimacyLogDialog — Janela (modal) do módulo Feminino para registrar um
+// momento de intimidade em uma data escolhida.
+// A usuária preenche tipo de atividade, duração, contexto, notas de avaliação
+// (desejo, satisfação, prazer), humor, saúde e observações; ao salvar, os
+// dados são enviados para o app gravar (via onSave) e o formulário é limpo.
+// ============================================================================
+
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -8,12 +16,17 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import type { IntimacyLogInsert } from '@/hooks/useIntimacyLogs';
 
+// Listas fixas de opções que aparecem como botões no formulário.
 const ACTIVITY_TYPES = ['Penetrativa', 'Oral', 'Manual', 'Masturbação', 'Beijos/Carícias', 'Outro'];
 const MOODS = ['Romântico', 'Apaixonado', 'Aventureiro', 'Carnal', 'Relaxado', 'Espontâneo'];
 const ENERGY = ['Baixa', 'Média', 'Alta'];
 const ORGASM = ['Nenhum', 'Um', 'Múltiplos'];
 const DISCOMFORT = ['Nenhum', 'Leve', 'Moderado', 'Severo'];
 
+// Informações que este componente recebe de quem o utiliza:
+// open = se a janela está aberta; date = a data do registro;
+// onClose = fechar a janela; onSave = função que grava os dados;
+// isSaving = indica que está salvando (para bloquear o botão).
 interface Props {
   open: boolean;
   date: Date | null;
@@ -22,6 +35,8 @@ interface Props {
   isSaving: boolean;
 }
 
+// Componente auxiliar: mostra uma escala de 1 a 10 em botões.
+// Ao clicar em um número, ele e todos os anteriores ficam preenchidos com a cor.
 function ScaleSelector({ value, onChange, color = 'hsl(340 60% 55%)' }: { value: number; onChange: (v: number) => void; color?: string }) {
   return (
     <div className="flex gap-1">
@@ -45,6 +60,8 @@ function ScaleSelector({ value, onChange, color = 'hsl(340 60% 55%)' }: { value:
 }
 
 export function IntimacyLogDialog({ open, date, onClose, onSave, isSaving }: Props) {
+  // Estado do formulário: guarda tudo o que a usuária vai preenchendo.
+  // Já começa com alguns valores padrão (sem proteção marcada e escalas em 5).
   const [form, setForm] = useState<Partial<IntimacyLogInsert>>({
     activity_type: [],
     protection_used: false,
@@ -53,6 +70,8 @@ export function IntimacyLogDialog({ open, date, onClose, onSave, isSaving }: Pro
     pleasure: 5,
   });
 
+  // Liga/desliga um tipo de atividade na lista: se já estava selecionado, remove;
+  // se não estava, adiciona. Permite escolher vários ao mesmo tempo.
   const toggleActivity = (a: string) =>
     setForm(f => ({
       ...f,
@@ -61,6 +80,8 @@ export function IntimacyLogDialog({ open, date, onClose, onSave, isSaving }: Pro
         : [...(f.activity_type ?? []), a],
     }));
 
+  // Ao clicar em salvar: monta o objeto final com todos os campos preenchidos,
+  // envia para o app gravar, limpa o formulário e fecha a janela.
   const handleSave = async () => {
     if (!date) return;
     await onSave({
@@ -85,6 +106,8 @@ export function IntimacyLogDialog({ open, date, onClose, onSave, isSaving }: Pro
     onClose();
   };
 
+  // Parte visual: a janela desliza de baixo para cima (animação) e mostra,
+  // em seções, todos os campos do formulário e o botão de salvar no final.
   return (
     <AnimatePresence>
       {open && (

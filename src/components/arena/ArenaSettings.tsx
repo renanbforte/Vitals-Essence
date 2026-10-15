@@ -10,10 +10,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Lock, Globe, Shield, Eye, EyeOff, Minus, Droplets, Utensils, Dumbbell, UserPlus, Search, Crown } from 'lucide-react';
+import { Lock, Globe, Shield, Eye, EyeOff, Minus, Droplets, Utensils, Dumbbell, UserPlus, Search, Crown, KeyRound, Copy, Check } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 interface ArenaSettingsProps {
   group: ArenaGroup;
@@ -25,8 +26,23 @@ interface ArenaSettingsProps {
 export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSettingsProps) {
   // Usuário logado (usado para não aparecer nos resultados da busca de convite).
   const { user } = useAuth();
+  // Se o código de convite acabou de ser copiado (para trocar o ícone por um check).
+  const [copied, setCopied] = useState(false);
   // Texto digitado no campo de busca de pessoas.
   const [search, setSearch] = useState('');
+
+  // Copia o código de convite do grupo para a área de transferência.
+  const copyCode = async () => {
+    if (!group.invite_code) return;
+    try {
+      await navigator.clipboard.writeText(group.invite_code);
+      setCopied(true);
+      toast.success('Código copiado!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar');
+    }
+  };
   // Lista de pessoas encontradas na busca por nome.
   const [searchResults, setSearchResults] = useState<any[]>([]);
   // Indica se uma busca está em andamento (mostra "Buscando...").
@@ -129,6 +145,21 @@ export function ArenaSettings({ group, members, isCreator, onInvite }: ArenaSett
           ))}
         </div>
       </Card>
+
+      {/* Código de convite: qualquer membro pode compartilhar para trazer amigos */}
+      {group.invite_code && (
+        <Card className="p-4 rounded-2xl border-border space-y-2">
+          <h3 className="font-bold text-sm flex items-center gap-2"><KeyRound className="w-4 h-4" /> Código do desafio</h3>
+          <p className="text-xs text-muted-foreground">Compartilhe este código para amigos entrarem na Arena.</p>
+          <button
+            onClick={copyCode}
+            className="w-full flex items-center justify-between gap-2 rounded-xl bg-primary/5 border border-primary/20 px-4 py-3 hover:bg-primary/10 transition-colors"
+          >
+            <span className="text-xl font-extrabold tracking-widest text-primary">{group.invite_code}</span>
+            {copied ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+          </button>
+        </Card>
+      )}
 
       {/* Cartão de convite: aparece somente para o criador do grupo */}
       {isCreator && (

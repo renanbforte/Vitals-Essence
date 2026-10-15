@@ -1,3 +1,10 @@
+// ============================================================================
+// REGISTRO DIÁRIO DO FLUXO (FlowLogger)
+// Tela onde a usuária registra, dia a dia, como está seu período menstrual:
+// a intensidade do fluxo, os sintomas sentidos, o humor e observações livres.
+// Permite navegar entre os dias e salvar (ou atualizar) o registro de cada data.
+// ============================================================================
+
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -8,11 +15,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import type { FlowIntensity, MenstrualDailyLog } from '@/hooks/useMenstrualCycle';
 
+// Informações que este componente recebe:
+// - dailyLogs: lista de todos os registros diários já feitos
+// - onLog: função que salva o registro de uma data específica
 interface Props {
   dailyLogs: MenstrualDailyLog[];
   onLog: (date: string, data: { flow_intensity?: FlowIntensity; symptoms?: string[]; mood?: string; notes?: string }) => Promise<void>;
 }
 
+// Opções de intensidade do fluxo, cada uma com nome, cor e ícone visual.
 const FLOW_OPTIONS: { value: FlowIntensity; label: string; color: string; icon: string }[] = [
   { value: 'none', label: 'Sem fluxo', color: 'bg-muted', icon: '○' },
   { value: 'spotting', label: 'Escape', color: 'bg-[hsl(340_50%_85%)]', icon: '·' },
@@ -22,29 +33,39 @@ const FLOW_OPTIONS: { value: FlowIntensity; label: string; color: string; icon: 
   { value: 'very_heavy', label: 'Muito intenso', color: 'bg-[hsl(345_60%_38%)]', icon: '🩸🩸🩸🩸' },
 ];
 
+// Lista de sintomas que a usuária pode marcar no dia.
 const SYMPTOMS = [
   '😣 Cólica', '🤕 Dor de cabeça', '😴 Cansaço', '💧 Inchaço',
   '🍫 Desejo de doce', '😤 Irritabilidade', '😢 Sensibilidade', '🤢 Náusea',
   '💢 Dor nas costas', '🌡️ Sensação de calor', '😰 Ansiedade', '🥴 Tontura',
 ];
 
+// Lista de estados de humor que a usuária pode escolher.
 const MOODS = [
   '😊 Bem', '😐 Normal', '😔 Triste', '😤 Irritada',
   '😴 Cansada', '🥰 Carinhosa', '😰 Ansiosa', '💪 Energizada',
 ];
 
 export function FlowLogger({ dailyLogs, onLog }: Props) {
+  // Data atualmente selecionada na tela (começa no dia de hoje).
   const [selectedDate, setSelectedDate] = useState(new Date());
+  // Data selecionada em texto (ex.: 2026-07-28) e o registro já existente para ela, se houver.
   const dateStr = format(selectedDate, 'yyyy-MM-dd');
   const existingLog = dailyLogs.find(l => l.date === dateStr);
 
+  // Intensidade do fluxo escolhida para o dia selecionado.
   const [flow, setFlow] = useState<FlowIntensity>(existingLog?.flow_intensity || 'none');
+  // Sintomas marcados para o dia selecionado.
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>(existingLog?.symptoms || []);
+  // Humor escolhido para o dia selecionado.
   const [mood, setMood] = useState(existingLog?.mood || '');
+  // Texto livre de observações do dia.
   const [notes, setNotes] = useState(existingLog?.notes || '');
+  // Indica se o registro está sendo salvo no momento (para bloquear o botão).
   const [saving, setSaving] = useState(false);
 
   // Sync when date changes
+  // Preenche todos os campos da tela com os dados de um registro (ou os limpa se não houver).
   const syncFromLog = (log: MenstrualDailyLog | undefined) => {
     setFlow(log?.flow_intensity || 'none');
     setSelectedSymptoms(log?.symptoms || []);

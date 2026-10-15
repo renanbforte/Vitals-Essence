@@ -7,10 +7,14 @@
 // ============================================================================
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { MapPin, Play, Square, Navigation, Trash2, Timer, Ruler, Zap, ChevronDown, ChevronUp } from 'lucide-react';
+import { MapPin, Play, Pause, Square, Navigation, Trash2, Timer, Ruler, Zap, Gauge, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { WorkoutSummary } from '@/components/WorkoutSummary';
+import { ShareWorkoutDialog } from '@/components/ShareWorkoutDialog';
+import { averageSpeedKmh } from '@/lib/workout';
+import { format } from 'date-fns';
 import type { Coordinate, WorkoutRoute } from '@/hooks/useWorkoutRoutes';
 
 export interface ExtendedCoordinate extends Coordinate {
@@ -262,7 +266,7 @@ function LiveMap({ coordinates }: { coordinates: Coordinate[] }) {
 export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onDeleteRoute, onFetchRoutes }: WorkoutRouteTrackerProps) {
   // Estados que descrevem a atividade em andamento e a interface:
   const [isTracking, setIsTracking] = useState(false);       // se está rastreando agora
-  const [_isPaused, setIsPaused] = useState(false);          // se está pausado
+  const [isPaused, setIsPaused] = useState(false);           // se está pausado
   const [coordinates, setCoordinates] = useState<Coordinate[]>([]); // pontos do trajeto
   const [elapsedSeconds, setElapsedSeconds] = useState(0);   // tempo decorrido em segundos
   const [distance, setDistance] = useState(0);               // distância acumulada em km
@@ -272,6 +276,8 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
   const [permissionDenied, setPermissionDenied] = useState(false); // se o GPS foi negado
   const [pointsReceived, setPointsReceived] = useState(0);   // quantos pontos de GPS chegaram
   const [pointsAccepted, setPointsAccepted] = useState(0);   // quantos foram aceitos (bons)
+  const [shareOpen, setShareOpen] = useState(false);         // diálogo de compartilhar na Arena
+  const [lastWorkout, setLastWorkout] = useState<{ dist: number; dur: number } | null>(null); // dados do treino recém-salvo
 
   // Referências que persistem entre renderizações sem disparar nova renderização:
   const watchIdRef = useRef<number | null>(null);            // id do monitoramento de GPS
@@ -279,6 +285,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
   const coordsRef = useRef<Coordinate[]>([]);                // cópia dos pontos para uso imediato
   const wakeLockRef = useRef<WakeLockSentinel | null>(null); // trava que mantém a tela ligada
   const lastSaveRef = useRef(0);                             // marca do último salvamento da sessão
+  const isPausedRef = useRef(false);                         // cópia de isPaused para uso imediato no GPS/cronômetro
 
   // Rótulo e ícone exibidos conforme o tipo de treino (corrida ou pedal)
   const label = workoutType === 'running' ? 'Corrida' : 'Pedal';
@@ -377,6 +384,8 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
 
   // Processa cada nova posição do GPS: valida, adiciona ao trajeto e atualiza a distância
   const handlePosition = useCallback((pos: GeolocationPosition, startTime: Date, currentElapsed: number) => {
+    // Enquanto pausado, ignora os pontos de GPS (não acumula trajeto nem distância).
+    if (isPausedRef.current) return;
     setPointsReceived(p => p + 1);
 
     if (!shouldAcceptPoint(pos, coordsRef.current)) return;
@@ -385,6 +394,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
       timestamp: pos.timestamp,
+      alt: pos.coords.altitude, // pode ser null quando o aparelho não reporta
     };
     coordsRef.current = [...coordsRef.current, coord];
     setCoordinates([...coordsRef.current]);
@@ -426,6 +436,7 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     watchIdRef.current = startGpsWatch(startTime, elapsedRef);
 
     timerRef.current = setInterval(() => {
+      if (isPausedRef.current) return; // pausado: não conta o tempo
       elapsedRef.value += 1;
       setElapsedSeconds(elapsedRef.value);
     }, 1000);
@@ -449,12 +460,14 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     setPointsAccepted(0);
     setIsTracking(true);
     setIsPaused(false);
+    isPausedRef.current = false;
     requestWakeLock();
 
     const elapsedRef = { value: 0 };
     watchIdRef.current = startGpsWatch(now, elapsedRef);
 
     timerRef.current = setInterval(() => {
+      if (isPausedRef.current) return; // pausado: não conta o tempo
       elapsedRef.value += 1;
       setElapsedSeconds(elapsedRef.value);
       persistSession(coordsRef.current, now, elapsedRef.value);
@@ -468,7 +481,17 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     releaseWakeLock();
     setIsTracking(false);
     setIsPaused(false);
+    isPausedRef.current = false;
     clearSession();
+  }, []);
+
+  // Pausa/retoma: enquanto pausado, o tempo não corre e os pontos de GPS são ignorados.
+  const togglePause = useCallback(() => {
+    setIsPaused(p => {
+      const next = !p;
+      isPausedRef.current = next;
+      return next;
+    });
   }, []);
 
   // Finaliza o treino e salva o percurso no banco (exige pelo menos 2 pontos)
@@ -491,6 +514,9 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
     if (!error) {
       toast.success(`${label} salva! ${distance.toFixed(2)} km em ${formatDuration(elapsedSeconds)}`);
       onFetchRoutes();
+      // Guarda os dados do treino e abre o convite para compartilhar na Arena.
+      setLastWorkout({ dist: distance, dur: elapsedSeconds });
+      setShareOpen(true);
       setCoordinates([]);
       setDistance(0);
       setElapsedSeconds(0);
@@ -550,22 +576,34 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
       {/* quando parado, mostra apenas o botão para iniciar o rastreamento. */}
       {isTracking ? (
         <div className="space-y-3">
-          {/* Live stats */}
-          <div className="grid grid-cols-3 gap-2">
+          {/* Aviso de pausa */}
+          {isPaused && (
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2 text-center text-xs font-semibold text-amber-600">
+              ⏸ Pausado — o tempo e a distância estão congelados
+            </div>
+          )}
+
+          {/* Live stats: tempo, distância, ritmo e velocidade */}
+          <div className="grid grid-cols-4 gap-2">
             <div className="bg-primary/10 rounded-xl p-3 text-center">
               <Timer className="w-4 h-4 text-primary mx-auto mb-1" />
-              <p className="text-lg font-extrabold text-foreground font-mono">{formatDuration(elapsedSeconds)}</p>
+              <p className="text-base font-extrabold text-foreground font-mono">{formatDuration(elapsedSeconds)}</p>
               <p className="text-[10px] text-muted-foreground">Tempo</p>
             </div>
             <div className="bg-primary/10 rounded-xl p-3 text-center">
               <Ruler className="w-4 h-4 text-primary mx-auto mb-1" />
-              <p className="text-lg font-extrabold text-foreground">{distance.toFixed(2)}</p>
+              <p className="text-base font-extrabold text-foreground">{distance.toFixed(2)}</p>
               <p className="text-[10px] text-muted-foreground">km</p>
             </div>
             <div className="bg-primary/10 rounded-xl p-3 text-center">
               <Zap className="w-4 h-4 text-primary mx-auto mb-1" />
-              <p className="text-lg font-extrabold text-foreground font-mono">{pace}</p>
+              <p className="text-base font-extrabold text-foreground font-mono">{pace}</p>
               <p className="text-[10px] text-muted-foreground">min/km</p>
+            </div>
+            <div className="bg-primary/10 rounded-xl p-3 text-center">
+              <Gauge className="w-4 h-4 text-primary mx-auto mb-1" />
+              <p className="text-base font-extrabold text-foreground">{averageSpeedKmh(distance, elapsedSeconds).toFixed(1)}</p>
+              <p className="text-[10px] text-muted-foreground">km/h</p>
             </div>
           </div>
 
@@ -586,14 +624,23 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
             <p className="text-[10px] text-muted-foreground/60">Precisão mín: {MAX_ACCURACY_METERS}m · Dist mín: {MIN_DISTANCE_METERS}m</p>
           </div>
 
-          <Button
-            onClick={handleFinish}
-            disabled={saving}
-            className="w-full rounded-xl h-11 bg-destructive hover:bg-destructive/90 text-white font-bold"
-          >
-            <Square className="w-4 h-4 mr-2" />
-            {saving ? 'Salvando…' : 'Finalizar e Salvar Percurso'}
-          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              onClick={togglePause}
+              variant="outline"
+              className="rounded-xl h-11 font-bold border-amber-500/40 text-amber-600 hover:bg-amber-500/10"
+            >
+              {isPaused ? <><Play className="w-4 h-4 mr-2" />Retomar</> : <><Pause className="w-4 h-4 mr-2" />Pausar</>}
+            </Button>
+            <Button
+              onClick={handleFinish}
+              disabled={saving}
+              className="rounded-xl h-11 bg-destructive hover:bg-destructive/90 text-white font-bold"
+            >
+              <Square className="w-4 h-4 mr-2" />
+              {saving ? 'Salvando…' : 'Finalizar'}
+            </Button>
+          </div>
         </div>
       ) : (
         <Button
@@ -620,6 +667,18 @@ export function WorkoutRouteTracker({ workoutType, onSaveRoute, savedRoutes, onD
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Convite para compartilhar o treino num desafio da Arena */}
+      {lastWorkout && (
+        <ShareWorkoutDialog
+          open={shareOpen}
+          onOpenChange={setShareOpen}
+          workoutType={workoutType}
+          distanceKm={lastWorkout.dist}
+          durationSeconds={lastWorkout.dur}
+          date={format(new Date(), 'yyyy-MM-dd')}
+        />
+      )}
     </div>
   );
 }
@@ -649,20 +708,12 @@ function SavedRouteCard({ route, label, onDelete }: { route: WorkoutRoute; label
           </Button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div>
-            <p className="text-base font-extrabold text-foreground">{route.distance_km.toFixed(2)}</p>
-            <p className="text-[10px] text-muted-foreground">km</p>
-          </div>
-          <div>
-            <p className="text-base font-extrabold text-foreground font-mono">{formatDuration(route.duration_seconds)}</p>
-            <p className="text-[10px] text-muted-foreground">tempo</p>
-          </div>
-          <div>
-            <p className="text-base font-extrabold text-foreground font-mono">{formatPace(route.distance_km, route.duration_seconds)}</p>
-            <p className="text-[10px] text-muted-foreground">min/km</p>
-          </div>
-        </div>
+        {/* Resumo completo: distância, tempo, ritmo, velocidade, elevação, calorias e splits */}
+        <WorkoutSummary
+          coordinates={route.coordinates}
+          durationSeconds={route.duration_seconds}
+          workoutType={route.workout_type}
+        />
 
         {route.coordinates.length > 1 && (
           <button

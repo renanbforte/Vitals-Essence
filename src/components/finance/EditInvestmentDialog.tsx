@@ -1,3 +1,9 @@
+// ============================================================================
+// EditInvestmentDialog (Janela de Editar Investimento)
+// Janela (modal) que permite alterar os dados de um investimento ja existente:
+// nome, tipo, objetivo, valores atuais, meta e configuracao de aporte recorrente.
+// Ao salvar, envia as mudancas para quem chamou o componente.
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -18,6 +24,8 @@ interface EditInvestmentDialogProps {
   objectives: string[];
 }
 
+// Tipos de meta que o usuario pode escolher para o investimento. Cada opcao tem
+// um rotulo, uma descricao explicativa e a unidade exibida (R$, %, R$/mes, etc.).
 const TARGET_MODES = [
   { value: 'total', label: 'Valor total', description: 'Meta de patrimônio acumulado', unit: 'R$' },
   { value: 'fixed_monthly', label: 'Valor fixo / mês', description: 'Quanto aportar por mês', unit: 'R$/mês' },
@@ -27,19 +35,22 @@ const TARGET_MODES = [
 ];
 
 export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit, investmentTypes, objectives }: EditInvestmentDialogProps) {
-  const [name, setName] = useState('');
-  const [investmentType, setInvestmentType] = useState('');
-  const [objective, setObjective] = useState('');
-  const [currentValue, setCurrentValue] = useState('');
-  const [operatingCapital, setOperatingCapital] = useState('');
-  const [targetValue, setTargetValue] = useState('');
-  const [targetMode, setTargetMode] = useState('total');
-  const [trackingMode, setTrackingMode] = useState('cumulative');
-  const [isRecurring, setIsRecurring] = useState(false);
-  const [recurringAmount, setRecurringAmount] = useState('');
-  const [recurrenceType, setRecurrenceType] = useState('months');
-  const [submitting, setSubmitting] = useState(false);
+  // Cada estado abaixo guarda o valor atual de um campo do formulario:
+  const [name, setName] = useState(''); // Nome do investimento
+  const [investmentType, setInvestmentType] = useState(''); // Tipo (ex: renda fixa)
+  const [objective, setObjective] = useState(''); // Objetivo/finalidade
+  const [currentValue, setCurrentValue] = useState(''); // Lucro/rendimento acumulado
+  const [operatingCapital, setOperatingCapital] = useState(''); // Capital usado para operar
+  const [targetValue, setTargetValue] = useState(''); // Valor da meta
+  const [targetMode, setTargetMode] = useState('total'); // Tipo de meta selecionado
+  const [trackingMode, setTrackingMode] = useState('cumulative'); // Como o valor e atualizado
+  const [isRecurring, setIsRecurring] = useState(false); // Se ha aporte recorrente
+  const [recurringAmount, setRecurringAmount] = useState(''); // Valor do aporte recorrente
+  const [recurrenceType, setRecurrenceType] = useState('months'); // Frequencia do aporte
+  const [submitting, setSubmitting] = useState(false); // Se esta salvando no momento
 
+  // Quando a janela abre, preenche todos os campos com os dados atuais do
+  // investimento recebido (para o usuario editar a partir do que ja existe).
   useEffect(() => {
     if (open && investment) {
       setName(investment.name);
@@ -56,8 +67,11 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
     }
   }, [open, investment]);
 
+  // Encontra os detalhes (descricao e unidade) do tipo de meta escolhido.
   const selectedMode = TARGET_MODES.find(m => m.value === targetMode)!;
 
+  // Salva as alteracoes: valida o nome, converte textos em numeros e envia
+  // as mudancas para quem chamou; ao terminar, fecha a janela.
   const handleSubmit = async () => {
     if (!name.trim()) return;
     setSubmitting(true);

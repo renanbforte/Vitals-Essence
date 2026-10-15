@@ -1,3 +1,9 @@
+// ============================================================================
+// TELA DE PERFIL (Onboarding)
+// Este componente é a etapa em que o usuário informa seus dados pessoais:
+// nome, data de nascimento, CPF (opcional), peso atual e meta de peso.
+// Ele também mostra automaticamente quantos quilos faltam para atingir a meta.
+// ============================================================================
 import { User, Target, Scale, Cake, CreditCard } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +15,8 @@ interface StepProfileProps {
 }
 
 export default function StepProfile({ data, updateData }: StepProfileProps) {
+  // Formata o CPF enquanto o usuário digita, colocando pontos e traço
+  // automaticamente (ex.: 000.000.000-00) e limitando a 11 dígitos.
   const formatCpf = (value: string) => {
     const digits = value.replace(/\D/g, '').slice(0, 11);
     if (digits.length <= 3) return digits;
@@ -19,6 +27,7 @@ export default function StepProfile({ data, updateData }: StepProfileProps) {
 
   return (
     <div className="space-y-6">
+      {/* Campo do nome do usuário */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-3 mb-4">
@@ -39,6 +48,7 @@ export default function StepProfile({ data, updateData }: StepProfileProps) {
         </CardContent>
       </Card>
 
+      {/* Campo da data de nascimento */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-3 mb-4">
@@ -59,6 +69,7 @@ export default function StepProfile({ data, updateData }: StepProfileProps) {
         </CardContent>
       </Card>
 
+      {/* Campo do CPF (opcional), formatado automaticamente ao digitar */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-3 mb-4">
@@ -80,6 +91,7 @@ export default function StepProfile({ data, updateData }: StepProfileProps) {
         </CardContent>
       </Card>
 
+      {/* Campo do peso atual do usuário (em kg) */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-3 mb-4">
@@ -105,6 +117,7 @@ export default function StepProfile({ data, updateData }: StepProfileProps) {
         </CardContent>
       </Card>
 
+      {/* Campo da meta de peso, com o resumo de quanto falta logo abaixo */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-center gap-3 mb-4">
@@ -128,6 +141,7 @@ export default function StepProfile({ data, updateData }: StepProfileProps) {
             <span className="text-muted-foreground font-medium">kg</span>
           </div>
           
+          {/* Resumo automático: mostra se o usuário precisa perder, ganhar ou já está no peso ideal */}
           {data.currentWeight > 0 && data.targetWeight > 0 && (
             <div className="mt-4 p-3 rounded-lg bg-muted/50">
               <p className="text-sm text-muted-foreground">

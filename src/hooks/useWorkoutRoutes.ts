@@ -12,11 +12,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 
-// Um ponto no mapa: latitude, longitude e o momento em que foi registrado.
+// Um ponto no mapa: latitude, longitude, o momento em que foi registrado e,
+// quando o aparelho reporta, a altitude em metros (usada para a elevação).
 export interface Coordinate {
   lat: number;
   lng: number;
   timestamp: number;
+  alt?: number | null;
 }
 
 // Formato de uma rota de treino: tipo, distância, duração e o caminho no mapa.

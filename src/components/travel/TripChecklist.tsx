@@ -1,3 +1,10 @@
+// ============================================================================
+// TripChecklist (Checklist de Bagagem)
+// Componente que mostra a lista de itens a levar em uma viagem, organizados
+// por categoria (roupas, higiene, eletronicos, etc). O usuario pode adicionar,
+// marcar como "arrumado", excluir itens e ainda salvar/reaproveitar a lista
+// como um "modelo" reutilizavel em outras viagens. Os dados ficam no Supabase.
+// ============================================================================
 import { useState, useEffect } from 'react';
 import { CheckSquare, Plus, Trash2, Save, Download } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,6 +17,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
+// Formato de um item da checklist (o que aparece em cada linha da lista).
 interface ChecklistItem {
   id: string;
   category: string;
@@ -18,12 +26,14 @@ interface ChecklistItem {
   packed: boolean;
 }
 
+// Formato de um "modelo" de checklist salvo para reutilizar em outras viagens.
 interface Template {
   id: string;
   name: string;
   created_at: string;
 }
 
+// Lista fixa de categorias disponiveis, cada uma com um emoji/icone e rotulo.
 const CATEGORIES = [
   { value: 'roupas', label: '👕 Roupas', icon: '👕' },
   { value: 'higiene', label: '🧴 Higiene/Banheiro', icon: '🧴' },
@@ -35,24 +45,36 @@ const CATEGORIES = [
   { value: 'outros', label: '📦 Outros', icon: '📦' },
 ];
 
+// Dados que o componente recebe de fora: apenas o identificador da viagem.
 interface Props {
   tripId: string;
 }
 
 export default function TripChecklist({ tripId }: Props) {
+  // Usuario logado (necessario para salvar itens e modelos vinculados a ele).
   const { user } = useAuth();
+  // Lista de itens da checklist atual carregados do banco.
   const [items, setItems] = useState<ChecklistItem[]>([]);
+  // Texto digitado para o nome do novo item.
   const [newItem, setNewItem] = useState('');
+  // Categoria escolhida para o novo item (comeca em "roupas").
   const [newCategory, setNewCategory] = useState('roupas');
+  // Quantidade escolhida para o novo item (comeca em 1).
   const [newQty, setNewQty] = useState(1);
+  // Controla se o formulario de "adicionar item" esta aberto.
   const [showAdd, setShowAdd] = useState(false);
 
-  // Template state
+  // --- Estados dos modelos (templates) reutilizaveis ---
+  // Lista de modelos salvos do usuario.
   const [templates, setTemplates] = useState<Template[]>([]);
+  // Controla a abertura da janela de "salvar como modelo".
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  // Controla a abertura da janela de "usar modelo salvo".
   const [showLoadDialog, setShowLoadDialog] = useState(false);
+  // Texto digitado para o nome do modelo que sera salvo.
   const [templateName, setTemplateName] = useState('');
 
+  // Ao abrir/trocar de viagem, busca no banco os itens da checklist dela.
   useEffect(() => {
     supabase
       .from('trip_checklist_items')
@@ -76,6 +98,7 @@ export default function TripChecklist({ tripId }: Props) {
     if (data) setTemplates(data as Template[]);
   };
 
+  // Adiciona um novo item na checklist (grava no banco e na tela).
   const addItem = async () => {
     if (!newItem.trim() || !user) return;
     const { data, error } = await supabase
@@ -89,12 +112,14 @@ export default function TripChecklist({ tripId }: Props) {
     setNewQty(1);
   };
 
+  // Marca/desmarca um item como "arrumado na mala" (alterna o estado).
   const togglePacked = async (item: ChecklistItem) => {
     const packed = !item.packed;
     await supabase.from('trip_checklist_items').update({ packed }).eq('id', item.id);
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, packed } : i));
   };
 
+  // Exclui um item da checklist (remove do banco e da tela).
   const deleteItem = async (id: string) => {
     await supabase.from('trip_checklist_items').delete().eq('id', id);
     setItems(prev => prev.filter(i => i.id !== id));
@@ -130,6 +155,8 @@ export default function TripChecklist({ tripId }: Props) {
   };
 
   // Load template into current trip
+  // Carrega os itens de um modelo salvo para dentro da viagem atual,
+  // ignorando os que ja existem (evita duplicar itens iguais).
   const loadTemplate = async (templateId: string) => {
     if (!user) return;
     const { data: templateItems } = await supabase
@@ -175,13 +202,16 @@ export default function TripChecklist({ tripId }: Props) {
     setShowLoadDialog(false);
   };
 
+  // Exclui um modelo salvo da lista de modelos do usuario.
   const deleteTemplate = async (id: string) => {
     await supabase.from('trip_checklist_templates').delete().eq('id', id);
     setTemplates(prev => prev.filter(t => t.id !== id));
     toast.success('Modelo excluído');
   };
 
+  // Quantos itens ja foram marcados como arrumados (para o contador/barra).
   const packedCount = items.filter(i => i.packed).length;
+  // Agrupa os itens por categoria e descarta categorias sem nenhum item.
   const grouped = CATEGORIES.map(cat => ({
     ...cat,
     items: items.filter(i => i.category === cat.value),

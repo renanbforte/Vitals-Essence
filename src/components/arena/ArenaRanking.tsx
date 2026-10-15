@@ -135,6 +135,10 @@ export function ArenaRanking({ group, members, scores }: ArenaRankingProps) {
   // Calcula as pontuações de todos os membros uma única vez.
   const ranked = computeRankings(members, scores);
 
+  // Pódio de encerramento: quando o desafio terminou, mostra o campeão (1º no total).
+  const isEnded = group.status === 'ended';
+  const podium = [...ranked].filter(r => r.days > 0).sort((a, b) => b.totalScore - a.totalScore).slice(0, 3);
+
   // Monta a lista de abas apenas com os tipos de ranking que o grupo habilitou.
   const tabs = [];
   if (group.ranking_total_score) tabs.push({ key: 'total', label: 'Total', icon: Trophy });
@@ -146,7 +150,28 @@ export function ArenaRanking({ group, members, scores }: ArenaRankingProps) {
   if (tabs.length === 0) tabs.push({ key: 'total', label: 'Total', icon: Trophy });
 
   return (
-    <Tabs defaultValue={tabs[0].key}>
+    <div className="space-y-4">
+      {/* Pódio de encerramento do desafio */}
+      {isEnded && podium.length > 0 && (
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+          <Card className="p-4 rounded-2xl gradient-health text-white text-center space-y-3 border-0">
+            <div className="flex items-center justify-center gap-2">
+              <Crown className="w-5 h-5" />
+              <p className="text-sm font-extrabold uppercase tracking-wide">Desafio encerrado</p>
+            </div>
+            <div className="flex items-end justify-center gap-3">
+              {/* 2º */}
+              {podium[1] && <PodiumPlace rank={2} name={podium[1].member.profile?.name} avatar={podium[1].member.profile?.avatar_url} score={podium[1].totalScore} />}
+              {/* 1º (maior) */}
+              <PodiumPlace rank={1} name={podium[0].member.profile?.name} avatar={podium[0].member.profile?.avatar_url} score={podium[0].totalScore} />
+              {/* 3º */}
+              {podium[2] && <PodiumPlace rank={3} name={podium[2].member.profile?.name} avatar={podium[2].member.profile?.avatar_url} score={podium[2].totalScore} />}
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
+      <Tabs defaultValue={tabs[0].key}>
       {/* Só mostra a barra de abas quando existe mais de um tipo de ranking */}
       {tabs.length > 1 && (
         <TabsList className={`grid w-full grid-cols-${tabs.length} h-10 rounded-xl bg-card border border-border p-1`}>
@@ -164,6 +189,26 @@ export function ArenaRanking({ group, members, scores }: ArenaRankingProps) {
           <RankingList ranked={ranked} sortKey={t.key} group={group} />
         </TabsContent>
       ))}
-    </Tabs>
+      </Tabs>
+    </div>
+  );
+}
+
+// Um lugar do pódio de encerramento: avatar, medalha, nome e pontos. O 1º lugar
+// vem maior e mais alto que o 2º e o 3º.
+function PodiumPlace({ rank, name, avatar, score }: { rank: 1 | 2 | 3; name?: string | null; avatar?: string | null; score: number }) {
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉';
+  const size = rank === 1 ? 'w-16 h-16' : 'w-12 h-12';
+  const lift = rank === 1 ? '' : 'mb-2';
+  return (
+    <div className={`flex flex-col items-center gap-1 ${lift}`}>
+      <span className={rank === 1 ? 'text-2xl' : 'text-xl'}>{medal}</span>
+      <Avatar className={`${size} border-2 border-white/60`}>
+        <AvatarImage src={avatar || ''} />
+        <AvatarFallback className="bg-white/20 text-white font-bold">{(name || '?')[0]}</AvatarFallback>
+      </Avatar>
+      <p className={`font-bold truncate max-w-[80px] ${rank === 1 ? 'text-sm' : 'text-xs'}`}>{name || 'Usuário'}</p>
+      <p className="text-[10px] font-extrabold tabular-nums">{score} pts</p>
+    </div>
   );
 }

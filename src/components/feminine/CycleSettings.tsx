@@ -1,3 +1,10 @@
+// ============================================================================
+// CONFIGURAÇÕES DO CICLO (CycleSettings)
+// Janela (pop-up) onde a usuária ajusta os dados do seu ciclo menstrual:
+// a duração média do ciclo, a duração média do período e o tipo de
+// contraceptivo. Ao salvar, envia essas informações para serem guardadas.
+// ============================================================================
+
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -7,6 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import type { MenstrualSettings } from '@/hooks/useMenstrualCycle';
 
+// Informações que este componente recebe de quem o utiliza:
+// - open: se a janela está aberta ou fechada
+// - onOpenChange: função para abrir/fechar a janela
+// - settings: os dados atuais do ciclo já salvos (ou nada, se ainda não houver)
+// - onSave: função que efetivamente grava as alterações
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -15,10 +27,14 @@ interface Props {
 }
 
 export function CycleSettings({ open, onOpenChange, settings, onSave }: Props) {
+  // Guarda o valor digitado para a duração do ciclo (começa em 28 dias).
   const [cycleLength, setCycleLength] = useState(settings?.average_cycle_length || 28);
+  // Guarda o valor digitado para a duração do período (começa em 5 dias).
   const [periodLength, setPeriodLength] = useState(settings?.average_period_length || 5);
+  // Guarda o contraceptivo escolhido (começa em "nenhum").
   const [contraceptive, setContraceptive] = useState(settings?.contraceptive_type || 'none');
 
+  // Sempre que os dados salvos mudarem, atualiza os campos da tela para refleti-los.
   useEffect(() => {
     if (settings) {
       setCycleLength(settings.average_cycle_length);
@@ -27,6 +43,7 @@ export function CycleSettings({ open, onOpenChange, settings, onSave }: Props) {
     }
   }, [settings]);
 
+  // Grava as configurações escolhidas, mostra um aviso de sucesso e fecha a janela.
   const handleSave = async () => {
     await onSave({
       average_cycle_length: cycleLength,
@@ -37,6 +54,7 @@ export function CycleSettings({ open, onOpenChange, settings, onSave }: Props) {
     onOpenChange(false);
   };
 
+  // Monta a aparência da janela de configurações na tela.
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl max-w-sm">
@@ -45,6 +63,7 @@ export function CycleSettings({ open, onOpenChange, settings, onSave }: Props) {
         </DialogHeader>
 
         <div className="space-y-5 pt-2">
+          {/* Campo: duração média do ciclo, aceita de 18 a 45 dias */}
           <div className="space-y-2">
             <Label>Duração média do ciclo (dias)</Label>
             <Input
@@ -58,6 +77,7 @@ export function CycleSettings({ open, onOpenChange, settings, onSave }: Props) {
             <p className="text-[11px] text-muted-foreground">O intervalo entre o 1º dia de uma menstruação e o 1º dia da próxima.</p>
           </div>
 
+          {/* Campo: duração média do período, aceita de 2 a 10 dias */}
           <div className="space-y-2">
             <Label>Duração média do período (dias)</Label>
             <Input
@@ -70,6 +90,7 @@ export function CycleSettings({ open, onOpenChange, settings, onSave }: Props) {
             />
           </div>
 
+          {/* Campo: escolha do método contraceptivo em uma lista suspensa */}
           <div className="space-y-2">
             <Label>Contraceptivo</Label>
             <Select value={contraceptive} onValueChange={setContraceptive}>
@@ -90,6 +111,7 @@ export function CycleSettings({ open, onOpenChange, settings, onSave }: Props) {
             </Select>
           </div>
 
+          {/* Botão que confirma e salva todas as configurações acima */}
           <Button
             onClick={handleSave}
             className="w-full rounded-2xl bg-gradient-to-r from-[hsl(340_60%_55%)] to-[hsl(320_50%_50%)] text-white font-semibold"
