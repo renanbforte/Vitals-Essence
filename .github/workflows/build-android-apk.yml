@@ -1,0 +1,75 @@
+name: Build Android APK
+
+# Compila o app em um APK instalável. Roda a cada push na main e também pode ser
+# disparado manualmente (aba Actions -> Run workflow). O APK fica disponível para
+# download no fim da execução, em "Artifacts", e também anexado em "Releases".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # necessário para criar o Release com o APK
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Build do app (Vite)
+        run: npm run build
+        env:
+          # Chave pública (anon) do Supabase — protegida por RLS, pode ir no cliente.
+          VITE_SUPABASE_URL: https://ktymjadbggzxvjbefquw.supabase.co
+          VITE_SUPABASE_PROJECT_ID: ktymjadbggzxvjbefquw
+          VITE_SUPABASE_PUBLISHABLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt0eW1qYWRiZ2d6eHZqYmVmcXV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNTk3NjYsImV4cCI6MjEwMDgzNTc2Nn0.8C9al9UV27bojSaXm4xhN9-75avrDlyN2hfnOlH5hz8
+
+      - name: Adicionar plataforma Android (Capacitor)
+        run: npx cap add android
+
+      - name: Sincronizar o build no Android
+        run: npx cap sync android
+
+      - name: Compilar o APK (debug, instalável)
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Renomear o APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk vitalis-essence.apk
+
+      - name: Disponibilizar o APK (download)
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitalis-essence-apk
+          path: vitalis-essence.apk
+          retention-days: 90
+
+      - name: Publicar em Releases (link direto)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-latest
+          name: Vitalis Essence — APK Android
+          body: |
+            APK instalável do app (build mais recente da branch main).
+            Baixe o arquivo vitalis-essence.apk abaixo e instale no celular
+            (ative "Instalar apps de fontes desconhecidas").
+          files: vitalis-essence.apk
+          make_latest: true
