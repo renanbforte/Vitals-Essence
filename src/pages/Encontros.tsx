@@ -9,13 +9,15 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Users, Calendar, MapPin, DollarSign, PartyPopper, Utensils, Beer, Gift, Flame, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Calendar, MapPin, DollarSign, PartyPopper, Utensils, Beer, Gift, Flame, MoreHorizontal, HandCoins, Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CoupleDatesBoard } from '@/components/encontros/CoupleDatesBoard';
 import { useGatheringEvents } from '@/hooks/useGatherings';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
@@ -60,6 +62,8 @@ export default function Encontros() {
   const { toast } = useToast();
   // Controla se a janela de "Novo Encontro" está aberta
   const [showCreate, setShowCreate] = useState(false);
+  // Aba ativa: "rateios" (eventos com amigos) ou "casal" (nossa lista de encontros)
+  const [tab, setTab] = useState('rateios');
   // Dados digitados no formulário de criação do evento
   const [form, setForm] = useState({ title: '', event_type: 'churrasco', event_date: '', location: '', description: '' });
 
@@ -102,15 +106,30 @@ export default function Encontros() {
               <p className="text-xs text-muted-foreground">Organize sem stress financeiro</p>
             </div>
           </div>
-          <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-xl gap-1.5">
-            <Plus className="w-4 h-4" />
-            Novo
-          </Button>
+          {tab === 'rateios' && (
+            <Button size="sm" onClick={() => setShowCreate(true)} className="rounded-xl gap-1.5">
+              <Plus className="w-4 h-4" />
+              Novo
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Corpo da tela: mostra "carregando", o estado vazio, ou a lista de eventos */}
-      <div className="container mx-auto px-4 py-4 space-y-3">
+      <Tabs value={tab} onValueChange={setTab}>
+        {/* Abas: Rateios (eventos com amigos) e Nós Dois (encontros do casal) */}
+        <div className="container mx-auto px-4 pt-4">
+          <TabsList className="grid w-full grid-cols-2 h-11 rounded-xl bg-card border border-border p-1">
+            <TabsTrigger value="rateios" className="gap-1.5 rounded-lg text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <HandCoins className="w-4 h-4" /> Rateios
+            </TabsTrigger>
+            <TabsTrigger value="casal" className="gap-1.5 rounded-lg text-xs font-bold data-[state=active]:bg-pink-500 data-[state=active]:text-white">
+              <Heart className="w-4 h-4" /> Nós Dois
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        {/* Aba Rateios: lista de eventos com amigos (mostra carregando, vazio ou lista) */}
+        <TabsContent value="rateios" className="container mx-auto px-4 py-4 space-y-3">
         {isLoading ? (
           <div className="text-center text-muted-foreground py-20">Carregando...</div>
         ) : !events?.length ? (
@@ -191,7 +210,13 @@ export default function Encontros() {
             })}
           </AnimatePresence>
         )}
-      </div>
+        </TabsContent>
+
+        {/* Aba Nós Dois: a bucket list de encontros do casal */}
+        <TabsContent value="casal" className="container mx-auto px-4 py-4 max-w-2xl">
+          <CoupleDatesBoard />
+        </TabsContent>
+      </Tabs>
 
       {/* Janela de criação: formulário com nome, tipo, data e local do novo encontro */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>

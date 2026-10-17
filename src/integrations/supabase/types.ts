@@ -579,6 +579,68 @@ export type Database = {
         }
         Relationships: []
       }
+      couple_dates: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          category: string
+          status: string
+          location: string | null
+          how_to: string | null
+          notes: string | null
+          items: Json
+          schedule: Json
+          costs: Json
+          cost_estimate: number | null
+          distance_km: number | null
+          planned_date: string | null
+          done_date: string | null
+          rating: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          category?: string
+          status?: string
+          location?: string | null
+          how_to?: string | null
+          notes?: string | null
+          items?: Json
+          schedule?: Json
+          costs?: Json
+          cost_estimate?: number | null
+          planned_date?: string | null
+          done_date?: string | null
+          rating?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          category?: string
+          status?: string
+          location?: string | null
+          how_to?: string | null
+          notes?: string | null
+          items?: Json
+          schedule?: Json
+          costs?: Json
+          cost_estimate?: number | null
+          distance_km?: number | null
+          planned_date?: string | null
+          done_date?: string | null
+          rating?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       crypto_daily_moves: {
         Row: {
           coin: string
