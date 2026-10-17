@@ -1,10 +1,11 @@
 // ============================================================================
-// useRestaurants  —  MAPA DE RESTAURANTES
+// usePlaces  —  LUGARES NO MAPA (quero ir / já fui)
 // ----------------------------------------------------------------------------
-// Cuida da lista de restaurantes que o usuário quer conhecer ou já foi:
-// criar, editar, marcar como "já fui", excluir. Ao salvar, tenta descobrir as
-// coordenadas (lat/lng) a partir do link do Google Maps ou do endereço, para
-// o lugar aparecer no mapa.
+// Cuida de uma lista de lugares que o usuário quer conhecer ou já foi, mostrada
+// num mapa. É genérico: o mesmo mecanismo serve para restaurantes (módulo
+// Encontros) e para pontos de viagem (módulo Viagens). O "scope" separa um do
+// outro. Ao salvar, tenta descobrir as coordenadas (lat/lng) a partir do link
+// do Google Maps ou do endereço, para o lugar aparecer no mapa.
 // ============================================================================
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,14 +13,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { resolveLocation } from '@/lib/geocode';
 
-export type RestaurantStatus = 'want' | 'visited';
+export type PlaceStatus = 'want' | 'visited';
 
-// Um restaurante no mapa.
-export interface Restaurant {
+// Um lugar no mapa.
+export interface Place {
   id: string;
+  scope: string;
   name: string;
   category: string;
-  status: RestaurantStatus;
+  status: PlaceStatus;
   address: string | null;
   instagram: string | null;
   maps_url: string | null;
@@ -33,10 +35,10 @@ export interface Restaurant {
 }
 
 // Dados que o formulário envia (só o nome é obrigatório).
-export interface RestaurantInput {
+export interface PlaceInput {
   name: string;
   category?: string;
-  status?: RestaurantStatus;
+  status?: PlaceStatus;
   address?: string | null;
   instagram?: string | null;
   maps_url?: string | null;
@@ -45,40 +47,44 @@ export interface RestaurantInput {
   rating?: number | null;
 }
 
-export function useRestaurants() {
+// scope: 'restaurant' (Encontros) ou 'travel' (Viagens). defaultCategory é a
+// categoria inicial de um lugar novo nesse contexto.
+export function usePlaces(scope: string, defaultCategory: string) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Busca todos os restaurantes do usuário, dos mais recentes aos mais antigos.
-  const fetchRestaurants = useCallback(async () => {
+  // Busca os lugares do usuário neste escopo, dos mais recentes aos mais antigos.
+  const fetchPlaces = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('restaurants')
       .select('*')
       .eq('user_id', user.id)
+      .eq('scope', scope)
       .order('created_at', { ascending: false });
     if (error) {
-      console.error('Erro ao buscar restaurantes:', error);
+      console.error('Erro ao buscar lugares:', error);
     } else {
-      setRestaurants((data || []) as Restaurant[]);
+      setPlaces((data || []) as Place[]);
     }
     setLoading(false);
-  }, [user]);
+  }, [user, scope]);
 
-  useEffect(() => { fetchRestaurants(); }, [fetchRestaurants]);
+  useEffect(() => { fetchPlaces(); }, [fetchPlaces]);
 
-  // Cria um restaurante. Antes de salvar, tenta achar a posição no mapa a partir
-  // do link do Google Maps ou do endereço digitado.
-  const addRestaurant = async (input: RestaurantInput) => {
+  // Cria um lugar. Antes de salvar, tenta achar a posição no mapa a partir do
+  // link do Google Maps ou do endereço digitado.
+  const addPlace = async (input: PlaceInput) => {
     if (!user) return;
     const point = await resolveLocation(input.address, input.maps_url);
     const { error } = await supabase.from('restaurants').insert({
       user_id: user.id,
+      scope,
       name: input.name,
-      category: input.category || 'japones',
+      category: input.category || defaultCategory,
       status: input.status || 'want',
       address: input.address || null,
       instagram: input.instagram || null,
@@ -90,18 +96,18 @@ export function useRestaurants() {
       lng: point?.lng ?? null,
     });
     if (error) {
-      toast({ title: 'Erro ao adicionar restaurante', description: error.message, variant: 'destructive' });
+      toast({ title: 'Erro ao adicionar', description: error.message, variant: 'destructive' });
     } else {
       toast({
-        title: 'Restaurante adicionado 🍽️',
+        title: 'Lugar adicionado 📍',
         description: point ? 'Já aparece no mapa.' : 'Não achei a localização — confira o endereço ou o link do Maps.',
       });
-      fetchRestaurants();
+      fetchPlaces();
     }
   };
 
-  // Atualiza um restaurante. Se o endereço ou o link do Maps mudou, recalcula a posição.
-  const updateRestaurant = async (id: string, updates: Partial<RestaurantInput>, recalcLocation = false) => {
+  // Atualiza um lugar. Se o endereço ou o link do Maps mudou, recalcula a posição.
+  const updatePlace = async (id: string, updates: Partial<PlaceInput>, recalcLocation = false) => {
     if (!user) return;
     const payload: Record<string, unknown> = { ...updates };
     if (recalcLocation) {
@@ -117,27 +123,27 @@ export function useRestaurants() {
     if (error) {
       toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
     } else {
-      fetchRestaurants();
+      fetchPlaces();
     }
   };
 
   // Alterna entre "quero ir" e "já fui".
-  const toggleVisited = async (r: Restaurant) => {
-    await updateRestaurant(r.id, { status: r.status === 'visited' ? 'want' : 'visited' });
-    toast({ title: r.status === 'visited' ? 'Voltou para "Quero ir"' : 'Marcado como visitado ✅' });
+  const toggleVisited = async (p: Place) => {
+    await updatePlace(p.id, { status: p.status === 'visited' ? 'want' : 'visited' });
+    toast({ title: p.status === 'visited' ? 'Voltou para "Quero ir"' : 'Marcado como visitado ✅' });
   };
 
-  // Exclui um restaurante.
-  const deleteRestaurant = async (id: string) => {
+  // Exclui um lugar.
+  const deletePlace = async (id: string) => {
     if (!user) return;
     const { error } = await supabase.from('restaurants').delete().eq('id', id).eq('user_id', user.id);
     if (error) {
       toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
     } else {
-      toast({ title: 'Restaurante removido' });
-      fetchRestaurants();
+      toast({ title: 'Lugar removido' });
+      fetchPlaces();
     }
   };
 
-  return { restaurants, loading, addRestaurant, updateRestaurant, toggleVisited, deleteRestaurant, refetch: fetchRestaurants };
+  return { places, loading, addPlace, updatePlace, toggleVisited, deletePlace, refetch: fetchPlaces };
 }

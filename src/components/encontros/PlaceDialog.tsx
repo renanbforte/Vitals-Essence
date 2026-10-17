@@ -1,9 +1,10 @@
 // ============================================================================
-// RestaurantDialog  —  FORMULÁRIO DE RESTAURANTE (criar / editar)
+// PlaceDialog  —  FORMULÁRIO DE LUGAR (criar / editar)
 // ----------------------------------------------------------------------------
-// Janela para cadastrar um restaurante: nome, tipo de cozinha, se quero ir ou
-// já fui, endereço, Instagram, link do Google Maps e preço médio. Ao salvar,
-// o hook tenta posicionar o lugar no mapa a partir do endereço/link.
+// Janela para cadastrar um lugar no mapa: nome, categoria, se quero ir ou já
+// fui, endereço, Instagram, link do Google Maps e preço/custo. Serve tanto para
+// restaurantes (Encontros) quanto para pontos de viagem (Viagens) — o que muda
+// são as categorias e alguns rótulos, recebidos por props.
 // ============================================================================
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
@@ -12,32 +13,40 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { RESTAURANT_CATEGORIES } from './restaurantCategories';
-import type { Restaurant, RestaurantInput, RestaurantStatus } from '@/hooks/useRestaurants';
+import type { Place, PlaceInput, PlaceStatus } from '@/hooks/usePlaces';
+
+// Formato mínimo de uma categoria (serve para restaurante e viagem).
+export interface PlaceCategoryOption {
+  value: string;
+  label: string;
+  emoji: string;
+}
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Quando vier preenchido, estamos editando um restaurante existente.
-  editing?: Restaurant | null;
-  onSave: (input: RestaurantInput, locationChanged: boolean) => Promise<void>;
+  editing?: Place | null;
+  onSave: (input: PlaceInput, locationChanged: boolean) => Promise<void>;
+  categories: PlaceCategoryOption[];
+  defaultCategory: string;
+  // Rótulos ajustáveis conforme o contexto.
+  title?: string;           // ex.: "restaurante" / "lugar"
+  namePlaceholder?: string; // ex.: "Sushi Yassu" / "Cristo Redentor"
+  priceLabel?: string;      // ex.: "Preço médio (R$)" / "Custo estimado (R$)"
 }
 
-const EMPTY = {
-  name: '',
-  category: 'japones',
-  status: 'want' as RestaurantStatus,
-  address: '',
-  instagram: '',
-  maps_url: '',
-  price: '',
-};
-
-export function RestaurantDialog({ open, onOpenChange, editing, onSave }: Props) {
-  const [form, setForm] = useState({ ...EMPTY });
+export function PlaceDialog({
+  open, onOpenChange, editing, onSave,
+  categories, defaultCategory,
+  title = 'lugar', namePlaceholder = 'Nome do lugar', priceLabel = 'Preço médio (R$)',
+}: Props) {
+  const empty = {
+    name: '', category: defaultCategory, status: 'want' as PlaceStatus,
+    address: '', instagram: '', maps_url: '', price: '',
+  };
+  const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
 
-  // Ao abrir, carrega os dados do restaurante em edição (ou limpa para um novo).
   useEffect(() => {
     if (!open) return;
     if (editing) {
@@ -51,14 +60,14 @@ export function RestaurantDialog({ open, onOpenChange, editing, onSave }: Props)
         price: editing.price != null ? String(editing.price) : '',
       });
     } else {
-      setForm({ ...EMPTY });
+      setForm({ ...empty });
     }
-  }, [open, editing]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editing, defaultCategory]);
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
     setSaving(true);
-    // Só recalcula a posição no mapa se o endereço ou o link mudaram (economiza busca).
     const locationChanged =
       !editing ||
       (editing.address || '') !== form.address.trim() ||
@@ -86,27 +95,23 @@ export function RestaurantDialog({ open, onOpenChange, editing, onSave }: Props)
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{editing ? 'Editar restaurante' : 'Novo restaurante'}</DialogTitle>
+          <DialogTitle>{editing ? `Editar ${title}` : `Novo ${title}`}</DialogTitle>
           <DialogDescription>Salve os lugares que quer conhecer e marque quando for.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
             <Label>Nome *</Label>
-            <Input
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Ex: Sushi Yassu"
-            />
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={`Ex: ${namePlaceholder}`} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Tipo de cozinha</Label>
+              <Label>Categoria</Label>
               <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {RESTAURANT_CATEGORIES.map((c) => (
+                  {categories.map((c) => (
                     <SelectItem key={c.value} value={c.value}>{c.emoji} {c.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -114,7 +119,7 @@ export function RestaurantDialog({ open, onOpenChange, editing, onSave }: Props)
             </div>
             <div>
               <Label>Situação</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as RestaurantStatus })}>
+              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v as PlaceStatus })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="want">🎯 Quero ir</SelectItem>
@@ -149,14 +154,10 @@ export function RestaurantDialog({ open, onOpenChange, editing, onSave }: Props)
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Instagram</Label>
-              <Input
-                value={form.instagram}
-                onChange={(e) => setForm({ ...form, instagram: e.target.value })}
-                placeholder="@perfil"
-              />
+              <Input value={form.instagram} onChange={(e) => setForm({ ...form, instagram: e.target.value })} placeholder="@perfil" />
             </div>
             <div>
-              <Label>Preço médio (R$)</Label>
+              <Label>{priceLabel}</Label>
               <Input
                 type="number"
                 inputMode="decimal"

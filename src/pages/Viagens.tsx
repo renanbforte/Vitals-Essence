@@ -29,7 +29,7 @@ function parseLocalDate(dateStr: string): Date {
 }
 
 import { motion } from 'framer-motion';
-import { Plus, Plane, MapPin, Calendar, ArrowLeft, DollarSign, Bell, Check, X } from 'lucide-react';
+import { Plus, Plane, MapPin, Calendar, ArrowLeft, DollarSign, Bell, Check, X, Map as MapIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -37,6 +37,9 @@ import { Input } from '@/components/ui/input';
 import { LocationAutocomplete } from '@/components/ui/location-autocomplete';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { PlacesMap } from '@/components/encontros/PlacesMap';
+import { TRAVEL_CATEGORIES } from '@/components/encontros/travelCategories';
 
 export default function Viagens() {
   const navigate = useNavigate();
@@ -124,7 +127,18 @@ export default function Viagens() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-6 space-y-4">
+      <Tabs defaultValue="viagens" className="container mx-auto px-4 py-6">
+        {/* Abas: lista de Viagens e o Mapa de lugares (quero ir / já fui) */}
+        <TabsList className="grid w-full grid-cols-2 h-11 rounded-xl bg-card border border-border p-1 mb-4">
+          <TabsTrigger value="viagens" className="gap-1.5 rounded-lg text-xs font-bold data-[state=active]:bg-sky-500 data-[state=active]:text-white">
+            <Plane className="w-4 h-4" /> Viagens
+          </TabsTrigger>
+          <TabsTrigger value="mapa" className="gap-1.5 rounded-lg text-xs font-bold data-[state=active]:bg-emerald-500 data-[state=active]:text-white">
+            <MapIcon className="w-4 h-4" /> Mapa
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="viagens" className="space-y-4 mt-0">
         {/* Convites pendentes: só aparece se houver convites. Cada convite mostra
             a viagem e dois botões (verde = aceitar, vermelho = recusar) */}
         {invitations.length > 0 && (
@@ -233,7 +247,21 @@ export default function Viagens() {
             })}
           </motion.div>
         )}
-      </div>
+        </TabsContent>
+
+        {/* Aba Mapa: lugares da viagem que quero conhecer / já fui, no mapa */}
+        <TabsContent value="mapa" className="mt-0 max-w-2xl mx-auto">
+          <PlacesMap
+            scope="travel"
+            categories={TRAVEL_CATEGORIES}
+            defaultCategory="ponto_turistico"
+            dialogTitle="lugar"
+            namePlaceholder="Cristo Redentor"
+            priceLabel="Custo estimado (R$)"
+            emptyText="Comece marcando os lugares que quer conhecer nas suas viagens."
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Janela (modal) do formulário de Nova Viagem: nome, destino, datas e orçamento */}
       <Dialog open={showNew} onOpenChange={setShowNew}>

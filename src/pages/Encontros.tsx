@@ -18,7 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CoupleDatesBoard } from '@/components/encontros/CoupleDatesBoard';
-import { RestaurantMap } from '@/components/encontros/RestaurantMap';
+import { PlacesMap } from '@/components/encontros/PlacesMap';
+import { RESTAURANT_CATEGORIES } from '@/components/encontros/restaurantCategories';
 import { useGatheringEvents } from '@/hooks/useGatherings';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
@@ -223,7 +224,15 @@ export default function Encontros() {
 
         {/* Aba Mapa: restaurantes que quero conhecer / já fui, no mapa */}
         <TabsContent value="mapa" className="container mx-auto px-4 py-4 max-w-2xl">
-          <RestaurantMap />
+          <PlacesMap
+            scope="restaurant"
+            categories={RESTAURANT_CATEGORIES}
+            defaultCategory="japones"
+            dialogTitle="restaurante"
+            namePlaceholder="Sushi Yassu"
+            priceLabel="Preço médio (R$)"
+            emptyText="Comece adicionando o primeiro restaurante."
+          />
         </TabsContent>
       </Tabs>
 

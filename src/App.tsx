@@ -22,6 +22,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";               // sabe QUEM está logado
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext"; // sabe QUAIS módulos o usuário acessa
 import { PaymentFailedBanner } from "@/components/PaymentFailedBanner"; // faixa de aviso se o pagamento falhou
+import { useAndroidBackButton } from "@/hooks/useAndroidBackButton";   // botão "voltar" do Android volta tela, não fecha o app
 
 // ---- As TELAS (cada import é uma página da pasta src/pages) ----
 import Index from "./pages/Index";               // página inicial ("/")
@@ -55,6 +56,13 @@ import ResetPassword from "./pages/ResetPassword"; // redefinir senha
 // evitando buscar a mesma coisa várias vezes).
 const queryClient = new QueryClient();
 
+// Pequeno componente (sem visual) que liga o tratamento do botão "voltar" do
+// Android. Precisa ficar DENTRO do BrowserRouter para enxergar a rota atual.
+const AndroidBackHandler = () => {
+  useAndroidBackButton();
+  return null;
+};
+
 // Componente principal do app. O JSX abaixo é montado de fora para dentro:
 // cada provedor "abraça" os que estão dentro dele, disponibilizando algo para todos.
 const App = () => (
@@ -73,6 +81,8 @@ const App = () => (
           <PaymentFailedBanner />
           {/* BrowserRouter: liga a barra de endereços do navegador às rotas abaixo */}
           <BrowserRouter>
+            {/* Faz o botão "voltar" do Android navegar dentro do app */}
+            <AndroidBackHandler />
             {/* Routes: lista de todas as rotas possíveis. Só UMA casa por vez. */}
             <Routes>
               {/* path = endereço na URL ; element = tela que será exibida */}

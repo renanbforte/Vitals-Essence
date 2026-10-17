@@ -645,6 +645,7 @@ export type Database = {
         Row: {
           id: string
           user_id: string
+          scope: string
           name: string
           category: string
           status: string
@@ -662,6 +663,7 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
+          scope?: string
           name: string
           category?: string
           status?: string
@@ -679,6 +681,7 @@ export type Database = {
         Update: {
           id?: string
           user_id?: string
+          scope?: string
           name?: string
           category?: string
           status?: string
