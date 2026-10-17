@@ -641,6 +641,60 @@ export type Database = {
         }
         Relationships: []
       }
+      restaurants: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          category: string
+          status: string
+          address: string | null
+          instagram: string | null
+          maps_url: string | null
+          price: number | null
+          notes: string | null
+          rating: number | null
+          lat: number | null
+          lng: number | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          category?: string
+          status?: string
+          address?: string | null
+          instagram?: string | null
+          maps_url?: string | null
+          price?: number | null
+          notes?: string | null
+          rating?: number | null
+          lat?: number | null
+          lng?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          category?: string
+          status?: string
+          address?: string | null
+          instagram?: string | null
+          maps_url?: string | null
+          price?: number | null
+          notes?: string | null
+          rating?: number | null
+          lat?: number | null
+          lng?: number | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       crypto_daily_moves: {
         Row: {
           coin: string

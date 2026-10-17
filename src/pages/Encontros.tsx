@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Users, Calendar, MapPin, DollarSign, PartyPopper, Utensils, Beer, Gift, Flame, MoreHorizontal, HandCoins, Heart } from 'lucide-react';
+import { ArrowLeft, Plus, Users, Calendar, MapPin, DollarSign, PartyPopper, Utensils, Beer, Gift, Flame, MoreHorizontal, HandCoins, Heart, UtensilsCrossed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CoupleDatesBoard } from '@/components/encontros/CoupleDatesBoard';
+import { RestaurantMap } from '@/components/encontros/RestaurantMap';
 import { useGatheringEvents } from '@/hooks/useGatherings';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
@@ -118,12 +119,15 @@ export default function Encontros() {
       <Tabs value={tab} onValueChange={setTab}>
         {/* Abas: Rateios (eventos com amigos) e Nós Dois (encontros do casal) */}
         <div className="container mx-auto px-4 pt-4">
-          <TabsList className="grid w-full grid-cols-2 h-11 rounded-xl bg-card border border-border p-1">
+          <TabsList className="grid w-full grid-cols-3 h-11 rounded-xl bg-card border border-border p-1">
             <TabsTrigger value="rateios" className="gap-1.5 rounded-lg text-xs font-bold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <HandCoins className="w-4 h-4" /> Rateios
             </TabsTrigger>
             <TabsTrigger value="casal" className="gap-1.5 rounded-lg text-xs font-bold data-[state=active]:bg-pink-500 data-[state=active]:text-white">
               <Heart className="w-4 h-4" /> Nós Dois
+            </TabsTrigger>
+            <TabsTrigger value="mapa" className="gap-1.5 rounded-lg text-xs font-bold data-[state=active]:bg-emerald-500 data-[state=active]:text-white">
+              <UtensilsCrossed className="w-4 h-4" /> Mapa
             </TabsTrigger>
           </TabsList>
         </div>
@@ -215,6 +219,11 @@ export default function Encontros() {
         {/* Aba Nós Dois: a bucket list de encontros do casal */}
         <TabsContent value="casal" className="container mx-auto px-4 py-4 max-w-2xl">
           <CoupleDatesBoard />
+        </TabsContent>
+
+        {/* Aba Mapa: restaurantes que quero conhecer / já fui, no mapa */}
+        <TabsContent value="mapa" className="container mx-auto px-4 py-4 max-w-2xl">
+          <RestaurantMap />
         </TabsContent>
       </Tabs>
 
