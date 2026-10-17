@@ -44,6 +44,7 @@ export interface CoupleDate {
   title: string;
   category: string;
   status: 'idea' | 'planned' | 'done';
+  is_next: boolean;
   location: string | null;
   how_to: string | null;
   notes: string | null;
@@ -64,6 +65,7 @@ export interface CoupleDateInput {
   title: string;
   category?: string;
   status?: 'idea' | 'planned' | 'done';
+  is_next?: boolean;
   location?: string | null;
   how_to?: string | null;
   notes?: string | null;
@@ -158,8 +160,33 @@ export function useCoupleDates() {
       status: 'done',
       done_date: new Date().toISOString().split('T')[0],
       rating: rating ?? null,
+      is_next: false, // ao viver, sai do topo
     });
     toast({ title: 'Encontro vivido! ❤️' });
+  };
+
+  // Define qual encontro é o "Próximo" (fixado no topo). Tira o anterior primeiro,
+  // pois só pode haver um por vez.
+  const setNext = async (id: string) => {
+    if (!user) return;
+    await supabase.from('couple_dates').update({ is_next: false }).eq('user_id', user.id).eq('is_next', true);
+    const { error } = await supabase.from('couple_dates').update({ is_next: true }).eq('id', id).eq('user_id', user.id);
+    if (error) {
+      toast({ title: 'Erro ao marcar como próximo', description: error.message, variant: 'destructive' });
+    } else {
+      fetchDates();
+    }
+  };
+
+  // Tira o encontro do topo (deixa sem "próximo").
+  const clearNext = async () => {
+    if (!user) return;
+    const { error } = await supabase.from('couple_dates').update({ is_next: false }).eq('user_id', user.id).eq('is_next', true);
+    if (error) {
+      toast({ title: 'Erro ao tirar do topo', description: error.message, variant: 'destructive' });
+    } else {
+      fetchDates();
+    }
   };
 
   // Exclui um encontro da lista.
@@ -174,5 +201,5 @@ export function useCoupleDates() {
     }
   };
 
-  return { dates, loading, addDate, updateDate, markAsDone, deleteDate, refetch: fetchDates };
+  return { dates, loading, addDate, updateDate, markAsDone, setNext, clearNext, deleteDate, refetch: fetchDates };
 }

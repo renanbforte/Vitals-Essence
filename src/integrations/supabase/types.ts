@@ -586,6 +586,7 @@ export type Database = {
           title: string
           category: string
           status: string
+          is_next: boolean
           location: string | null
           how_to: string | null
           notes: string | null
@@ -606,6 +607,7 @@ export type Database = {
           title: string
           category?: string
           status?: string
+          is_next?: boolean
           location?: string | null
           how_to?: string | null
           notes?: string | null
@@ -625,6 +627,7 @@ export type Database = {
           title?: string
           category?: string
           status?: string
+          is_next?: boolean
           location?: string | null
           how_to?: string | null
           notes?: string | null

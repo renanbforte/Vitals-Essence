@@ -8,7 +8,7 @@
 // ============================================================================
 import { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, Plus, MapPin, Backpack, Clock, Trash2, Pencil, Star, Lightbulb, CalendarCheck, Sparkles, Car, ArrowDownUp, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { Heart, Plus, MapPin, Backpack, Clock, Trash2, Pencil, Star, Lightbulb, CalendarCheck, Sparkles, Car, ArrowDownUp, Eye, EyeOff, RotateCcw, Shuffle, X, ArrowUpToLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -34,7 +34,7 @@ const SORTS = [
 ];
 
 export function CoupleDatesBoard() {
-  const { dates, loading, addDate, updateDate, markAsDone, deleteDate } = useCoupleDates();
+  const { dates, loading, addDate, updateDate, markAsDone, setNext, clearNext, deleteDate } = useCoupleDates();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CoupleDate | null>(null);
   const [rating, setRating] = useState<{ date: CoupleDate; stars: number } | null>(null);
@@ -81,6 +81,21 @@ export function CoupleDatesBoard() {
     };
   }, [dates, filterCat, sortBy]);
 
+  // O encontro marcado como "Próximo" (fixado no topo), se houver.
+  const nextDate = useMemo(() => dates.find(d => d.is_next) || null, [dates]);
+  // Candidatos ao sorteio: tudo que está em Ideia ou Planejado.
+  const eligibleForNext = useMemo(() => dates.filter(d => d.status === 'idea' || d.status === 'planned'), [dates]);
+
+  // Sorteia um encontro (entre ideias e planejados) para ser o Próximo. Evita
+  // repetir o que já está no topo quando há outras opções.
+  const drawNext = () => {
+    const others = eligibleForNext.filter(d => d.id !== nextDate?.id);
+    const pool = others.length ? others : eligibleForNext;
+    if (!pool.length) return;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    setNext(pick.id);
+  };
+
   const openEdit = (d: CoupleDate) => { setEditing(d); setFormOpen(true); };
   const openNew = () => { setEditing(null); setFormOpen(true); };
 
@@ -111,6 +126,44 @@ export function CoupleDatesBoard() {
           </div>
         </div>
       </Card>
+
+      {/* Próximo encontro: fixado no topo para organizar e decidir melhor */}
+      {(nextDate || eligibleForNext.length > 0) && (
+        <Card className="p-4 rounded-2xl border-2 border-pink-400/70 bg-pink-50/60 dark:bg-pink-950/20">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="flex items-center gap-1.5 font-extrabold text-pink-600">
+              <Star className="w-4 h-4 fill-pink-500 text-pink-500" /> Próximo encontro
+            </h3>
+            <div className="flex items-center gap-1">
+              {eligibleForNext.length > 0 && (
+                <Button size="sm" variant="ghost" onClick={drawNext} className="h-8 text-xs gap-1 text-pink-600">
+                  <Shuffle className="w-3.5 h-3.5" /> Sortear
+                </Button>
+              )}
+              {nextDate && (
+                <Button size="sm" variant="ghost" onClick={clearNext} className="h-8 text-xs gap-1 text-muted-foreground">
+                  <X className="w-3.5 h-3.5" /> Tirar do topo
+                </Button>
+              )}
+            </div>
+          </div>
+          {nextDate ? (
+            <DateCard
+              date={nextDate}
+              hideCosts={hideCosts}
+              onEdit={openEdit}
+              onAdvance={nextDate.status === 'idea' ? (d) => updateDate(d.id, { status: 'planned' }) : undefined}
+              advanceLabel={nextDate.status === 'idea' ? 'Planejar' : undefined}
+              onDone={(d) => setRating({ date: d, stars: 0 })}
+              onDelete={deleteDate}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Escolha um encontro como <b className="text-pink-600">Próximo</b> (botão ⭐ nos cartões) ou toque em <b className="text-pink-600">Sortear</b> para o app decidir por vocês 💕
+            </p>
+          )}
+        </Card>
+      )}
 
       <Button onClick={openNew} className="w-full rounded-xl h-11 bg-pink-500 hover:bg-pink-600 text-white font-bold gap-2">
         <Plus className="w-4 h-4" /> Nova ideia de encontro
@@ -157,9 +210,9 @@ export function CoupleDatesBoard() {
         </div>
       )}
 
-      {/* Grupos */}
-      <Section title="Ideias" icon={Lightbulb} items={groups.idea} empty="Sonhe um encontro novo" hideCosts={hideCosts} onEdit={openEdit} onAdvance={(d) => updateDate(d.id, { status: 'planned' })} advanceLabel="Planejar" onDone={(d) => setRating({ date: d, stars: 0 })} onDelete={deleteDate} />
-      <Section title="Planejados" icon={CalendarCheck} items={groups.planned} empty="Marque uma data para um encontro" hideCosts={hideCosts} onEdit={openEdit} onDone={(d) => setRating({ date: d, stars: 0 })} onDelete={deleteDate} />
+      {/* Grupos (o "próximo" não se repete aqui; ele fica no topo) */}
+      <Section title="Ideias" icon={Lightbulb} items={groups.idea.filter(d => d.id !== nextDate?.id)} empty="Sonhe um encontro novo" hideCosts={hideCosts} onEdit={openEdit} onAdvance={(d) => updateDate(d.id, { status: 'planned' })} advanceLabel="Planejar" onDone={(d) => setRating({ date: d, stars: 0 })} onSetNext={(d) => setNext(d.id)} onDelete={deleteDate} />
+      <Section title="Planejados" icon={CalendarCheck} items={groups.planned.filter(d => d.id !== nextDate?.id)} empty="Marque uma data para um encontro" hideCosts={hideCosts} onEdit={openEdit} onDone={(d) => setRating({ date: d, stars: 0 })} onSetNext={(d) => setNext(d.id)} onDelete={deleteDate} />
       <Section title="Já vivemos" icon={Sparkles} items={groups.done} empty="Os encontros vividos aparecem aqui" hideCosts={hideCosts} onEdit={openEdit} onReopen={(d) => updateDate(d.id, { status: 'planned', done_date: null, rating: null })} onDelete={deleteDate} done />
 
       {/* Formulário de criar/editar */}
@@ -200,7 +253,7 @@ export function CoupleDatesBoard() {
 }
 
 // Uma seção (etapa) com seus cartões.
-function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onDelete, done }: {
+function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onSetNext, onDelete, done }: {
   title: string;
   icon: React.ElementType;
   items: CoupleDate[];
@@ -211,6 +264,7 @@ function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance
   advanceLabel?: string;
   onDone?: (d: CoupleDate) => void;
   onReopen?: (d: CoupleDate) => void;
+  onSetNext?: (d: CoupleDate) => void;
   onDelete: (id: string) => void;
   done?: boolean;
 }) {
@@ -222,7 +276,7 @@ function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance
       </h3>
       {items.map((d, i) => (
         <motion.div key={d.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-          <DateCard date={d} hideCosts={hideCosts} onEdit={onEdit} onAdvance={onAdvance} advanceLabel={advanceLabel} onDone={onDone} onReopen={onReopen} onDelete={onDelete} done={done} />
+          <DateCard date={d} hideCosts={hideCosts} onEdit={onEdit} onAdvance={onAdvance} advanceLabel={advanceLabel} onDone={onDone} onReopen={onReopen} onSetNext={onSetNext} onDelete={onDelete} done={done} />
         </motion.div>
       ))}
     </div>
@@ -230,7 +284,7 @@ function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance
 }
 
 // Cartão de um encontro.
-function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onDelete, done }: {
+function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onSetNext, onDelete, done }: {
   date: CoupleDate;
   hideCosts?: boolean;
   onEdit: (d: CoupleDate) => void;
@@ -238,6 +292,7 @@ function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, on
   advanceLabel?: string;
   onDone?: (d: CoupleDate) => void;
   onReopen?: (d: CoupleDate) => void;
+  onSetNext?: (d: CoupleDate) => void;
   onDelete: (id: string) => void;
   done?: boolean;
 }) {
@@ -277,15 +332,20 @@ function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, on
       </div>
 
       {/* Ações */}
-      <div className="flex items-center gap-2 mt-3">
+      <div className="flex flex-wrap items-center gap-2 mt-3">
         {!done && onDone && (
-          <Button size="sm" onClick={() => onDone(date)} className="flex-1 h-8 text-xs gap-1 bg-pink-500 hover:bg-pink-600 text-white">
+          <Button size="sm" onClick={() => onDone(date)} className="flex-1 min-w-[120px] h-8 text-xs gap-1 bg-pink-500 hover:bg-pink-600 text-white">
             <Heart className="w-3.5 h-3.5" /> Vivemos!
           </Button>
         )}
         {onAdvance && advanceLabel && (
           <Button size="sm" variant="outline" onClick={() => onAdvance(date)} className="h-8 text-xs gap-1 border-pink-500/30 text-pink-600">
             <CalendarCheck className="w-3.5 h-3.5" /> {advanceLabel}
+          </Button>
+        )}
+        {onSetNext && !done && (
+          <Button size="sm" variant="outline" onClick={() => onSetNext(date)} className="h-8 text-xs gap-1 border-pink-500/30 text-pink-600">
+            <ArrowUpToLine className="w-3.5 h-3.5" /> Próximo
           </Button>
         )}
         {done && onReopen && (
