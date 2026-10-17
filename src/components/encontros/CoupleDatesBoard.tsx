@@ -6,16 +6,16 @@
 // no topo, os cartões de cada encontro e as ações de avançar de etapa, riscar
 // da lista (marcar como vivido) e editar.
 // ============================================================================
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, Plus, MapPin, Backpack, Clock, Trash2, Pencil, Star, Lightbulb, CalendarCheck, Sparkles, Car, ArrowDownUp } from 'lucide-react';
+import { Heart, Plus, MapPin, Backpack, Clock, Trash2, Pencil, Star, Lightbulb, CalendarCheck, Sparkles, Car, ArrowDownUp, Eye, EyeOff, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCoupleDates, totalDateCost, type CoupleDate } from '@/hooks/useCoupleDates';
 import { categoryOf, DATE_CATEGORIES } from './coupleDateCategories';
-import { CoupleDateDialog } from './CoupleDateDialog';
+import { CoupleDateDialog, clearCoupleDateDraft, hasPendingNewCoupleDateDraft } from './CoupleDateDialog';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -40,6 +40,24 @@ export function CoupleDatesBoard() {
   const [rating, setRating] = useState<{ date: CoupleDate; stars: number } | null>(null);
   const [filterCat, setFilterCat] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
+  // Ocultar os custos de todos os encontros (lembra a escolha no aparelho).
+  const [hideCosts, setHideCosts] = useState(() => {
+    try { return localStorage.getItem('coupleDatesHideCosts') === '1'; } catch { return false; }
+  });
+  const toggleHideCosts = () => {
+    setHideCosts(prev => {
+      const next = !prev;
+      try { localStorage.setItem('coupleDatesHideCosts', next ? '1' : '0'); } catch { /* ignore */ }
+      return next;
+    });
+  };
+
+  // Se o app recarregou com um rascunho de encontro novo não salvo (ex.: você
+  // saiu para copiar um endereço em outro app), reabre o formulário com tudo
+  // que havia digitado.
+  useEffect(() => {
+    if (hasPendingNewCoupleDateDraft()) { setEditing(null); setFormOpen(true); }
+  }, []);
 
   // Aplica o filtro por categoria e a ordenação, depois agrupa pelas três etapas.
   const groups = useMemo(() => {
@@ -98,26 +116,36 @@ export function CoupleDatesBoard() {
         <Plus className="w-4 h-4" /> Nova ideia de encontro
       </Button>
 
-      {/* Filtro por categoria e ordenação */}
+      {/* Filtro por categoria, ordenação e botão de ocultar custos */}
       {dates.length > 0 && (
-        <div className="grid grid-cols-2 gap-2">
-          <Select value={filterCat} onValueChange={setFilterCat}>
-            <SelectTrigger className="h-9 rounded-xl text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas as categorias</SelectItem>
-              {DATE_CATEGORIES.map(c => (
-                <SelectItem key={c.value} value={c.value}>{c.emoji} {c.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="h-9 rounded-xl text-xs">
-              <span className="flex items-center gap-1.5"><ArrowDownUp className="w-3.5 h-3.5" /><SelectValue /></span>
-            </SelectTrigger>
-            <SelectContent>
-              {SORTS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={filterCat} onValueChange={setFilterCat}>
+              <SelectTrigger className="h-9 rounded-xl text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as categorias</SelectItem>
+                {DATE_CATEGORIES.map(c => (
+                  <SelectItem key={c.value} value={c.value}>{c.emoji} {c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="h-9 rounded-xl text-xs">
+                <span className="flex items-center gap-1.5"><ArrowDownUp className="w-3.5 h-3.5" /><SelectValue /></span>
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={toggleHideCosts}
+            className="w-full h-9 rounded-xl text-xs gap-1.5 text-muted-foreground"
+          >
+            {hideCosts ? <><Eye className="w-3.5 h-3.5" /> Mostrar custos</> : <><EyeOff className="w-3.5 h-3.5" /> Ocultar custos</>}
+          </Button>
         </div>
       )}
 
@@ -130,14 +158,14 @@ export function CoupleDatesBoard() {
       )}
 
       {/* Grupos */}
-      <Section title="Ideias" icon={Lightbulb} items={groups.idea} empty="Sonhe um encontro novo" onEdit={openEdit} onAdvance={(d) => updateDate(d.id, { status: 'planned' })} advanceLabel="Planejar" onDone={(d) => setRating({ date: d, stars: 0 })} onDelete={deleteDate} />
-      <Section title="Planejados" icon={CalendarCheck} items={groups.planned} empty="Marque uma data para um encontro" onEdit={openEdit} onDone={(d) => setRating({ date: d, stars: 0 })} onDelete={deleteDate} />
-      <Section title="Já vivemos" icon={Sparkles} items={groups.done} empty="Os encontros vividos aparecem aqui" onEdit={openEdit} onDelete={deleteDate} done />
+      <Section title="Ideias" icon={Lightbulb} items={groups.idea} empty="Sonhe um encontro novo" hideCosts={hideCosts} onEdit={openEdit} onAdvance={(d) => updateDate(d.id, { status: 'planned' })} advanceLabel="Planejar" onDone={(d) => setRating({ date: d, stars: 0 })} onDelete={deleteDate} />
+      <Section title="Planejados" icon={CalendarCheck} items={groups.planned} empty="Marque uma data para um encontro" hideCosts={hideCosts} onEdit={openEdit} onDone={(d) => setRating({ date: d, stars: 0 })} onDelete={deleteDate} />
+      <Section title="Já vivemos" icon={Sparkles} items={groups.done} empty="Os encontros vividos aparecem aqui" hideCosts={hideCosts} onEdit={openEdit} onReopen={(d) => updateDate(d.id, { status: 'planned', done_date: null, rating: null })} onDelete={deleteDate} done />
 
       {/* Formulário de criar/editar */}
       <CoupleDateDialog
         open={formOpen}
-        onOpenChange={(o) => { setFormOpen(o); if (!o) setEditing(null); }}
+        onOpenChange={(o) => { setFormOpen(o); if (!o) { setEditing(null); clearCoupleDateDraft(); } }}
         onSubmit={addDate}
         onUpdate={updateDate}
         editDate={editing}
@@ -172,15 +200,17 @@ export function CoupleDatesBoard() {
 }
 
 // Uma seção (etapa) com seus cartões.
-function Section({ title, icon: Icon, items, empty, onEdit, onAdvance, advanceLabel, onDone, onDelete, done }: {
+function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onDelete, done }: {
   title: string;
   icon: React.ElementType;
   items: CoupleDate[];
   empty: string;
+  hideCosts?: boolean;
   onEdit: (d: CoupleDate) => void;
   onAdvance?: (d: CoupleDate) => void;
   advanceLabel?: string;
   onDone?: (d: CoupleDate) => void;
+  onReopen?: (d: CoupleDate) => void;
   onDelete: (id: string) => void;
   done?: boolean;
 }) {
@@ -192,7 +222,7 @@ function Section({ title, icon: Icon, items, empty, onEdit, onAdvance, advanceLa
       </h3>
       {items.map((d, i) => (
         <motion.div key={d.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-          <DateCard date={d} onEdit={onEdit} onAdvance={onAdvance} advanceLabel={advanceLabel} onDone={onDone} onDelete={onDelete} done={done} />
+          <DateCard date={d} hideCosts={hideCosts} onEdit={onEdit} onAdvance={onAdvance} advanceLabel={advanceLabel} onDone={onDone} onReopen={onReopen} onDelete={onDelete} done={done} />
         </motion.div>
       ))}
     </div>
@@ -200,12 +230,14 @@ function Section({ title, icon: Icon, items, empty, onEdit, onAdvance, advanceLa
 }
 
 // Cartão de um encontro.
-function DateCard({ date, onEdit, onAdvance, advanceLabel, onDone, onDelete, done }: {
+function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onDelete, done }: {
   date: CoupleDate;
+  hideCosts?: boolean;
   onEdit: (d: CoupleDate) => void;
   onAdvance?: (d: CoupleDate) => void;
   advanceLabel?: string;
   onDone?: (d: CoupleDate) => void;
+  onReopen?: (d: CoupleDate) => void;
   onDelete: (id: string) => void;
   done?: boolean;
 }) {
@@ -229,7 +261,7 @@ function DateCard({ date, onEdit, onAdvance, advanceLabel, onDone, onDelete, don
           <div className="flex items-center gap-2 mt-0.5 flex-wrap">
             <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${cat.color}`}>{cat.label}</span>
             {date.location && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><MapPin className="w-2.5 h-2.5" />{date.location}</span>}
-            {total > 0 && <span className="text-[10px] font-semibold text-pink-600">{formatCurrency(total)}</span>}
+            {total > 0 && !hideCosts && <span className="text-[10px] font-semibold text-pink-600">{formatCurrency(total)}</span>}
             {date.distance_km != null && <span className="text-[10px] text-muted-foreground flex items-center gap-0.5"><Car className="w-2.5 h-2.5" />{date.distance_km} km</span>}
             {date.planned_date && !done && <span className="text-[10px] text-pink-600 font-medium">{format(parseISO(date.planned_date), "dd 'de' MMM", { locale: ptBR })}</span>}
             {done && date.done_date && <span className="text-[10px] text-muted-foreground">vivido em {format(parseISO(date.done_date), "dd/MM/yy", { locale: ptBR })}</span>}
@@ -254,6 +286,11 @@ function DateCard({ date, onEdit, onAdvance, advanceLabel, onDone, onDelete, don
         {onAdvance && advanceLabel && (
           <Button size="sm" variant="outline" onClick={() => onAdvance(date)} className="h-8 text-xs gap-1 border-pink-500/30 text-pink-600">
             <CalendarCheck className="w-3.5 h-3.5" /> {advanceLabel}
+          </Button>
+        )}
+        {done && onReopen && (
+          <Button size="sm" variant="outline" onClick={() => onReopen(date)} className="flex-1 h-8 text-xs gap-1 border-pink-500/30 text-pink-600">
+            <RotateCcw className="w-3.5 h-3.5" /> Voltar p/ Planejados
           </Button>
         )}
         <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => onEdit(date)}><Pencil className="w-3.5 h-3.5" /></Button>

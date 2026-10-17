@@ -6,7 +6,7 @@
 // encontro e, ao clicar num cartão, abrir seus detalhes para dividir as despesas.
 // ============================================================================
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Plus, Users, Calendar, MapPin, DollarSign, PartyPopper, Utensils, Beer, Gift, Flame, MoreHorizontal, HandCoins, Heart, UtensilsCrossed } from 'lucide-react';
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CoupleDatesBoard } from '@/components/encontros/CoupleDatesBoard';
+import { hasPendingNewCoupleDateDraft } from '@/components/encontros/CoupleDateDialog';
 import { PlacesMap } from '@/components/encontros/PlacesMap';
 import { RESTAURANT_CATEGORIES } from '@/components/encontros/restaurantCategories';
 import { useGatheringEvents } from '@/hooks/useGatherings';
@@ -66,6 +67,13 @@ export default function Encontros() {
   const [showCreate, setShowCreate] = useState(false);
   // Aba ativa: "rateios" (eventos com amigos) ou "casal" (nossa lista de encontros)
   const [tab, setTab] = useState('rateios');
+
+  // Se o app recarregou com um rascunho de encontro do casal não salvo (você
+  // saiu para buscar uma informação em outro app), já abre a aba "Nós Dois" —
+  // lá o formulário reabre sozinho com tudo que havia sido digitado.
+  useEffect(() => {
+    if (hasPendingNewCoupleDateDraft()) setTab('casal');
+  }, []);
   // Dados digitados no formulário de criação do evento
   const [form, setForm] = useState({ title: '', event_type: 'churrasco', event_date: '', location: '', description: '' });
 

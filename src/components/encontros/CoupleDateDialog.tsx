@@ -6,7 +6,7 @@
 // custo estimado, data planejada e notas. Serve tanto para criar quanto para
 // abrir e editar um encontro já salvo.
 // ============================================================================
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +32,24 @@ interface CoupleDateDialogProps {
 // Gera um id curto para itens da lista e etapas do cronograma.
 const uid = () => Math.random().toString(36).slice(2, 10);
 
+// --- Rascunho automático (sobrevive a recarregamentos do app) --------------
+// Enquanto o formulário está aberto, tudo que foi digitado fica salvo no
+// armazenamento local. Se o app recarregar ao voltar de outro aplicativo
+// (comportamento do Android), nada é perdido — o rascunho é restaurado.
+const DRAFT_KEY = 'coupleDateDraft';
+const DRAFT_OPEN_KEY = 'coupleDateDraftOpen';
+
+// Limpa o rascunho salvo (ao salvar com sucesso ou ao fechar de propósito).
+export function clearCoupleDateDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(DRAFT_OPEN_KEY); } catch { /* ignore */ }
+}
+
+// Há um rascunho de encontro NOVO (não salvo) aguardando? Usado para reabrir o
+// formulário sozinho quando o app recarrega ao voltar de outro app.
+export function hasPendingNewCoupleDateDraft(): boolean {
+  try { return localStorage.getItem(DRAFT_OPEN_KEY) === 'new'; } catch { return false; }
+}
+
 export function CoupleDateDialog({ open, onOpenChange, onSubmit, onUpdate, editDate }: CoupleDateDialogProps) {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('romantico');
@@ -45,25 +63,57 @@ export function CoupleDateDialog({ open, onOpenChange, onSubmit, onUpdate, editD
   const [costs, setCosts] = useState<DateCost[]>([]);
   const [newItem, setNewItem] = useState('');
   const [saving, setSaving] = useState(false);
+  // Evita que o primeiro "salvar rascunho" (logo após restaurar) sobrescreva o
+  // que acabou de ser carregado.
+  const skipNextPersistRef = useRef(false);
 
-  // Ao abrir em modo edição, carrega os campos do encontro.
+  // Ao abrir: carrega os campos do encontro em edição (ou vazio para um novo) e,
+  // por cima, restaura qualquer rascunho não salvo do mesmo contexto.
   useEffect(() => {
-    if (open && editDate) {
-      setTitle(editDate.title);
-      setCategory(editDate.category);
-      setLocation(editDate.location || '');
-      setHowTo(editDate.how_to || '');
-      setNotes(editDate.notes || '');
-      setDistance(editDate.distance_km != null ? String(editDate.distance_km) : '');
-      setPlannedDate(editDate.planned_date || '');
-      setItems(editDate.items || []);
-      setSchedule(editDate.schedule || []);
-      setCosts(editDate.costs || []);
-    } else if (open) {
-      reset();
-    }
+    if (!open) return;
+    const base = editDate
+      ? {
+          title: editDate.title, category: editDate.category, location: editDate.location || '',
+          howTo: editDate.how_to || '', notes: editDate.notes || '',
+          distance: editDate.distance_km != null ? String(editDate.distance_km) : '',
+          plannedDate: editDate.planned_date || '',
+          items: editDate.items || [], schedule: editDate.schedule || [], costs: editDate.costs || [], newItem: '',
+        }
+      : {
+          title: '', category: 'romantico', location: '', howTo: '', notes: '',
+          distance: '', plannedDate: '', items: [] as DateItem[], schedule: [] as DateScheduleStep[], costs: [] as DateCost[], newItem: '',
+        };
+
+    // Rascunho salvo do mesmo contexto (mesmo encontro, ou "novo").
+    let draft: Record<string, unknown> | null = null;
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (raw) {
+        const d = JSON.parse(raw);
+        if ((d.id ?? null) === (editDate?.id ?? null)) draft = d;
+      }
+    } catch { /* ignore */ }
+
+    const s = { ...base, ...(draft || {}) } as typeof base;
+    setTitle(s.title); setCategory(s.category); setLocation(s.location); setHowTo(s.howTo);
+    setNotes(s.notes); setDistance(s.distance); setPlannedDate(s.plannedDate);
+    setItems(s.items || []); setSchedule(s.schedule || []); setCosts(s.costs || []); setNewItem(s.newItem || '');
+    skipNextPersistRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editDate]);
+
+  // Enquanto aberto, salva o rascunho a cada alteração (não perde nada se o app
+  // recarregar ao voltar de outro aplicativo).
+  useEffect(() => {
+    if (!open) return;
+    if (skipNextPersistRef.current) { skipNextPersistRef.current = false; return; }
+    try {
+      const draft = { id: editDate?.id ?? null, title, category, location, howTo, notes, plannedDate, distance, items, schedule, costs, newItem };
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+      localStorage.setItem(DRAFT_OPEN_KEY, editDate?.id ?? 'new');
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, title, category, location, howTo, notes, plannedDate, distance, items, schedule, costs, newItem]);
 
   const reset = () => {
     setTitle(''); setCategory('romantico'); setLocation(''); setHowTo('');
@@ -117,6 +167,7 @@ export function CoupleDateDialog({ open, onOpenChange, onSubmit, onUpdate, editD
     };
     if (editDate && onUpdate) await onUpdate(editDate.id, input);
     else await onSubmit(input);
+    clearCoupleDateDraft();
     reset();
     setSaving(false);
     onOpenChange(false);
