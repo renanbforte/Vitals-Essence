@@ -101,7 +101,7 @@ export function useTrips() {
 
   // Cria uma nova viagem no banco, vinculada ao usuario logado
   const createTrip = useMutation({
-    mutationFn: async (data: { name: string; main_destination?: string; start_date?: string; end_date?: string; budget?: number; currency?: string }) => {
+    mutationFn: async (data: { name: string; main_destination?: string; start_date?: string; end_date?: string; budget?: number; currency?: string; maps_url?: string | null; lat?: number | null; lng?: number | null }) => {
       if (!user) throw new Error('Not authenticated');
       const { data: trip, error } = await supabase
         .from('trips')

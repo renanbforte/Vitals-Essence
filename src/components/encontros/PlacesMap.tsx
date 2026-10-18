@@ -29,6 +29,20 @@ const PIN_COLOR: Record<string, string> = {
 // Categoria com cor do selo (as props trazem só value/label/emoji; a cor fica aqui).
 interface Category extends PlaceCategoryOption { color?: string }
 
+// Marcador extra no mapa, vindo de fora (ex.: as viagens planejadas). Não entra
+// na lista de lugares — serve só para "ligar" outras coisas ao mapa.
+export interface ExtraMarker {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  emoji?: string;
+  color?: string;
+  subtitle?: string;
+  actionLabel?: string;   // texto do botão no popup (ex.: "Abrir viagem")
+  onAction?: () => void;  // o que fazer ao tocar no botão
+}
+
 interface Props {
   scope: string;              // 'restaurant' | 'travel'
   categories: Category[];
@@ -37,6 +51,8 @@ interface Props {
   namePlaceholder?: string;   // "Sushi Yassu" / "Cristo Redentor"
   priceLabel?: string;        // "Preço médio (R$)" / "Custo estimado (R$)"
   emptyText?: string;         // texto do estado vazio na lista
+  extraMarkers?: ExtraMarker[]; // marcadores de fora (ex.: viagens)
+  extraLegend?: string;         // legenda curta explicando os marcadores extras
 }
 
 // Preço em reais (ou traço quando não informado).
@@ -49,6 +65,7 @@ export function PlacesMap({
   scope, categories, defaultCategory,
   dialogTitle = 'lugar', namePlaceholder = 'Nome do lugar', priceLabel: priceFieldLabel = 'Preço médio (R$)',
   emptyText = 'Comece adicionando o primeiro lugar.',
+  extraMarkers = [], extraLegend,
 }: Props) {
   const { places, loading, addPlace, updatePlace, toggleVisited, deletePlace } = usePlaces(scope, defaultCategory);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -125,7 +142,6 @@ export function PlacesMap({
     const layer = markersLayerRef.current;
     if (!map || !layer || !L) return;
     layer.clearLayers();
-    if (!located.length) return;
 
     const points: [number, number][] = [];
     for (const p of located) {
@@ -159,13 +175,44 @@ export function PlacesMap({
       points.push([p.lat as number, p.lng as number]);
     }
 
+    // Marcadores extras (ex.: viagens planejadas) — visual diferente (círculo).
+    for (const m of extraMarkers) {
+      const color = m.color || '#0ea5e9';
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="width:34px;height:34px;border-radius:9999px;background:${color};border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;font-size:16px;">${m.emoji || '✈️'}</div>`,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -18],
+      });
+      const marker = L.marker([m.lat, m.lng], { icon }).addTo(layer);
+      const btn = m.onAction
+        ? `<button data-extra="${m.id}" style="margin-top:6px;border:0;background:${color};color:#fff;font-weight:600;padding:5px 10px;border-radius:8px;cursor:pointer;">${m.actionLabel || 'Abrir'}</button>`
+        : '';
+      marker.bindPopup(
+        `<div style="font-family:system-ui;min-width:150px;">
+          <strong>${m.emoji || '✈️'} ${m.name}</strong>${m.subtitle ? `<br/><span style="color:#64748b;">${m.subtitle}</span>` : ''}
+          ${btn ? `<br/>${btn}` : ''}
+        </div>`,
+      );
+      if (m.onAction) {
+        marker.on('popupopen', () => {
+          const el = marker.getPopup()?.getElement()?.querySelector('[data-extra]');
+          el?.addEventListener('click', () => m.onAction?.(), { once: true });
+        });
+      }
+      points.push([m.lat, m.lng]);
+    }
+
+    if (!points.length) return;
     if (points.length === 1) {
       map.setView(points[0], 15);
     } else {
       map.fitBounds(points, { padding: [40, 40], maxZoom: 15 });
     }
     setTimeout(() => map.invalidateSize(), 100);
-  }, [located]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [located, extraMarkers]);
 
   const openNew = () => { setEditing(null); setDialogOpen(true); };
   const openEdit = (p: Place) => { setEditing(p); setDialogOpen(true); };
@@ -244,7 +291,7 @@ export function PlacesMap({
       {/* O mapa */}
       <div className="relative rounded-2xl overflow-hidden border border-border">
         <div ref={mapRef} className="w-full h-[55vh] min-h-[320px] bg-muted z-0" />
-        {!located.length && !loading && (
+        {!located.length && !extraMarkers.length && !loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 pointer-events-none bg-background/60">
             <MapPin className="w-10 h-10 text-muted-foreground/40 mb-2" />
             <p className="text-sm text-muted-foreground max-w-xs">
@@ -253,6 +300,14 @@ export function PlacesMap({
           </div>
         )}
       </div>
+
+      {/* Legenda dos marcadores extras (ex.: viagens) */}
+      {extraLegend && extraMarkers.length > 0 && (
+        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 px-1">
+          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-sky-500 text-[9px]">✈️</span>
+          {extraLegend}
+        </p>
+      )}
 
       {/* Lista dos lugares filtrados */}
       {loading ? (

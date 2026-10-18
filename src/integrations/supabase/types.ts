@@ -4888,7 +4888,10 @@ export type Database = {
           currency: string | null
           end_date: string | null
           id: string
+          lat: number | null
+          lng: number | null
           main_destination: string | null
+          maps_url: string | null
           name: string
           notes: string | null
           start_date: string | null
@@ -4903,7 +4906,10 @@ export type Database = {
           currency?: string | null
           end_date?: string | null
           id?: string
+          lat?: number | null
+          lng?: number | null
           main_destination?: string | null
+          maps_url?: string | null
           name: string
           notes?: string | null
           start_date?: string | null
@@ -4918,7 +4924,10 @@ export type Database = {
           currency?: string | null
           end_date?: string | null
           id?: string
+          lat?: number | null
+          lng?: number | null
           main_destination?: string | null
+          maps_url?: string | null
           name?: string
           notes?: string | null
           start_date?: string | null

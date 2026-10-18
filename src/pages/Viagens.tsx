@@ -7,8 +7,9 @@
 // ============================================================================
 
 // Ferramentas do React (estado e efeitos) e navegação entre telas.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { resolveLocation } from '@/lib/geocode';
 // Dados do usuário logado.
 import { useAuth } from '@/contexts/AuthContext';
 // Hooks que buscam/gravam as viagens e os convites no banco (Supabase).
@@ -46,13 +47,13 @@ export default function Viagens() {
   // Usuário logado e se a autenticação ainda está carregando.
   const { user, loading } = useAuth();
   // Lista de viagens do usuário, indicador de carregamento e ação de criar viagem.
-  const { trips, isLoading, createTrip } = useTrips();
+  const { trips, isLoading, createTrip, updateTrip } = useTrips();
   // Convites de viagem recebidos e a ação de aceitar/recusar.
   const { invitations, respond } = useTripInvitations();
   // Controla se o formulário "Nova Viagem" está aberto.
   const [showNew, setShowNew] = useState(false);
   // Guarda o que o usuário digita no formulário de nova viagem.
-  const [form, setForm] = useState({ name: '', main_destination: '', start_date: '', end_date: '', budget: '' });
+  const [form, setForm] = useState({ name: '', main_destination: '', start_date: '', end_date: '', budget: '', maps_url: '' });
   // Guarda os links temporários das imagens de capa de cada viagem (por id).
   const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
 
@@ -74,23 +75,62 @@ export default function Viagens() {
     });
   }, [trips]);
 
+  // Posiciona no mapa as viagens que ainda não têm coordenadas, usando o link do
+  // Maps ou o destino principal. Faz uma vez por viagem (guarda as já tentadas).
+  const geocodedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    (async () => {
+      for (const t of trips as any[]) {
+        if (t.lat != null || geocodedRef.current.has(t.id)) continue;
+        if (!t.maps_url && !t.main_destination) continue;
+        if (t.user_id !== user?.id) continue; // só mexe nas próprias viagens
+        geocodedRef.current.add(t.id);
+        const point = await resolveLocation(t.main_destination, t.maps_url);
+        if (point) updateTrip.mutate({ id: t.id, lat: point.lat, lng: point.lng });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trips]);
+
+  // Viagens já posicionadas viram marcadores no mapa (clicáveis para abrir o plano).
+  const tripMarkers = useMemo(
+    () => (trips as any[])
+      .filter(t => t.lat != null && t.lng != null)
+      .map(t => ({
+        id: t.id,
+        name: t.name,
+        lat: t.lat as number,
+        lng: t.lng as number,
+        emoji: '✈️',
+        color: '#0ea5e9',
+        subtitle: t.main_destination || undefined,
+        actionLabel: 'Abrir viagem',
+        onAction: () => navigate(`/viagens/${t.id}`),
+      })),
+    [trips, navigate],
+  );
+
   // Enquanto valida o login não mostra nada; se não houver usuário, manda para o login.
   if (loading) return null;
   if (!user) { navigate('/auth'); return null; }
 
-  // Cria uma nova viagem com os dados do formulário e, ao dar certo,
-  // fecha o formulário e limpa os campos.
-  const handleCreate = () => {
+  // Cria uma nova viagem com os dados do formulário. Antes de salvar, tenta
+  // descobrir a posição no mapa (pelo link do Google Maps ou pelo destino).
+  const handleCreate = async () => {
+    const point = await resolveLocation(form.main_destination, form.maps_url);
     createTrip.mutate({
       name: form.name,
       main_destination: form.main_destination || undefined,
       start_date: form.start_date || undefined,
       end_date: form.end_date || undefined,
       budget: form.budget ? Number(form.budget) : undefined,
+      maps_url: form.maps_url || null,
+      lat: point?.lat ?? null,
+      lng: point?.lng ?? null,
     }, {
       onSuccess: () => {
         setShowNew(false);
-        setForm({ name: '', main_destination: '', start_date: '', end_date: '', budget: '' });
+        setForm({ name: '', main_destination: '', start_date: '', end_date: '', budget: '', maps_url: '' });
       }
     });
   };
@@ -259,6 +299,8 @@ export default function Viagens() {
             namePlaceholder="Cristo Redentor"
             priceLabel="Custo estimado (R$)"
             emptyText="Comece marcando os lugares que quer conhecer nas suas viagens."
+            extraMarkers={tripMarkers}
+            extraLegend="Suas viagens — toque no marcador para abrir o plano"
           />
         </TabsContent>
       </Tabs>
@@ -291,6 +333,11 @@ export default function Viagens() {
             <div>
               <Label>Orçamento previsto (R$)</Label>
               <Input type="number" placeholder="0" value={form.budget} onChange={e => setForm(f => ({ ...f, budget: e.target.value }))} />
+            </div>
+            <div>
+              <Label>Link do Google Maps (opcional)</Label>
+              <Input placeholder="Cole o link do destino no Maps" value={form.maps_url} onChange={e => setForm(f => ({ ...f, maps_url: e.target.value }))} />
+              <p className="text-[11px] text-muted-foreground mt-1">Para a viagem aparecer no mapa. Se não colar, o app tenta pelo destino.</p>
             </div>
           </div>
           {/* Rodapé do formulário: cancelar ou criar. O botão "Criar" fica
