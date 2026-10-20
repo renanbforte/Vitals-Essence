@@ -42,15 +42,21 @@ const TAX_TYPES: { value: TaxType; label: string; hint: string }[] = [
 interface ProjectionSimulatorProps {
   // Patrimônio investido hoje (vem da carteira); usado como valor inicial padrão.
   defaultPrincipal: number;
+  // Valores iniciais opcionais (ex.: ao projetar UM investimento específico).
+  initialContribution?: number; // aporte mensal
+  initialAnnualRate?: number;   // rendimento esperado em % ao ano
+  initialTaxType?: TaxType;     // tributação
+  title?: string;               // título do cartão
+  subtitle?: string;            // texto de apoio
 }
 
-export function ProjectionSimulator({ defaultPrincipal }: ProjectionSimulatorProps) {
+export function ProjectionSimulator({ defaultPrincipal, initialContribution, initialAnnualRate, initialTaxType, title, subtitle }: ProjectionSimulatorProps) {
   // --- ESTADOS (controles do simulador) ---
   const [principalText, setPrincipalText] = useState('');
-  const [annualRateText, setAnnualRateText] = useState('10'); // taxa esperada, em % ao ano
-  const [monthlyContribution, setMonthlyContribution] = useState(500); // aporte mensal simulado
+  const [annualRateText, setAnnualRateText] = useState(initialAnnualRate != null ? String(initialAnnualRate) : '10'); // taxa esperada, em % ao ano
+  const [monthlyContribution, setMonthlyContribution] = useState(initialContribution ?? 500); // aporte mensal simulado
   const [horizon, setHorizon] = useState(60); // horizonte em meses (padrão: 5 anos)
-  const [taxType, setTaxType] = useState<TaxType>('renda_fixa'); // tributação do investimento
+  const [taxType, setTaxType] = useState<TaxType>(initialTaxType ?? 'renda_fixa'); // tributação do investimento
   const [customRateText, setCustomRateText] = useState('15'); // alíquota de IR personalizada (%)
   const [tableOpen, setTableOpen] = useState(false); // tabela mês a mês aberta/fechada
 
@@ -83,10 +89,10 @@ export function ProjectionSimulator({ defaultPrincipal }: ProjectionSimulatorPro
           <div className="w-10 h-10 rounded-xl gradient-finance flex items-center justify-center shadow-md">
             <TrendingUp className="w-5 h-5 text-white" />
           </div>
-          Simulador de Projeção
+          {title ?? 'Simulador de Projeção'}
         </CardTitle>
         <p className="text-xs text-muted-foreground">
-          Juros compostos já descontando o Imposto de Renda no resgate. Ajuste o aporte e veja o que realmente fica no bolso.
+          {subtitle ?? 'Juros compostos já descontando o Imposto de Renda no resgate. Ajuste o aporte e veja o que realmente fica no bolso.'}
         </p>
       </CardHeader>
       <CardContent className="space-y-5">

@@ -13,11 +13,35 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Trash2, GripVertical, Target, RefreshCw, Pencil, Sparkles, CheckCircle2, Globe } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Target, RefreshCw, Pencil, Sparkles, CheckCircle2, Globe, LineChart } from 'lucide-react';
 import { AddValueDialog } from './AddValueDialog';
 import { EditInvestmentDialog } from './EditInvestmentDialog';
+import { ProjectionSimulator } from './ProjectionSimulator';
 import { currencySymbol } from '@/lib/exchange';
+import type { TaxType } from '@/lib/projection';
 import type { Investment, InvestmentInput } from '@/hooks/useInvestments';
+
+// Deriva a tributação (IR) a partir do tipo do investimento, para pré-preencher a projeção.
+function taxTypeFor(investmentType: string | null): TaxType {
+  switch (investmentType) {
+    case 'Ações':
+    case 'FII':
+    case 'Criptomoeda':
+      return 'acoes_fii';
+    case 'Poupança':
+      return 'isento';
+    default:
+      return 'renda_fixa'; // Renda Fixa, Tesouro, Previdência, etc.
+  }
+}
+
+// Deriva o rendimento esperado em % ao ano a partir da meta do investimento (quando for em %).
+function annualRateFor(inv: Investment): number | undefined {
+  const t = Number(inv.target_value) || 0;
+  if (inv.target_mode === 'pct_yearly') return t || undefined;
+  if (inv.target_mode === 'pct_monthly') return t ? (Math.pow(1 + t / 100, 12) - 1) * 100 : undefined;
+  return undefined; // deixa o padrão do simulador (10% a.a.)
+}
 
 // Dados que este componente recebe de fora:
 // - investment: o investimento a exibir
@@ -52,6 +76,8 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
   const [makeRealOpen, setMakeRealOpen] = useState(false);
   const [makeRealDate, setMakeRealDate] = useState(new Date().toISOString().split('T')[0]);
   const [makingReal, setMakingReal] = useState(false);
+  // Janela de projeção (juros compostos) deste investimento.
+  const [projOpen, setProjOpen] = useState(false);
 
   const isSimulated = investment.is_simulated;
 
@@ -104,7 +130,7 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-bold text-muted-foreground/60 tabular-nums">#{index + 1}</span>
-                    <h4 className="font-bold text-foreground truncate">{investment.name}</h4>
+                    <h4 className="font-bold text-foreground truncate cursor-pointer hover:text-[hsl(var(--finance))] transition-colors" onClick={() => setProjOpen(true)} title="Ver projeção">{investment.name}</h4>
                     {isSimulated && (
                       <span className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-600 flex items-center gap-1">
                         <Sparkles className="w-2.5 h-2.5" /> Simulação
@@ -234,6 +260,9 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
                   <Plus className="w-3.5 h-3.5" />
                   {investment.tracking_mode === 'cumulative' ? 'Adicionar Aporte' : 'Atualizar Valor'}
                 </Button>
+                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-[hsl(var(--finance))]" onClick={() => setProjOpen(true)} title="Ver projeção (juros compostos)">
+                  <LineChart className="w-3.5 h-3.5" />
+                </Button>
                 <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-muted-foreground hover:text-[hsl(var(--finance))]" onClick={() => setEditOpen(true)}>
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
@@ -273,6 +302,20 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
         investmentTypes={investmentTypes}
         objectives={objectives}
       />
+
+      {/* Projeção de juros compostos deste investimento (igual ao Simulador de Projeção) */}
+      <Dialog open={projOpen} onOpenChange={setProjOpen}>
+        <DialogContent className="max-w-md max-h-[92vh] overflow-y-auto p-0 border-0 bg-transparent shadow-none">
+          <ProjectionSimulator
+            defaultPrincipal={operatingCap + currentVal}
+            initialContribution={investment.is_recurring_contribution && investment.recurring_amount ? Number(investment.recurring_amount) : 0}
+            initialAnnualRate={annualRateFor(investment)}
+            initialTaxType={taxTypeFor(investment.investment_type)}
+            title={`Projeção: ${investment.name}`}
+            subtitle="Juros compostos com o aporte mês a mês, já descontando o IR no resgate. Ajuste e veja o lucro real."
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* Janela de "tornar real": pede a data de início e confirma */}
       <Dialog open={makeRealOpen} onOpenChange={setMakeRealOpen}>

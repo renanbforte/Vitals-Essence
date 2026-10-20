@@ -173,8 +173,9 @@ export default function Finance() {
     });
   }, [costCenters, addTransaction]);
 
-  // Registra no fluxo a saída do aporte inicial de um investimento. Para o real
-  // já marca como pago; para a simulação, cria como planejado (não pago).
+  // Registra no fluxo a saída do aporte inicial de um investimento. Fica como
+  // pendente (visível na lista do Fluxo); o usuário marca como pago quando o
+  // dinheiro de fato sair. planned=true (simulação) marca como planejado.
   const recordInvestmentEntry = useCallback(async (name: string, amount: number, date: string, planned = false) => {
     const investCC = costCenters.find(cc => cc.name === 'Investimentos');
     const txId = await addTransaction({
@@ -185,18 +186,15 @@ export default function Finance() {
       cost_center_id: investCC?.id ?? null,
       is_planned: planned,
     });
-    if (txId && !planned) {
-      await supabase.from('financial_transactions').update({ paid: true }).eq('id', txId);
-    }
     return txId;
   }, [costCenters, addTransaction]);
 
   // Converte os lançamentos planejados de uma simulação em reais (ao torná-la real):
-  // a saída inicial vira paga e a série de aportes deixa de ser planejada.
+  // a saída inicial e a série de aportes deixam de ser planejadas (ficam no Fluxo real).
   const convertInvestmentTxToReal = useCallback(async (entryTxId: string | null, recurringTxId: string | null) => {
     if (!user) return;
     if (entryTxId) {
-      await supabase.from('financial_transactions').update({ is_planned: false, paid: true }).eq('id', entryTxId).eq('user_id', user.id);
+      await supabase.from('financial_transactions').update({ is_planned: false }).eq('id', entryTxId).eq('user_id', user.id);
     }
     if (recurringTxId) {
       await supabase.from('financial_transactions').update({ is_planned: false }).eq('id', recurringTxId).eq('user_id', user.id);
