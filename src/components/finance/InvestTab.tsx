@@ -41,6 +41,8 @@ interface InvestTabProps {
   onTogglePaid?: (id: string, currentPaid: boolean) => void;
   // Agenda um aporte mensal recorrente no fluxo; retorna o id do lançamento criado.
   onScheduleAporte?: (name: string, amount: number, startDate: string) => Promise<string | null>;
+  // Registra a saída do aporte inicial no fluxo; retorna o id do lançamento criado.
+  onRecordInvestmentEntry?: (name: string, amount: number, date: string) => Promise<string | null>;
 }
 
 // Formata um numero como valor em real brasileiro (ex: "R$ 1.234,56").
@@ -48,7 +50,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions = [], onDeleteTransaction, onEditTransaction, onTogglePaid, onScheduleAporte }: InvestTabProps) {
+export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions = [], onDeleteTransaction, onEditTransaction, onTogglePaid, onScheduleAporte, onRecordInvestmentEntry }: InvestTabProps) {
   // Busca no banco a lista de investimentos, o total investido e as funcoes
   // para adicionar, atualizar, excluir e aportar valor, alem das listas de
   // tipos e objetivos disponiveis.
@@ -71,22 +73,34 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
   const realInvestments = useMemo(() => investments.filter(i => !i.is_simulated), [investments]);
   const simulatedInvestments = useMemo(() => investments.filter(i => i.is_simulated), [investments]);
 
-  // Cria um investimento; se for real e tiver aporte recorrente, agenda as saídas no fluxo.
+  // Cria um investimento; se for real, registra a saída do aporte inicial no fluxo
+  // e, se tiver aporte recorrente, agenda as saídas mensais.
   const handleCreateInvestment = async (input: Parameters<typeof addInvestment>[0]) => {
+    const today = new Date().toISOString().split('T')[0];
     let recurringTxId: string | null = null;
-    if (!input.is_simulated && input.is_recurring_contribution && input.recurring_amount && onScheduleAporte) {
-      recurringTxId = await onScheduleAporte(
-        input.name,
-        Number(input.recurring_amount),
-        input.start_date || new Date().toISOString().split('T')[0]
-      );
+    let entryTxId: string | null = null;
+    if (!input.is_simulated) {
+      // Saída do capital investido agora (já pago) — aparece no Fluxo.
+      const entryAmount = Number(input.operating_capital || 0);
+      if (entryAmount > 0 && onRecordInvestmentEntry) {
+        entryTxId = await onRecordInvestmentEntry(input.name, entryAmount, input.start_date || today);
+      }
+      if (input.is_recurring_contribution && input.recurring_amount && onScheduleAporte) {
+        recurringTxId = await onScheduleAporte(input.name, Number(input.recurring_amount), input.start_date || today);
+      }
     }
-    await addInvestment({ ...input, recurring_tx_id: recurringTxId });
+    await addInvestment({ ...input, recurring_tx_id: recurringTxId, entry_tx_id: entryTxId });
   };
 
-  // Promove uma simulação a real: agenda o aporte (se houver) e atualiza o investimento.
+  // Promove uma simulação a real: registra a saída inicial, agenda o aporte (se
+  // houver) e atualiza o investimento.
   const handleMakeReal = async (inv: typeof investments[number], startDate: string) => {
     let recurringTxId: string | null = null;
+    let entryTxId: string | null = null;
+    const entryAmount = Number(inv.operating_capital || 0);
+    if (entryAmount > 0 && onRecordInvestmentEntry) {
+      entryTxId = await onRecordInvestmentEntry(inv.name, entryAmount, startDate);
+    }
     if (inv.is_recurring_contribution && inv.recurring_amount && onScheduleAporte) {
       recurringTxId = await onScheduleAporte(inv.name, Number(inv.recurring_amount), startDate);
     }
@@ -94,6 +108,7 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
       is_simulated: false,
       start_date: startDate,
       recurring_tx_id: recurringTxId,
+      entry_tx_id: entryTxId,
     });
   };
 

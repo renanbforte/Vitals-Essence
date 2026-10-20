@@ -38,6 +38,8 @@ export interface FinancialTransaction {
   paid: boolean;
   payment_method: string | null;
   card_bank: string | null;
+  installment_index: number | null;
+  installment_total: number | null;
   created_at: string;
   cost_center?: CostCenter;
   installment_label?: string; // e.g. "2/5"
@@ -170,13 +172,17 @@ export function useFinancialFlow(selectedMonth: Date) {
       }
 
       // Enriquece cada lançamento com sua categoria completa e o rótulo de parcela.
+      // Usa a numeração salva no lançamento (fixa, não quebra ao apagar uma parcela);
+      // se não houver (dados antigos), cai no cálculo por contagem das irmãs.
       const enriched = data.map(t => ({
         ...t,
         type: t.type as 'income' | 'expense',
         cost_center: costCenters.find(cc => cc.id === t.cost_center_id),
-        installment_label: installmentMap.has(t.id)
-          ? `${installmentMap.get(t.id)!.index}/${installmentMap.get(t.id)!.total}`
-          : undefined,
+        installment_label: (t.installment_total && t.installment_total > 1)
+          ? `${t.installment_index}/${t.installment_total}`
+          : (installmentMap.has(t.id)
+              ? `${installmentMap.get(t.id)!.index}/${installmentMap.get(t.id)!.total}`
+              : undefined),
       }));
       setTransactions(enriched);
     }
@@ -215,6 +221,10 @@ export function useFinancialFlow(selectedMonth: Date) {
   const addTransaction = async (input: TransactionInput): Promise<string | null> => {
     if (!user) return null;
 
+    // Quantas parcelas terá a série (quando recorrente). Fixa o total para que o
+    // rótulo "X/Y" não mude se uma parcela for apagada depois.
+    const seriesTotal = input.is_recurring ? (input.installments ? input.installments : 60) : null;
+
     // Build the base transaction
     const base = {
       user_id: user.id,
@@ -231,6 +241,8 @@ export function useFinancialFlow(selectedMonth: Date) {
       payment_method: input.payment_method || null,
       card_bank: input.card_bank || null,
       recurrence_mode: input.recurrence_mode || null,
+      installment_index: input.is_recurring ? 1 : null,
+      installment_total: seriesTotal,
     };
 
     // Grava o primeiro lançamento (o "pai" da série, se houver recorrência).
@@ -253,7 +265,7 @@ export function useFinancialFlow(selectedMonth: Date) {
       const interval = input.recurrence_interval || 1;   // de quantos em quantos (ex.: a cada 1 mês)
       const type = input.recurrence_type || 'months';    // unidade: dias/semanas/meses/anos
       // Sem número de parcelas definido = recorrência contínua (projeta até 60 ocorrências).
-      const totalInstallments = input.installments ? input.installments : 60;
+      const totalInstallments = seriesTotal || 60;
 
       // Calcula a data de cada parcela futura conforme a unidade e o intervalo.
       for (let i = 1; i < totalInstallments; i++) {
@@ -278,6 +290,8 @@ export function useFinancialFlow(selectedMonth: Date) {
           ...base,
           date: format(nextDate, 'yyyy-MM-dd'),
           parent_transaction_id: parentId,
+          installment_index: i + 1,       // 2ª, 3ª... parcela (a 1ª é o lançamento pai)
+          installment_total: totalInstallments,
         });
       }
 
@@ -388,7 +402,15 @@ export function useFinancialFlow(selectedMonth: Date) {
           payment_method: input.payment_method !== undefined ? input.payment_method : (existingTxn?.payment_method || null),
           card_bank: input.card_bank !== undefined ? input.card_bank : (existingTxn?.card_bank || null),
           parent_transaction_id: anchorId,
+          installment_total: totalInstallments,
         };
+
+        // O lançamento âncora (pai) é a 1ª parcela da série.
+        await supabase
+          .from('financial_transactions')
+          .update({ installment_index: 1, installment_total: totalInstallments })
+          .eq('id', anchorId)
+          .eq('user_id', user.id);
 
         const futureInserts = [];
         for (let i = 1; i < totalInstallments; i++) {
@@ -399,7 +421,7 @@ export function useFinancialFlow(selectedMonth: Date) {
             case 'years': nextDate = addYears(baseDate, interval * i); break;
             case 'months': default: nextDate = addMonths(baseDate, interval * i); break;
           }
-          futureInserts.push({ ...base, date: format(nextDate, 'yyyy-MM-dd') });
+          futureInserts.push({ ...base, date: format(nextDate, 'yyyy-MM-dd'), installment_index: i + 1 });
         }
         if (futureInserts.length > 0) {
           await supabase.from('financial_transactions').insert(futureInserts);

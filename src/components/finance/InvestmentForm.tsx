@@ -45,6 +45,9 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
   const [isForeign, setIsForeign] = useState(false);
   const [currencyCode, setCurrencyCode] = useState('USD');
   const [foreignAmount, setForeignAmount] = useState('');
+  const [brlInput, setBrlInput] = useState(''); // valor digitado em R$ (modo inverso)
+  // 'foreign' = digito na moeda e vejo em R$; 'brl' = digito em R$ e vejo na moeda.
+  const [foreignInputMode, setForeignInputMode] = useState<'foreign' | 'brl'>('foreign');
   const [exchangeRate, setExchangeRate] = useState('');
   const [fetchingRate, setFetchingRate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -63,8 +66,17 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isForeign, currencyCode]);
 
-  // Valor convertido em reais (valor na moeda × cotação), para mostrar e salvar.
-  const convertedBRL = (parseFloat(foreignAmount) || 0) * (parseFloat(exchangeRate) || 0);
+  // Cotação (R$ por unidade da moeda).
+  const rate = parseFloat(exchangeRate) || 0;
+  // Valor final em reais (saída no fluxo) e valor final na moeda, conforme o modo:
+  // - 'foreign': digito na moeda → R$ = moeda × cotação.
+  // - 'brl': digito em R$ → moeda = R$ ÷ cotação.
+  const convertedBRL = foreignInputMode === 'foreign'
+    ? (parseFloat(foreignAmount) || 0) * rate
+    : (parseFloat(brlInput) || 0);
+  const convertedForeign = foreignInputMode === 'brl'
+    ? (rate > 0 ? (parseFloat(brlInput) || 0) / rate : 0)
+    : (parseFloat(foreignAmount) || 0);
 
   const selectedMode = TARGET_MODES.find(m => m.value === targetMode)!;
 
@@ -85,6 +97,8 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
     setIsForeign(false);
     setCurrencyCode('USD');
     setForeignAmount('');
+    setBrlInput('');
+    setForeignInputMode('foreign');
     setExchangeRate('');
   };
 
@@ -112,8 +126,8 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
       start_date: isSimulated ? null : startDate,
       // Moeda estrangeira: guarda moeda, valor na moeda e cotação usada.
       currency: isForeign ? currencyCode : 'BRL',
-      foreign_amount: isForeign ? (parseFloat(foreignAmount) || 0) : null,
-      exchange_rate: isForeign ? (parseFloat(exchangeRate) || 0) : null,
+      foreign_amount: isForeign ? convertedForeign : null,
+      exchange_rate: isForeign ? rate : null,
     });
     reset();
     setSubmitting(false);
@@ -194,23 +208,47 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
             </div>
             {isForeign && (
               <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Moeda</Label>
-                    <Select value={currencyCode} onValueChange={setCurrencyCode}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {FOREIGN_CURRENCIES.map(c => (
-                          <SelectItem key={c.code} value={c.code}>{c.symbol} {c.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div>
+                  <Label className="text-xs">Moeda</Label>
+                  <Select value={currencyCode} onValueChange={setCurrencyCode}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {FOREIGN_CURRENCIES.map(c => (
+                        <SelectItem key={c.code} value={c.code}>{c.symbol} {c.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Direção da conversão: digito na moeda ou em reais */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForeignInputMode('foreign')}
+                    className={`rounded-lg border p-2 text-xs font-semibold transition-all ${foreignInputMode === 'foreign' ? 'border-sky-500 bg-sky-500/10 text-sky-600' : 'border-border text-muted-foreground'}`}
+                  >
+                    Digitar em {currencySymbol(currencyCode)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForeignInputMode('brl')}
+                    className={`rounded-lg border p-2 text-xs font-semibold transition-all ${foreignInputMode === 'brl' ? 'border-sky-500 bg-sky-500/10 text-sky-600' : 'border-border text-muted-foreground'}`}
+                  >
+                    Digitar em R$
+                  </button>
+                </div>
+
+                {foreignInputMode === 'foreign' ? (
                   <div>
                     <Label className="text-xs">Valor em {currencySymbol(currencyCode)}</Label>
                     <Input type="number" min="0" step="0.01" value={foreignAmount} onChange={e => setForeignAmount(e.target.value)} placeholder="0,00" />
                   </div>
-                </div>
+                ) : (
+                  <div>
+                    <Label className="text-xs">Valor em R$</Label>
+                    <Input type="number" min="0" step="0.01" value={brlInput} onChange={e => setBrlInput(e.target.value)} placeholder="0,00" />
+                  </div>
+                )}
                 <div>
                   <Label className="text-xs flex items-center justify-between">
                     <span>Cotação do dia (R$ por {currencySymbol(currencyCode)})</span>
@@ -223,10 +261,14 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
                 </div>
                 <div className="flex items-center justify-between rounded-lg bg-sky-500/10 p-2.5">
                   <span className="text-xs text-muted-foreground">Equivale a</span>
-                  <span className="text-sm font-bold text-sky-700 tabular-nums">{formatCurrency(convertedBRL)}</span>
+                  <span className="text-sm font-bold text-sky-700 tabular-nums">
+                    {foreignInputMode === 'foreign'
+                      ? formatCurrency(convertedBRL)
+                      : `${currencySymbol(currencyCode)} ${convertedForeign.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                  </span>
                 </div>
                 <p className="text-[10px] text-muted-foreground">
-                  A saída registrada no fluxo será em reais, pela cotação informada.
+                  A saída registrada no fluxo será em reais ({formatCurrency(convertedBRL)}), pela cotação informada.
                 </p>
               </>
             )}

@@ -1344,6 +1344,8 @@ export type Database = {
           date: string
           description: string
           id: string
+          installment_index: number | null
+          installment_total: number | null
           is_recurring: boolean
           notes: string | null
           paid: boolean
@@ -1365,6 +1367,8 @@ export type Database = {
           date?: string
           description: string
           id?: string
+          installment_index?: number | null
+          installment_total?: number | null
           is_recurring?: boolean
           notes?: string | null
           paid?: boolean
@@ -1386,6 +1390,8 @@ export type Database = {
           date?: string
           description?: string
           id?: string
+          installment_index?: number | null
+          installment_total?: number | null
           is_recurring?: boolean
           notes?: string | null
           paid?: boolean
@@ -1919,6 +1925,7 @@ export type Database = {
           created_at: string
           currency: string
           current_value: number
+          entry_tx_id: string | null
           exchange_rate: number | null
           foreign_amount: number | null
           id: string
@@ -1945,6 +1952,7 @@ export type Database = {
           created_at?: string
           currency?: string
           current_value?: number
+          entry_tx_id?: string | null
           exchange_rate?: number | null
           foreign_amount?: number | null
           id?: string
@@ -1971,6 +1979,7 @@ export type Database = {
           created_at?: string
           currency?: string
           current_value?: number
+          entry_tx_id?: string | null
           exchange_rate?: number | null
           foreign_amount?: number | null
           id?: string

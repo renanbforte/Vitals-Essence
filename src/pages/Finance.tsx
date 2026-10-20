@@ -71,12 +71,10 @@ export default function Finance() {
     () => costCenters.filter(cc => cc.name === 'Investimentos').map(cc => cc.id),
     [costCenters]
   );
-  // Lançamentos do "Fluxo": tudo que NÃO é investimento (entradas/saídas do dia a dia)
-  const flowTransactions = useMemo(
-    () => transactions.filter(t => !t.cost_center_id || !investmentCostCenterIds.includes(t.cost_center_id)),
-    [transactions, investmentCostCenterIds]
-  );
-  // Lançamentos de investimento (aparecem na aba "Investir")
+  // Lançamentos do "Fluxo": TODOS (inclui as saídas de investimento, que agora
+  // também aparecem no fluxo — não só na aba Investir).
+  const flowTransactions = transactions;
+  // Lançamentos de investimento (também aparecem na aba "Investir")
   const investTransactions = useMemo(
     () => transactions.filter(t => t.cost_center_id && investmentCostCenterIds.includes(t.cost_center_id)),
     [transactions, investmentCostCenterIds]
@@ -161,6 +159,23 @@ export default function Finance() {
       recurrence_type: 'months',
       recurrence_interval: 1,
     });
+  }, [costCenters, addTransaction]);
+
+  // Registra no fluxo a saída do aporte inicial de um investimento real (já pago,
+  // pois o dinheiro saiu da conta). Retorna o id do lançamento para vincular.
+  const recordInvestmentEntry = useCallback(async (name: string, amount: number, date: string) => {
+    const investCC = costCenters.find(cc => cc.name === 'Investimentos');
+    const txId = await addTransaction({
+      type: 'expense',
+      description: `Investimento - ${name}`,
+      amount,
+      date,
+      cost_center_id: investCC?.id ?? null,
+    });
+    if (txId) {
+      await supabase.from('financial_transactions').update({ paid: true }).eq('id', txId);
+    }
+    return txId;
   }, [costCenters, addTransaction]);
 
   // --- APARÊNCIA DA TELA (o que o usuário vê) ---
@@ -320,7 +335,7 @@ export default function Finance() {
 
             {/* CONTEÚDO DA ABA "INVESTIR": investimentos, metas e simulador (unificados) */}
             <TabsContent value="invest" className="mt-6" key="invest">
-              <InvestTab monthlyIncome={flowSummary.income} monthlyExpenses={flowSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} />
+              <InvestTab monthlyIncome={flowSummary.income} monthlyExpenses={flowSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} />
             </TabsContent>
           </AnimatePresence>
         </Tabs>

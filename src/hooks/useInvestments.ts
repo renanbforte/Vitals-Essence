@@ -38,6 +38,7 @@ export interface Investment {
   is_simulated: boolean;
   start_date: string | null;
   recurring_tx_id: string | null;
+  entry_tx_id: string | null; // lançamento de saída (aporte inicial) no fluxo
   // Moeda estrangeira: moeda, valor na moeda e cotação usada (current_value fica em BRL).
   currency: string;
   foreign_amount: number | null;
@@ -63,6 +64,7 @@ export interface InvestmentInput {
   is_simulated?: boolean;
   start_date?: string | null;
   recurring_tx_id?: string | null;
+  entry_tx_id?: string | null;
   currency?: string;
   foreign_amount?: number | null;
   exchange_rate?: number | null;
@@ -167,6 +169,8 @@ export function useInvestments() {
       operating_capital: input.operating_capital || 0,
       is_simulated: input.is_simulated || false,
       start_date: input.start_date || null,
+      recurring_tx_id: input.recurring_tx_id || null,
+      entry_tx_id: input.entry_tx_id || null,
       currency: input.currency || 'BRL',
       foreign_amount: input.foreign_amount ?? null,
       exchange_rate: input.exchange_rate ?? null,
@@ -199,6 +203,16 @@ export function useInvestments() {
   // Exclui um investimento e todo o seu historico de aportes.
   const deleteInvestment = async (id: string) => {
     if (!user) return;
+    const inv = investments.find(i => i.id === id);
+    // Remove os lançamentos de fluxo ligados a este investimento (saída inicial e
+    // a série de aportes recorrentes), para não ficarem órfãos no Fluxo.
+    if (inv?.entry_tx_id) {
+      await supabase.from('financial_transactions').delete().eq('id', inv.entry_tx_id).eq('user_id', user.id);
+    }
+    if (inv?.recurring_tx_id) {
+      await supabase.from('financial_transactions').delete().eq('parent_transaction_id', inv.recurring_tx_id).eq('user_id', user.id);
+      await supabase.from('financial_transactions').delete().eq('id', inv.recurring_tx_id).eq('user_id', user.id);
+    }
     // Apaga primeiro o historico para nao deixar registros orfaos no banco.
     await supabase.from('investment_history').delete().eq('investment_id', id).eq('user_id', user.id);
     const { error } = await supabase.from('investments').delete().eq('id', id).eq('user_id', user.id);
