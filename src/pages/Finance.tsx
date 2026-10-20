@@ -9,8 +9,9 @@
 // Importações do React (ferramentas para guardar estados e reagir a mudanças)
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowUpDown, TrendingUp, Plus, Settings2 } from 'lucide-react';
+import { ArrowUpDown, TrendingUp, Plus, Settings2, LineChart } from 'lucide-react';
 import { InvestTab } from '@/components/finance/InvestTab';
+import { PerformanceTab } from '@/components/finance/PerformanceTab';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Header } from '@/components/Header';
 import { Button } from '@/components/ui/button';
@@ -256,7 +257,7 @@ export default function Finance() {
         {/* Sistema de ABAS: alterna entre "Fluxo" e "Investir" (Metas foi unificada em Investir) */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           {/* Barra com os dois botões de aba */}
-          <TabsList className="grid w-full grid-cols-2 h-14 rounded-2xl bg-card border border-border p-1.5 shadow-sm">
+          <TabsList className="grid w-full grid-cols-3 h-14 rounded-2xl bg-card border border-border p-1.5 shadow-sm">
             <TabsTrigger
               value="flow"
               className="gap-1.5 rounded-xl font-bold text-sm data-[state=active]:gradient-finance data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
@@ -270,6 +271,13 @@ export default function Finance() {
             >
               <TrendingUp className="w-4 h-4 shrink-0" />
               <span className="truncate">Investir</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="desempenho"
+              className="gap-1.5 rounded-xl font-bold text-sm data-[state=active]:gradient-finance data-[state=active]:text-white data-[state=active]:shadow-lg transition-all duration-300"
+            >
+              <LineChart className="w-4 h-4 shrink-0" />
+              <span className="truncate">Desempenho</span>
             </TabsTrigger>
           </TabsList>
 
@@ -336,6 +344,11 @@ export default function Finance() {
             {/* CONTEÚDO DA ABA "INVESTIR": investimentos, metas e simulador (unificados) */}
             <TabsContent value="invest" className="mt-6" key="invest">
               <InvestTab monthlyIncome={flowSummary.income} monthlyExpenses={flowSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} />
+            </TabsContent>
+
+            {/* CONTEÚDO DA ABA "DESEMPENHO": tabela e gráfico mês a mês (Real/Planejado) */}
+            <TabsContent value="desempenho" className="mt-6" key="desempenho">
+              <PerformanceTab />
             </TabsContent>
           </AnimatePresence>
         </Tabs>
