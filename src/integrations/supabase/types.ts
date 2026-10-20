@@ -1346,6 +1346,7 @@ export type Database = {
           id: string
           installment_index: number | null
           installment_total: number | null
+          is_planned: boolean
           is_recurring: boolean
           notes: string | null
           paid: boolean
@@ -1369,6 +1370,7 @@ export type Database = {
           id?: string
           installment_index?: number | null
           installment_total?: number | null
+          is_planned?: boolean
           is_recurring?: boolean
           notes?: string | null
           paid?: boolean
@@ -1392,6 +1394,7 @@ export type Database = {
           id?: string
           installment_index?: number | null
           installment_total?: number | null
+          is_planned?: boolean
           is_recurring?: boolean
           notes?: string | null
           paid?: boolean

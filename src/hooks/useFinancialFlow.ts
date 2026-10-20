@@ -36,6 +36,7 @@ export interface FinancialTransaction {
   parent_transaction_id: string | null;
   notes: string | null;
   paid: boolean;
+  is_planned: boolean; // true = planejado (hipótese), false = real
   payment_method: string | null;
   card_bank: string | null;
   installment_index: number | null;
@@ -61,6 +62,7 @@ export interface TransactionInput {
   notes?: string | null;
   payment_method?: string | null;
   card_bank?: string | null;
+  is_planned?: boolean;
 }
 
 // Categorias padrão criadas automaticamente para um usuário novo (primeiro acesso).
@@ -243,6 +245,7 @@ export function useFinancialFlow(selectedMonth: Date) {
       recurrence_mode: input.recurrence_mode || null,
       installment_index: input.is_recurring ? 1 : null,
       installment_total: seriesTotal,
+      is_planned: input.is_planned || false,
     };
 
     // Grava o primeiro lançamento (o "pai" da série, se houver recorrência).
@@ -606,6 +609,19 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   };
 
+  // Alterna um lançamento entre Real e Planejado. Atualiza a tela na hora.
+  const togglePlanned = async (id: string, currentPlanned: boolean) => {
+    if (!user) return;
+    const { error } = await supabase
+      .from('financial_transactions')
+      .update({ is_planned: !currentPlanned })
+      .eq('id', id)
+      .eq('user_id', user.id);
+    if (!error) {
+      setTransactions(prev => prev.map(t => t.id === id ? { ...t, is_planned: !currentPlanned } : t));
+    }
+  };
+
   // Cria uma nova categoria (centro de custo) para o usuário.
   const addCostCenter = async (name: string, icon?: string, color?: string) => {
     if (!user) return;
@@ -699,6 +715,7 @@ export function useFinancialFlow(selectedMonth: Date) {
     updateTransaction,
     deleteTransaction,
     togglePaid,
+    togglePlanned,
     addCostCenter,
     updateCostCenter,
     deleteCostCenter,

@@ -30,7 +30,7 @@ export function computeRealBalance(
   excludeCostCenterIds: string[] = []
 ): number {
   const paid = transactions.filter(
-    t => t.paid && (!t.cost_center_id || !excludeCostCenterIds.includes(t.cost_center_id))
+    t => t.paid && !t.is_planned && (!t.cost_center_id || !excludeCostCenterIds.includes(t.cost_center_id))
   );
   const initial = bankBalances.reduce((s, b) => s + Number(b.initial_balance), 0);
   const income = paid.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);

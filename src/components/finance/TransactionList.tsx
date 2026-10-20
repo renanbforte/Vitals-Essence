@@ -32,6 +32,7 @@ interface TransactionListProps {
   onDelete: (id: string, deleteRelated?: boolean) => void;
   onEdit?: (transaction: FinancialTransaction) => void;
   onTogglePaid?: (id: string, currentPaid: boolean) => void;
+  onTogglePlanned?: (id: string, currentPlanned: boolean) => void;
   onSearchAll?: (query?: string, costCenterId?: string, dateFrom?: string, dateTo?: string) => Promise<FinancialTransaction[]>;
   allCostCenters?: { id: string; name: string; icon: string | null }[];
 }
@@ -60,7 +61,7 @@ function getRecurrenceLabel(t: FinancialTransaction): string {
 type SortOrder = 'asc' | 'desc';
 type ViewMode = 'date' | 'list';
 
-export function TransactionList({ transactions, onDelete, onEdit, onTogglePaid, onSearchAll, allCostCenters }: TransactionListProps) {
+export function TransactionList({ transactions, onDelete, onEdit, onTogglePaid, onTogglePlanned, onSearchAll, allCostCenters }: TransactionListProps) {
   const [deleteTarget, setDeleteTarget] = useState<FinancialTransaction | null>(null);
   const [showPaid, setShowPaid] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
@@ -153,7 +154,7 @@ export function TransactionList({ transactions, onDelete, onEdit, onTogglePaid, 
       key={t.id}
       className={`flex items-center gap-3 p-4 cursor-pointer hover:bg-muted/40 transition-all ${
         t.paid && dimmed ? 'opacity-70' : ''
-      }`}
+      } ${t.is_planned ? 'border-l-2 border-dashed border-amber-400 bg-amber-500/[0.04]' : ''}`}
       onClick={() => onEdit?.(t)}
     >
       <button
@@ -214,10 +215,25 @@ export function TransactionList({ transactions, onDelete, onEdit, onTogglePaid, 
             {t.payment_method === 'pix' ? '⚡ PIX' : t.payment_method === 'boleto' ? '📄 Boleto' : t.payment_method === 'dinheiro' ? '💵 Dinheiro' : t.payment_method === 'cartao' ? `💳 ${t.card_bank || 'Cartão'}` : t.payment_method}
           </p>
         )}
-        {t.paid && (
+        {t.paid && !t.is_planned && (
           <p className="text-[10px] text-emerald-600 font-medium mt-0.5">
             {t.type === 'income' ? '✓ Recebido' : '✓ Pago'}
           </p>
+        )}
+        {/* Botão liga/desliga Real ↔ Planejado */}
+        {onTogglePlanned && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onTogglePlanned(t.id, t.is_planned); }}
+            className={`mt-1 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+              t.is_planned
+                ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                : 'bg-[hsl(var(--finance))]/10 text-[hsl(var(--finance))] border-[hsl(var(--finance))]/20'
+            }`}
+            title={t.is_planned ? 'Planejado — toque para tornar Real' : 'Real — toque para tornar Planejado'}
+          >
+            {t.is_planned ? '🔮 Planejado' : '💰 Real'}
+          </button>
         )}
       </div>
       <p className={`text-sm font-bold tabular-nums shrink-0 ${

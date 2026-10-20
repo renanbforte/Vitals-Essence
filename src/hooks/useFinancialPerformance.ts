@@ -29,7 +29,7 @@ export interface PerfRow {
 }
 
 // Formato cru de um lançamento vindo do banco (só os campos que usamos aqui).
-interface TxRow { date: string; type: string; amount: number; paid: boolean; cost_center_id: string | null }
+interface TxRow { date: string; type: string; amount: number; is_planned: boolean; cost_center_id: string | null }
 // Formato cru de um investimento (para projetar as simulações).
 interface InvRow {
   is_simulated: boolean; is_recurring_contribution: boolean;
@@ -63,7 +63,7 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
 
     // Lançamentos, categorias e investimentos do usuário.
     const [{ data: txns }, { data: ccs }, { data: invs }] = await Promise.all([
-      supabase.from('financial_transactions').select('date, type, amount, paid, cost_center_id').eq('user_id', user.id),
+      supabase.from('financial_transactions').select('date, type, amount, is_planned, cost_center_id').eq('user_id', user.id),
       supabase.from('cost_centers').select('id, name').eq('user_id', user.id),
       supabase.from('investments').select('is_simulated, is_recurring_contribution, recurring_amount, recurrence_type, operating_capital, current_value, start_date').eq('user_id', user.id),
     ]);
@@ -79,9 +79,10 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
     const currentKey = monthKey(base);
 
     // Monta uma série (Real ou Planejado) a partir dos lançamentos filtrados.
-    const buildSeries = (onlyPaid: boolean, withSimulations: boolean): PerfRow[] => {
+    // excludePlanned = true -> só os reais; false -> tudo (reais + planejados).
+    const buildSeries = (excludePlanned: boolean, withSimulations: boolean): PerfRow[] => {
       const rows = (txns || []) as TxRow[];
-      const selected = onlyPaid ? rows.filter(t => t.paid) : rows;
+      const selected = excludePlanned ? rows.filter(t => !t.is_planned) : rows;
 
       // Saldo de abertura: tudo que é anterior à janela entra como ponto de partida.
       let openConta = 0;      // acumulado na conta antes da janela
@@ -150,8 +151,8 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
       });
     };
 
-    setReal(buildSeries(true, false));       // Real: só pago, sem simulações
-    setPlanejado(buildSeries(false, true));  // Planejado: tudo + simulações
+    setReal(buildSeries(true, false));       // Real: só lançamentos reais, sem simulações
+    setPlanejado(buildSeries(false, true));  // Planejado: reais + planejados + simulações
     setLoading(false);
   }, [user, backMonths, forwardMonths]);
 

@@ -47,6 +47,8 @@ export function TransactionForm({ open, onOpenChange, costCenters, onSubmit, onA
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   // Centro de custo selecionado ("none" = sem centro de custo).
   const [costCenterId, setCostCenterId] = useState<string>('none');
+  // Se o lançamento é planejado (hipótese) em vez de real.
+  const [isPlanned, setIsPlanned] = useState(false);
   // Se o lançamento se repete no tempo (recorrente).
   const [isRecurring, setIsRecurring] = useState(false);
   // Modo da recorrência: parcelado (nº fixo) ou contínuo (mensal indefinido).
@@ -96,6 +98,7 @@ export function TransactionForm({ open, onOpenChange, costCenters, onSubmit, onA
       setDescription(editTransaction.description);
       setAmount(String(editTransaction.amount));
       setDate(editTransaction.date);
+      setIsPlanned(editTransaction.is_planned || false);
       setCostCenterId(editTransaction.cost_center_id || 'none');
       setIsRecurring(editTransaction.is_recurring);
       setRecurrenceType(editTransaction.recurrence_type || 'months');
@@ -115,6 +118,7 @@ export function TransactionForm({ open, onOpenChange, costCenters, onSubmit, onA
       setDescription('');
       setAmount('');
       setDate(new Date().toISOString().split('T')[0]);
+      setIsPlanned(false);
       setCostCenterId('none');
       setIsRecurring(false);
       setRecurrenceMode('installments');
@@ -155,6 +159,7 @@ export function TransactionForm({ open, onOpenChange, costCenters, onSubmit, onA
     notes: notes.trim() || null,
     payment_method: paymentMethod === 'none' ? null : paymentMethod,
     card_bank: cardBank.trim() || null,
+    is_planned: isPlanned,
   });
 
   const handleSubmit = () => {
@@ -239,6 +244,33 @@ export function TransactionForm({ open, onOpenChange, costCenters, onSubmit, onA
                 Saída
               </button>
             </div>
+
+            {/* Real x Planejado */}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPlanned(false)}
+                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl font-semibold text-xs transition-all ${
+                  !isPlanned ? 'bg-[hsl(var(--finance))]/15 text-[hsl(var(--finance))] ring-2 ring-[hsl(var(--finance))]/30' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                💰 Real
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPlanned(true)}
+                className={`flex items-center justify-center gap-2 p-2.5 rounded-xl font-semibold text-xs transition-all ${
+                  isPlanned ? 'bg-amber-500/15 text-amber-600 ring-2 ring-amber-500/30' : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                🔮 Planejado
+              </button>
+            </div>
+            {isPlanned && (
+              <p className="text-[10px] text-amber-600 -mt-2">
+                Planejado: só para organizar o planejamento. Não entra no saldo real nem conta como pago.
+              </p>
+            )}
 
             <div>
               <Label>Descrição</Label>

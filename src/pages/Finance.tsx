@@ -62,7 +62,7 @@ export default function Finance() {
   // --- DADOS (vindos do Supabase, através dos "hooks") ---
   const { user } = useAuth(); // usuário logado
   // Fluxo financeiro do mês: lista de lançamentos, centros de custo, bancos salvos e as funções para criar/editar/apagar.
-  const { transactions, costCenters, savedBanks, loading, addTransaction, updateTransaction, deleteTransaction, togglePaid, addCostCenter, updateCostCenter, deleteCostCenter, uploadAttachment, searchAllTransactions } = useFinancialFlow(selectedMonth);
+  const { transactions, costCenters, savedBanks, loading, addTransaction, updateTransaction, deleteTransaction, togglePaid, togglePlanned, addCostCenter, updateCostCenter, deleteCostCenter, uploadAttachment, searchAllTransactions } = useFinancialFlow(selectedMonth);
   const { totalInvested } = useInvestments();               // total investido (patrimônio)
   const { bankBalances, upsertBankBalance } = useBankBalances(); // saldos por banco
   const { manualReserve, autoReserve, totalReserve, reservaCenterIds, updateManualReserve } = useFinancialReserve(transactions, costCenters); // reserva de emergência
@@ -75,17 +75,27 @@ export default function Finance() {
   // Lançamentos do "Fluxo": TODOS (inclui as saídas de investimento, que agora
   // também aparecem no fluxo — não só na aba Investir).
   const flowTransactions = transactions;
-  // Lançamentos de investimento (também aparecem na aba "Investir")
+  // Lançamentos de investimento (também aparecem na aba "Investir") — só os reais.
   const investTransactions = useMemo(
-    () => transactions.filter(t => t.cost_center_id && investmentCostCenterIds.includes(t.cost_center_id)),
+    () => transactions.filter(t => !t.is_planned && t.cost_center_id && investmentCostCenterIds.includes(t.cost_center_id)),
     [transactions, investmentCostCenterIds]
   );
-  // Resumo do mês: soma as entradas, soma as saídas e calcula o saldo (entradas - saídas)
-  const flowSummary = useMemo(() => {
-    const income = flowTransactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-    const expense = flowTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+
+  // Visão do Fluxo: Real (só reais), Planejado (só hipóteses) ou Todas.
+  const [flowView, setFlowView] = useState<'todas' | 'real' | 'planejado'>('todas');
+  const flowReal = useMemo(() => flowTransactions.filter(t => !t.is_planned), [flowTransactions]);
+  const flowPlanned = useMemo(() => flowTransactions.filter(t => t.is_planned), [flowTransactions]);
+  const displayedFlow = flowView === 'real' ? flowReal : flowView === 'planejado' ? flowPlanned : flowTransactions;
+
+  // Soma entradas/saídas/saldo de um conjunto de lançamentos.
+  const summarize = (list: typeof transactions) => {
+    const income = list.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+    const expense = list.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
     return { income, expense, balance: income - expense };
-  }, [flowTransactions]);
+  };
+  // Resumo exibido no Fluxo (segue a visão escolhida) e resumo só do real (para o hero/investir).
+  const flowSummary = useMemo(() => summarize(displayedFlow), [displayedFlow]);
+  const realSummary = useMemo(() => summarize(flowReal), [flowReal]);
 
   // Busca TODOS os lançamentos já pagos até o fim do mês escolhido, para calcular o saldo real acumulado
   const [allPaidTransactions, setAllPaidTransactions] = useState<FinancialTransaction[]>([]);
@@ -189,7 +199,7 @@ export default function Finance() {
         {/* Hero: saldo real em destaque + chips de mês, patrimônio e reserva */}
         <FinanceHero
           realBalance={realBalance}
-          monthBalance={flowSummary.balance}
+          monthBalance={realSummary.balance}
           patrimony={totalInvested}
           reserve={totalReserve}
         />
@@ -291,7 +301,28 @@ export default function Finance() {
                   <MonthSelector selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
                 </motion.div>
 
-                {/* Resumo do mês: total de entradas, saídas e saldo */}
+                {/* Filtro: Real / Planejado / Todas */}
+                <motion.div variants={fadeUp} className="grid grid-cols-3 gap-1.5">
+                  {([
+                    { v: 'todas', label: 'Todas' },
+                    { v: 'real', label: '💰 Real' },
+                    { v: 'planejado', label: '🔮 Planejado' },
+                  ] as { v: typeof flowView; label: string }[]).map(opt => (
+                    <button
+                      key={opt.v}
+                      onClick={() => setFlowView(opt.v)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-all ${
+                        flowView === opt.v
+                          ? (opt.v === 'planejado' ? 'bg-amber-500 text-white border-amber-500' : 'gradient-finance text-white border-transparent')
+                          : 'bg-card border-border text-muted-foreground'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </motion.div>
+
+                {/* Resumo do mês: total de entradas, saídas e saldo (segue o filtro) */}
                 <motion.div variants={fadeUp}>
                   <FlowSummary income={flowSummary.income} expense={flowSummary.expense} balance={flowSummary.balance} />
                 </motion.div>
@@ -335,7 +366,7 @@ export default function Finance() {
                       <Skeleton className="h-20 rounded-2xl" />
                     </div>
                   ) : (
-                    <TransactionList transactions={flowTransactions} onDelete={deleteTransaction} onEdit={handleEdit} onTogglePaid={togglePaid} onSearchAll={searchAllTransactions} allCostCenters={costCenters} />
+                    <TransactionList transactions={displayedFlow} onDelete={deleteTransaction} onEdit={handleEdit} onTogglePaid={togglePaid} onTogglePlanned={togglePlanned} onSearchAll={searchAllTransactions} allCostCenters={costCenters} />
                   )}
                 </motion.div>
               </motion.div>
@@ -343,7 +374,7 @@ export default function Finance() {
 
             {/* CONTEÚDO DA ABA "INVESTIR": investimentos, metas e simulador (unificados) */}
             <TabsContent value="invest" className="mt-6" key="invest">
-              <InvestTab monthlyIncome={flowSummary.income} monthlyExpenses={flowSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} />
+              <InvestTab monthlyIncome={realSummary.income} monthlyExpenses={realSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} />
             </TabsContent>
 
             {/* CONTEÚDO DA ABA "DESEMPENHO": tabela e gráfico mês a mês (Real/Planejado) */}
