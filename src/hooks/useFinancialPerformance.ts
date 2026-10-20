@@ -30,26 +30,9 @@ export interface PerfRow {
 
 // Formato cru de um lançamento vindo do banco (só os campos que usamos aqui).
 interface TxRow { date: string; type: string; amount: number; is_planned: boolean; cost_center_id: string | null }
-// Formato cru de um investimento (para projetar as simulações).
-interface InvRow {
-  is_simulated: boolean; is_recurring_contribution: boolean;
-  recurring_amount: number | null; recurrence_type: string | null;
-  operating_capital: number | null; current_value: number | null; start_date: string | null;
-}
 
 // Mês de uma data no formato 'YYYY-MM'.
 const monthKey = (d: Date | string) => format(typeof d === 'string' ? new Date(d + 'T00:00:00') : d, 'yyyy-MM');
-
-// Aporte mensal equivalente de uma simulação (converte semanal/anual para mensal).
-function monthlyAporte(inv: InvRow): number {
-  const amt = Number(inv.recurring_amount || 0);
-  if (!amt) return 0;
-  switch (inv.recurrence_type) {
-    case 'weeks': return amt * 52 / 12;
-    case 'years': return amt / 12;
-    default: return amt; // months
-  }
-}
 
 export function useFinancialPerformance(backMonths: number, forwardMonths: number) {
   const { user } = useAuth();
@@ -61,11 +44,12 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
     if (!user) return;
     setLoading(true);
 
-    // Lançamentos, categorias e investimentos do usuário.
-    const [{ data: txns }, { data: ccs }, { data: invs }] = await Promise.all([
+    // Lançamentos e categorias do usuário. As simulações entram como lançamentos
+    // planejados (criados ao cadastrar a simulação), então não precisam de projeção
+    // separada aqui.
+    const [{ data: txns }, { data: ccs }] = await Promise.all([
       supabase.from('financial_transactions').select('date, type, amount, is_planned, cost_center_id').eq('user_id', user.id),
       supabase.from('cost_centers').select('id, name').eq('user_id', user.id),
-      supabase.from('investments').select('is_simulated, is_recurring_contribution, recurring_amount, recurrence_type, operating_capital, current_value, start_date').eq('user_id', user.id),
     ]);
 
     const investCCIds = new Set((ccs || []).filter(c => c.name === 'Investimentos').map(c => c.id));
@@ -80,7 +64,7 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
 
     // Monta uma série (Real ou Planejado) a partir dos lançamentos filtrados.
     // excludePlanned = true -> só os reais; false -> tudo (reais + planejados).
-    const buildSeries = (excludePlanned: boolean, withSimulations: boolean): PerfRow[] => {
+    const buildSeries = (excludePlanned: boolean): PerfRow[] => {
       const rows = (txns || []) as TxRow[];
       const selected = excludePlanned ? rows.filter(t => !t.is_planned) : rows;
 
@@ -107,27 +91,6 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
         monthly[k].investido += investDelta;
       }
 
-      // Simulações: projeta os aportes planejados a partir do mês atual (só no Planejado).
-      if (withSimulations) {
-        for (const inv of (invs || []) as InvRow[]) {
-          if (!inv.is_simulated) continue;
-          const monthlyAmt = monthlyAporte(inv);
-          const lump = Number(inv.operating_capital || inv.current_value || 0);
-          for (const m of months) {
-            const k = monthKey(m);
-            const isCurrentOrFuture = k >= currentKey;
-            if (!isCurrentOrFuture) continue;
-            if (monthlyAmt > 0) {
-              monthly[k].investido += monthlyAmt;
-              monthly[k].saidas += monthlyAmt;
-            } else if (k === currentKey && lump > 0) {
-              monthly[k].investido += lump;
-              monthly[k].saidas += lump;
-            }
-          }
-        }
-      }
-
       // Acumula mês a mês em cima do saldo de abertura.
       let accConta = openConta;
       let accInvest = openInvest;
@@ -151,8 +114,8 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
       });
     };
 
-    setReal(buildSeries(true, false));       // Real: só lançamentos reais, sem simulações
-    setPlanejado(buildSeries(false, true));  // Planejado: reais + planejados + simulações
+    setReal(buildSeries(true));       // Real: só lançamentos reais
+    setPlanejado(buildSeries(false)); // Planejado: reais + planejados (inclui simulações)
     setLoading(false);
   }, [user, backMonths, forwardMonths]);
 

@@ -62,7 +62,7 @@ export default function Finance() {
   // --- DADOS (vindos do Supabase, através dos "hooks") ---
   const { user } = useAuth(); // usuário logado
   // Fluxo financeiro do mês: lista de lançamentos, centros de custo, bancos salvos e as funções para criar/editar/apagar.
-  const { transactions, costCenters, savedBanks, loading, addTransaction, updateTransaction, deleteTransaction, togglePaid, togglePlanned, addCostCenter, updateCostCenter, deleteCostCenter, uploadAttachment, searchAllTransactions } = useFinancialFlow(selectedMonth);
+  const { transactions, costCenters, savedBanks, loading, addTransaction, updateTransaction, deleteTransaction, togglePaid, togglePlanned, addCostCenter, updateCostCenter, deleteCostCenter, uploadAttachment, searchAllTransactions, refetch: refetchTransactions } = useFinancialFlow(selectedMonth);
   const { totalInvested } = useInvestments();               // total investido (patrimônio)
   const { bankBalances, upsertBankBalance } = useBankBalances(); // saldos por banco
   const { manualReserve, autoReserve, totalReserve, reservaCenterIds, updateManualReserve } = useFinancialReserve(transactions, costCenters); // reserva de emergência
@@ -156,9 +156,9 @@ export default function Finance() {
     setFormOpen(true);
   };
 
-  // Agenda um aporte mensal recorrente (saída pendente) no fluxo, na categoria
-  // "Investimentos". Usado quando um investimento vira real. Retorna o id do pai.
-  const scheduleAporte = useCallback(async (name: string, amount: number, startDate: string) => {
+  // Agenda um aporte mensal recorrente no fluxo, na categoria "Investimentos".
+  // planned=true marca como planejado (usado nas simulações). Retorna o id do pai.
+  const scheduleAporte = useCallback(async (name: string, amount: number, startDate: string, planned = false) => {
     const investCC = costCenters.find(cc => cc.name === 'Investimentos');
     return await addTransaction({
       type: 'expense',
@@ -169,12 +169,13 @@ export default function Finance() {
       is_recurring: true,
       recurrence_type: 'months',
       recurrence_interval: 1,
+      is_planned: planned,
     });
   }, [costCenters, addTransaction]);
 
-  // Registra no fluxo a saída do aporte inicial de um investimento real (já pago,
-  // pois o dinheiro saiu da conta). Retorna o id do lançamento para vincular.
-  const recordInvestmentEntry = useCallback(async (name: string, amount: number, date: string) => {
+  // Registra no fluxo a saída do aporte inicial de um investimento. Para o real
+  // já marca como pago; para a simulação, cria como planejado (não pago).
+  const recordInvestmentEntry = useCallback(async (name: string, amount: number, date: string, planned = false) => {
     const investCC = costCenters.find(cc => cc.name === 'Investimentos');
     const txId = await addTransaction({
       type: 'expense',
@@ -182,12 +183,27 @@ export default function Finance() {
       amount,
       date,
       cost_center_id: investCC?.id ?? null,
+      is_planned: planned,
     });
-    if (txId) {
+    if (txId && !planned) {
       await supabase.from('financial_transactions').update({ paid: true }).eq('id', txId);
     }
     return txId;
   }, [costCenters, addTransaction]);
+
+  // Converte os lançamentos planejados de uma simulação em reais (ao torná-la real):
+  // a saída inicial vira paga e a série de aportes deixa de ser planejada.
+  const convertInvestmentTxToReal = useCallback(async (entryTxId: string | null, recurringTxId: string | null) => {
+    if (!user) return;
+    if (entryTxId) {
+      await supabase.from('financial_transactions').update({ is_planned: false, paid: true }).eq('id', entryTxId).eq('user_id', user.id);
+    }
+    if (recurringTxId) {
+      await supabase.from('financial_transactions').update({ is_planned: false }).eq('id', recurringTxId).eq('user_id', user.id);
+      await supabase.from('financial_transactions').update({ is_planned: false }).eq('parent_transaction_id', recurringTxId).eq('user_id', user.id);
+    }
+    refetchTransactions();
+  }, [user, refetchTransactions]);
 
   // --- APARÊNCIA DA TELA (o que o usuário vê) ---
   return (
@@ -374,7 +390,7 @@ export default function Finance() {
 
             {/* CONTEÚDO DA ABA "INVESTIR": investimentos, metas e simulador (unificados) */}
             <TabsContent value="invest" className="mt-6" key="invest">
-              <InvestTab monthlyIncome={realSummary.income} monthlyExpenses={realSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} />
+              <InvestTab monthlyIncome={realSummary.income} monthlyExpenses={realSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} onConvertInvestmentTxToReal={convertInvestmentTxToReal} />
             </TabsContent>
 
             {/* CONTEÚDO DA ABA "DESEMPENHO": tabela e gráfico mês a mês (Real/Planejado) */}
