@@ -81,9 +81,13 @@ export function useExamResults() {
       // Envia o arquivo em si para o armazenamento (bucket "exams") do Supabase.
       const { error: uploadError } = await supabase.storage
         .from('exams')
-        .upload(filePath, file);
+        .upload(filePath, file, { contentType: file.type || undefined, upsert: false });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        // Mostra a causa real (ex.: arquivo grande demais, sem conexão) em vez de genérico.
+        toast.error(`Falha ao enviar o arquivo: ${uploadError.message}`);
+        return null;
+      }
 
       // Create upload record with exam types as JSON array
       // Cria o registro do exame no banco, guardando os tipos como texto JSON.
@@ -100,7 +104,12 @@ export function useExamResults() {
         .select()
         .single();
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        // Se o registro falhou, remove o arquivo já enviado para não ficar órfão.
+        await supabase.storage.from('exams').remove([filePath]);
+        toast.error(`Erro ao registrar o exame: ${insertError.message}`);
+        return null;
+      }
 
       // Coloca o novo exame no topo da lista e avisa o usuário do sucesso.
       setUploads(prev => [uploadData, ...prev]);
@@ -108,9 +117,10 @@ export function useExamResults() {
 
       return uploadData;
     } catch (error) {
-      // Qualquer falha (upload ou banco) cai aqui: registra e avisa na tela.
+      // Qualquer falha inesperada cai aqui: registra e avisa na tela com a causa.
       console.error('Error uploading exam:', error);
-      toast.error('Erro ao enviar exame');
+      const msg = error instanceof Error ? error.message : 'erro desconhecido';
+      toast.error(`Erro ao enviar exame: ${msg}`);
       return null;
     } finally {
       // Aconteça o que acontecer, encerra o estado de "enviando".

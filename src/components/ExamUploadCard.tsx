@@ -12,7 +12,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Upload, FileText, Loader2, Clock } from 'lucide-react';
+import { toast } from 'sonner';
 import { ExamUpload } from '@/hooks/useExamResults';
+
+// Tamanho máximo por arquivo (o storage do Supabase recusa arquivos muito grandes).
+const MAX_FILE_MB = 45;
 
 // Informações que este cartão recebe de quem o utiliza:
 // - uploads: exames já salvos (usado só para mostrar a mensagem de "nenhum ainda")
@@ -57,11 +61,18 @@ export function ExamUploadCard({
   // Referência ao campo de arquivo, para poder limpá-lo após o envio
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Guarda os arquivos escolhidos quando o usuário seleciona no campo de arquivo
+  // Guarda os arquivos escolhidos quando o usuário seleciona no campo de arquivo.
+  // Avisa (e descarta) os que passarem do tamanho máximo, para não falhar no envio.
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setSelectedFiles(Array.from(files));
+      const all = Array.from(files);
+      const tooBig = all.filter(f => f.size > MAX_FILE_MB * 1024 * 1024);
+      const ok = all.filter(f => f.size <= MAX_FILE_MB * 1024 * 1024);
+      if (tooBig.length > 0) {
+        toast.error(`Arquivo muito grande (máx. ${MAX_FILE_MB}MB): ${tooBig.map(f => f.name).join(', ')}`);
+      }
+      setSelectedFiles(ok);
     }
   };
 
@@ -128,11 +139,16 @@ export function ExamUploadCard({
               ref={fileInputRef}
               id="exam-file"
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.rar,.7z"
+              // Tipos reconhecidos pelo seletor do Android (evita o seletor não abrir):
+              // PDF, imagens (galeria/câmera) e ZIP.
+              accept="application/pdf,image/*,application/zip,application/x-zip-compressed,.pdf,.jpg,.jpeg,.png,.webp,.zip"
               onChange={handleFileChange}
               multiple
               className="cursor-pointer"
             />
+            <p className="text-[11px] text-muted-foreground">
+              No celular, você pode escolher da galeria, dos arquivos ou tirar uma foto. Até {MAX_FILE_MB}MB por arquivo.
+            </p>
             {selectedFiles.length > 0 && (
               <div className="text-sm text-muted-foreground space-y-1">
                 <p className="font-medium">
