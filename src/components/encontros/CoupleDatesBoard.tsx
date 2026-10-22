@@ -8,7 +8,7 @@
 // ============================================================================
 import { useMemo, useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Heart, Plus, MapPin, Backpack, Clock, Trash2, Pencil, Star, Lightbulb, CalendarCheck, Sparkles, Car, ArrowDownUp, Eye, EyeOff, RotateCcw, Shuffle, X, ArrowUpToLine } from 'lucide-react';
+import { Heart, Plus, MapPin, Backpack, Clock, Trash2, Pencil, Star, Lightbulb, CalendarCheck, Sparkles, Car, ArrowDownUp, Eye, EyeOff, RotateCcw, Shuffle, X, ArrowUpToLine, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCoupleDates, totalDateCost, type CoupleDate } from '@/hooks/useCoupleDates';
 import { categoryOf, DATE_CATEGORIES } from './coupleDateCategories';
 import { CoupleDateDialog, clearCoupleDateDraft, hasPendingNewCoupleDateDraft } from './CoupleDateDialog';
+import { ShareCoupleDateDialog } from './ShareCoupleDateDialog';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -38,6 +39,7 @@ export function CoupleDatesBoard() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<CoupleDate | null>(null);
   const [rating, setRating] = useState<{ date: CoupleDate; stars: number } | null>(null);
+  const [shareDate, setShareDate] = useState<CoupleDate | null>(null);
   const [filterCat, setFilterCat] = useState('all');
   const [sortBy, setSortBy] = useState('recent');
   // Ocultar os custos de todos os encontros (lembra a escolha no aparelho).
@@ -155,6 +157,7 @@ export function CoupleDatesBoard() {
               onAdvance={nextDate.status === 'idea' ? (d) => updateDate(d.id, { status: 'planned' }) : undefined}
               advanceLabel={nextDate.status === 'idea' ? 'Planejar' : undefined}
               onDone={(d) => setRating({ date: d, stars: 0 })}
+              onShare={setShareDate}
               onDelete={deleteDate}
             />
           ) : (
@@ -211,9 +214,9 @@ export function CoupleDatesBoard() {
       )}
 
       {/* Grupos (o "próximo" não se repete aqui; ele fica no topo) */}
-      <Section title="Ideias" icon={Lightbulb} items={groups.idea.filter(d => d.id !== nextDate?.id)} empty="Sonhe um encontro novo" hideCosts={hideCosts} onEdit={openEdit} onAdvance={(d) => updateDate(d.id, { status: 'planned' })} advanceLabel="Planejar" onDone={(d) => setRating({ date: d, stars: 0 })} onSetNext={(d) => setNext(d.id)} onDelete={deleteDate} />
-      <Section title="Planejados" icon={CalendarCheck} items={groups.planned.filter(d => d.id !== nextDate?.id)} empty="Marque uma data para um encontro" hideCosts={hideCosts} onEdit={openEdit} onDone={(d) => setRating({ date: d, stars: 0 })} onSetNext={(d) => setNext(d.id)} onDelete={deleteDate} />
-      <Section title="Já vivemos" icon={Sparkles} items={groups.done} empty="Os encontros vividos aparecem aqui" hideCosts={hideCosts} onEdit={openEdit} onReopen={(d) => updateDate(d.id, { status: 'planned', done_date: null, rating: null })} onDelete={deleteDate} done />
+      <Section title="Ideias" icon={Lightbulb} items={groups.idea.filter(d => d.id !== nextDate?.id)} empty="Sonhe um encontro novo" hideCosts={hideCosts} onEdit={openEdit} onAdvance={(d) => updateDate(d.id, { status: 'planned' })} advanceLabel="Planejar" onDone={(d) => setRating({ date: d, stars: 0 })} onSetNext={(d) => setNext(d.id)} onShare={setShareDate} onDelete={deleteDate} />
+      <Section title="Planejados" icon={CalendarCheck} items={groups.planned.filter(d => d.id !== nextDate?.id)} empty="Marque uma data para um encontro" hideCosts={hideCosts} onEdit={openEdit} onDone={(d) => setRating({ date: d, stars: 0 })} onSetNext={(d) => setNext(d.id)} onShare={setShareDate} onDelete={deleteDate} />
+      <Section title="Já vivemos" icon={Sparkles} items={groups.done} empty="Os encontros vividos aparecem aqui" hideCosts={hideCosts} onEdit={openEdit} onReopen={(d) => updateDate(d.id, { status: 'planned', done_date: null, rating: null })} onShare={setShareDate} onDelete={deleteDate} done />
 
       {/* Formulário de criar/editar */}
       <CoupleDateDialog
@@ -223,6 +226,9 @@ export function CoupleDatesBoard() {
         onUpdate={updateDate}
         editDate={editing}
       />
+
+      {/* Compartilhar o encontro como imagem */}
+      <ShareCoupleDateDialog open={!!shareDate} onOpenChange={(o) => { if (!o) setShareDate(null); }} date={shareDate} />
 
       {/* Avaliação ao marcar como vivido */}
       <Dialog open={!!rating} onOpenChange={(o) => { if (!o) setRating(null); }}>
@@ -253,7 +259,7 @@ export function CoupleDatesBoard() {
 }
 
 // Uma seção (etapa) com seus cartões.
-function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onSetNext, onDelete, done }: {
+function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onSetNext, onShare, onDelete, done }: {
   title: string;
   icon: React.ElementType;
   items: CoupleDate[];
@@ -265,6 +271,7 @@ function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance
   onDone?: (d: CoupleDate) => void;
   onReopen?: (d: CoupleDate) => void;
   onSetNext?: (d: CoupleDate) => void;
+  onShare?: (d: CoupleDate) => void;
   onDelete: (id: string) => void;
   done?: boolean;
 }) {
@@ -276,7 +283,7 @@ function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance
       </h3>
       {items.map((d, i) => (
         <motion.div key={d.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
-          <DateCard date={d} hideCosts={hideCosts} onEdit={onEdit} onAdvance={onAdvance} advanceLabel={advanceLabel} onDone={onDone} onReopen={onReopen} onSetNext={onSetNext} onDelete={onDelete} done={done} />
+          <DateCard date={d} hideCosts={hideCosts} onEdit={onEdit} onAdvance={onAdvance} advanceLabel={advanceLabel} onDone={onDone} onReopen={onReopen} onSetNext={onSetNext} onShare={onShare} onDelete={onDelete} done={done} />
         </motion.div>
       ))}
     </div>
@@ -284,7 +291,7 @@ function Section({ title, icon: Icon, items, empty, hideCosts, onEdit, onAdvance
 }
 
 // Cartão de um encontro.
-function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onSetNext, onDelete, done }: {
+function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, onReopen, onSetNext, onShare, onDelete, done }: {
   date: CoupleDate;
   hideCosts?: boolean;
   onEdit: (d: CoupleDate) => void;
@@ -293,6 +300,7 @@ function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, on
   onDone?: (d: CoupleDate) => void;
   onReopen?: (d: CoupleDate) => void;
   onSetNext?: (d: CoupleDate) => void;
+  onShare?: (d: CoupleDate) => void;
   onDelete: (id: string) => void;
   done?: boolean;
 }) {
@@ -352,6 +360,9 @@ function DateCard({ date, hideCosts, onEdit, onAdvance, advanceLabel, onDone, on
           <Button size="sm" variant="outline" onClick={() => onReopen(date)} className="flex-1 h-8 text-xs gap-1 border-pink-500/30 text-pink-600">
             <RotateCcw className="w-3.5 h-3.5" /> Voltar p/ Planejados
           </Button>
+        )}
+        {onShare && (
+          <Button size="icon" variant="ghost" className="h-8 w-8 text-pink-500" onClick={() => onShare(date)} title="Compartilhar encontro"><Share2 className="w-3.5 h-3.5" /></Button>
         )}
         <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => onEdit(date)}><Pencil className="w-3.5 h-3.5" /></Button>
         <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => onDelete(date.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
