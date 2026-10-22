@@ -8,6 +8,9 @@
 // ============================================================================
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { totalDateCost, type CoupleDate } from '@/hooks/useCoupleDates';
 import { categoryOf } from '@/components/encontros/coupleDateCategories';
 
@@ -294,17 +297,56 @@ export async function renderCoupleDateImage(date: CoupleDate, opts: ShareImageOp
   return { blob, dataUrl };
 }
 
-// Tenta compartilhar a imagem (menu nativo). Se não der, baixa o arquivo.
-export async function shareOrDownloadImage(blob: Blob, fileName: string, title: string, text: string): Promise<'shared' | 'downloaded'> {
-  const file = new File([blob], fileName, { type: 'image/png' });
-  const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
-  if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
-    try { await nav.share({ files: [file], title, text }); return 'shared'; } catch { /* cancelou/falhou */ }
-  }
+// Converte um Blob em base64 puro (sem o prefixo data:...).
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onloadend = () => resolve((r.result as string).split(',')[1] || '');
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+// No app (Android): grava a imagem no armazenamento e abre o menu nativo de
+// compartilhar (onde dá para mandar no WhatsApp, salvar na galeria/Arquivos...).
+async function nativeWriteAndShare(blob: Blob, fileName: string, title: string, text: string): Promise<boolean> {
+  const data = await blobToBase64(blob);
+  const written = await Filesystem.writeFile({ path: fileName, data, directory: Directory.Cache });
+  await Share.share({ title, text, url: written.uri, dialogTitle: 'Compartilhar encontro' });
+  return true;
+}
+
+// Baixa a imagem via link (navegador) — fallback para web.
+function webDownload(blob: Blob, fileName: string) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url; link.download = fileName;
   document.body.appendChild(link); link.click(); link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+// Compartilhar: no app usa o menu nativo; na web usa o share do navegador (ou baixa).
+export async function shareOrDownloadImage(blob: Blob, fileName: string, title: string, text: string): Promise<'shared' | 'downloaded'> {
+  if (Capacitor.isNativePlatform()) {
+    try { await nativeWriteAndShare(blob, fileName, title, text); return 'shared'; }
+    catch { return 'downloaded'; } // usuário cancelou ou falhou — segue sem erro
+  }
+  const file = new File([blob], fileName, { type: 'image/png' });
+  const nav = navigator as Navigator & { canShare?: (d: unknown) => boolean };
+  if (nav.share && nav.canShare && nav.canShare({ files: [file] })) {
+    try { await nav.share({ files: [file], title, text }); return 'shared'; } catch { /* cancelou */ }
+  }
+  webDownload(blob, fileName);
+  return 'downloaded';
+}
+
+// Baixar/salvar: no app abre o menu nativo (que tem "Salvar imagem"/"Arquivos");
+// na web baixa o arquivo direto.
+export async function downloadImage(blob: Blob, fileName: string): Promise<'shared' | 'downloaded'> {
+  if (Capacitor.isNativePlatform()) {
+    try { await nativeWriteAndShare(blob, fileName, 'Salvar encontro', ''); return 'shared'; }
+    catch { return 'downloaded'; }
+  }
+  webDownload(blob, fileName);
   return 'downloaded';
 }

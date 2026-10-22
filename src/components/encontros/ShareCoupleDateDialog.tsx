@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Share2, Download, Loader2, Heart } from 'lucide-react';
-import { renderCoupleDateImage, shareOrDownloadImage } from '@/lib/coupleDateShare';
+import { renderCoupleDateImage, shareOrDownloadImage, downloadImage } from '@/lib/coupleDateShare';
 import type { CoupleDate } from '@/hooks/useCoupleDates';
 import { useToast } from '@/hooks/use-toast';
 
@@ -64,12 +64,8 @@ export function ShareCoupleDateDialog({ open, onOpenChange, date }: Props) {
   const handleDownload = async () => {
     if (!blob || !date) return;
     const safeName = date.title.replace(/[^\p{L}\p{N} ]/gu, '').trim().replace(/\s+/g, '-').toLowerCase() || 'encontro';
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url; link.download = `${safeName}.png`;
-    document.body.appendChild(link); link.click(); link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    toast({ title: 'Imagem baixada 💕' });
+    const res = await downloadImage(blob, `${safeName}.png`);
+    if (res === 'downloaded') toast({ title: 'Imagem baixada 💕' });
   };
 
   return (
