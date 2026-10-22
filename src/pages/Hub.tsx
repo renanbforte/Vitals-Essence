@@ -9,7 +9,8 @@
 // Ferramenta para navegar entre telas
 import { useNavigate } from 'react-router-dom';
 // Ícones usados na tela
-import { Heart, DollarSign, Briefcase, Sparkles, Plane, ShoppingCart, LogOut, Lock, PartyPopper, Leaf, Info, X, Users, Flower2, Star, Crown, Clock } from 'lucide-react';
+import { Heart, DollarSign, Briefcase, Sparkles, Plane, ShoppingCart, LogOut, Lock, PartyPopper, Leaf, Info, X, Users, Flower2, Star, Crown, Clock, SlidersHorizontal } from 'lucide-react';
+import { HubCustomizeDialog } from '@/components/HubCustomizeDialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription, FREE_MODULES } from '@/contexts/SubscriptionContext';
@@ -160,12 +161,30 @@ export default function Hub() {
     return saved === null ? true : saved === 'true';
   });
   const [showInfo, setShowInfo] = useState(false); // se a tela de detalhes do módulo está aberta
+  const [customizeOpen, setCustomizeOpen] = useState(false); // janela de personalizar o menu
 
-  // Lista de módulos exibidos: todos, ou só os gratuitos/contratados/em teste
+  // Personalização do menu (salva no aparelho): ordem dos módulos e quais estão ocultos.
+  const [moduleOrder, setModuleOrder] = useState<string[]>(() => {
+    try { const s = localStorage.getItem('hub-module-order'); return s ? JSON.parse(s) : modules.map(m => m.id); } catch { return modules.map(m => m.id); }
+  });
+  const [hiddenModules, setHiddenModules] = useState<string[]>(() => {
+    try { const s = localStorage.getItem('hub-hidden-modules'); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+
+  // Aplica a personalização: ordena pela escolha do usuário (novos módulos vão ao fim).
+  const orderedModules = useMemo(() => {
+    const byId = Object.fromEntries(modules.map(m => [m.id, m]));
+    const ordered = moduleOrder.map(id => byId[id]).filter(Boolean);
+    for (const m of modules) if (!moduleOrder.includes(m.id)) ordered.push(m);
+    return ordered as typeof modules;
+  }, [moduleOrder]);
+
+  // Lista exibida: respeita a personalização (ocultos) e o filtro Todos/Meus.
   const visibleModules = useMemo(() => {
-    if (showAllModules) return modules;
-    return modules.filter(m => FREE_MODULES.includes(m.id) || hasModuleAccess(m.id) || hasTrial(m.id));
-  }, [showAllModules, hasModuleAccess, hasTrial]);
+    let list = orderedModules.filter(m => !hiddenModules.includes(m.id));
+    if (!showAllModules) list = list.filter(m => FREE_MODULES.includes(m.id) || hasModuleAccess(m.id) || hasTrial(m.id));
+    return list.length ? list : orderedModules; // nunca deixa o menu vazio
+  }, [orderedModules, hiddenModules, showAllModules, hasModuleAccess, hasTrial]);
 
   // Módulo atualmente selecionado no carrossel — recupera o último visto (localStorage)
   const [selectedIndex, setSelectedIndex] = useState(() => {
@@ -215,6 +234,20 @@ export default function Hub() {
   useEffect(() => {
     localStorage.setItem('hub-show-all-modules', String(showAllModules));
   }, [showAllModules]);
+
+  // Salva a personalização do menu (ordem e ocultos).
+  useEffect(() => { try { localStorage.setItem('hub-module-order', JSON.stringify(moduleOrder)); } catch { /* ignore */ } }, [moduleOrder]);
+  useEffect(() => { try { localStorage.setItem('hub-hidden-modules', JSON.stringify(hiddenModules)); } catch { /* ignore */ } }, [hiddenModules]);
+
+  // Aplica mudanças vindas da janela de personalização.
+  const applyCustomize = useCallback((order: string[], hidden: string[]) => {
+    setModuleOrder(order);
+    setHiddenModules(hidden);
+  }, []);
+  const resetCustomize = useCallback(() => {
+    setModuleOrder(modules.map(m => m.id));
+    setHiddenModules([]);
+  }, []);
 
   // Se a lista de módulos encolher e o índice ficar inválido, volta para o primeiro
   useEffect(() => {
@@ -298,6 +331,16 @@ export default function Hub() {
           >
             {showAllModules ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
             {showAllModules ? 'Todos' : 'Meus'}
+          </Button>
+          {/* Botão personalizar: escolher quais módulos aparecem e a ordem */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setCustomizeOpen(true)}
+            className="text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xl w-9 h-9"
+            title="Personalizar menu"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
           </Button>
           {/* Botão coroa: abre a tela de planos/assinatura */}
           <Button
@@ -552,6 +595,17 @@ export default function Hub() {
           })}
         </div>
       </div>
+
+      {/* Janela de personalização do menu */}
+      <HubCustomizeDialog
+        open={customizeOpen}
+        onOpenChange={setCustomizeOpen}
+        modules={modules.map(m => ({ id: m.id, title: m.title, icon: m.icon, color: m.color }))}
+        order={moduleOrder}
+        hidden={hiddenModules}
+        onChange={applyCustomize}
+        onReset={resetCustomize}
+      />
     </div>
   );
 }
