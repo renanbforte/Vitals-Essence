@@ -127,6 +127,104 @@ function checkbox(ctx: Ctx, x: number, y: number, s: number, color: string, chec
   ctx.restore();
 }
 
+// --- Ilustrações "realistas" (coloridas, com profundidade) para a marca d'água -
+// Desenhadas num box (x,y,w,h). Usadas ao fundo dos cartões, de forma sutil.
+function imgCalendar(ctx: Ctx, x: number, y: number, w: number, h: number) {
+  const r = w * 0.07;
+  ctx.save();
+  // sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  roundRect(ctx, x + w * 0.04, y + h * 0.05, w, h, r); ctx.fill();
+  // corpo (página)
+  ctx.fillStyle = '#ffffff';
+  roundRect(ctx, x, y, w, h, r); ctx.fill();
+  // cabeçalho vermelho
+  const hb = h * 0.3;
+  ctx.save(); roundRect(ctx, x, y, w, h, r); ctx.clip();
+  const g = ctx.createLinearGradient(x, y, x, y + hb);
+  g.addColorStop(0, '#ff6a93'); g.addColorStop(1, '#e03b6b');
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, hb);
+  // dia da semana no topo
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.textAlign = 'center';
+  ctx.font = `bold ${h * 0.1}px sans-serif`; ctx.fillText('SÁB', x + w / 2, y + hb * 0.26);
+  ctx.restore();
+  // argolas metálicas
+  ctx.fillStyle = '#cfd4dc';
+  const rw = w * 0.055, rh = h * 0.16;
+  for (const rx of [x + w * 0.27, x + w * 0.73]) { roundRect(ctx, rx - rw / 2, y - rh * 0.45, rw, rh, rw / 2); ctx.fill(); }
+  // número do dia
+  ctx.fillStyle = '#2b2b2b'; ctx.textAlign = 'center';
+  ctx.font = `bold ${h * 0.34}px sans-serif`; ctx.fillText('14', x + w / 2, y + hb + h * 0.06);
+  // grade de dias
+  ctx.fillStyle = '#dde1e8';
+  for (let r1 = 0; r1 < 2; r1++) for (let c = 0; c < 6; c++) { const gx = x + w * 0.1 + c * w * 0.14, gy = y + h * 0.78 + r1 * h * 0.1; roundRect(ctx, gx, gy, w * 0.1, h * 0.06, 3); ctx.fill(); }
+  ctx.textAlign = 'left'; ctx.restore();
+}
+
+function imgBulb(ctx: Ctx, cx: number, cy: number, s: number) {
+  ctx.save();
+  // brilho
+  const glow = ctx.createRadialGradient(cx, cy - s * 0.1, s * 0.1, cx, cy - s * 0.1, s * 1.1);
+  glow.addColorStop(0, 'rgba(255,214,120,0.85)'); glow.addColorStop(1, 'rgba(255,214,120,0)');
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy - s * 0.1, s * 1.1, 0, Math.PI * 2); ctx.fill();
+  // base metálica
+  ctx.fillStyle = '#b4b9c2'; roundRect(ctx, cx - s * 0.2, cy + s * 0.32, s * 0.4, s * 0.26, s * 0.04); ctx.fill();
+  ctx.strokeStyle = '#8d939d'; ctx.lineWidth = s * 0.03;
+  for (let i = 0; i < 3; i++) { const ly = cy + s * 0.38 + i * s * 0.07; ctx.beginPath(); ctx.moveTo(cx - s * 0.2, ly); ctx.lineTo(cx + s * 0.2, ly); ctx.stroke(); }
+  ctx.fillStyle = '#6b7079'; roundRect(ctx, cx - s * 0.08, cy + s * 0.58, s * 0.16, s * 0.1, s * 0.03); ctx.fill();
+  // vidro
+  const gg = ctx.createRadialGradient(cx - s * 0.16, cy - s * 0.28, s * 0.04, cx, cy - s * 0.08, s * 0.58);
+  gg.addColorStop(0, '#fff3cf'); gg.addColorStop(0.6, '#ffe18c'); gg.addColorStop(1, '#f7c23e');
+  ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(cx, cy - s * 0.1, s * 0.5, 0, Math.PI * 2); ctx.fill();
+  // filamento
+  ctx.strokeStyle = '#d98a1f'; ctx.lineWidth = s * 0.045; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(cx - s * 0.13, cy + s * 0.18); ctx.lineTo(cx - s * 0.1, cy - s * 0.05); ctx.lineTo(cx, cy + s * 0.08); ctx.lineTo(cx + s * 0.1, cy - s * 0.05); ctx.lineTo(cx + s * 0.13, cy + s * 0.18); ctx.stroke();
+  ctx.restore();
+}
+
+function imgClipboard(ctx: Ctx, x: number, y: number, w: number, h: number) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.16)'; roundRect(ctx, x + w * 0.04, y + h * 0.04, w, h, w * 0.06); ctx.fill();
+  // prancheta de madeira
+  const wood = ctx.createLinearGradient(x, y, x + w, y + h);
+  wood.addColorStop(0, '#d79a5b'); wood.addColorStop(1, '#bf7f3f');
+  ctx.fillStyle = wood; roundRect(ctx, x, y, w, h, w * 0.06); ctx.fill();
+  // papel
+  ctx.fillStyle = '#ffffff'; roundRect(ctx, x + w * 0.1, y + h * 0.12, w * 0.8, h * 0.82, w * 0.03); ctx.fill();
+  // clipe metálico
+  ctx.fillStyle = '#aeb3bd'; roundRect(ctx, x + w * 0.35, y - h * 0.03, w * 0.3, h * 0.12, w * 0.03); ctx.fill();
+  ctx.fillStyle = '#cfd4dc'; roundRect(ctx, x + w * 0.41, y - h * 0.01, w * 0.18, h * 0.06, w * 0.02); ctx.fill();
+  // linhas + checks verdes
+  for (let i = 0; i < 4; i++) {
+    const ly = y + h * 0.3 + i * h * 0.16;
+    ctx.fillStyle = '#34c759'; roundRect(ctx, x + w * 0.17, ly, w * 0.11, w * 0.11, w * 0.025); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = w * 0.022; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(x + w * 0.195, ly + w * 0.06); ctx.lineTo(x + w * 0.225, ly + w * 0.09); ctx.lineTo(x + w * 0.265, ly + w * 0.03); ctx.stroke();
+    ctx.strokeStyle = '#d2d6dd'; ctx.lineWidth = w * 0.02;
+    ctx.beginPath(); ctx.moveTo(x + w * 0.34, ly + w * 0.055); ctx.lineTo(x + w * 0.8, ly + w * 0.055); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function imgCoins(ctx: Ctx, cx: number, cy: number, s: number) {
+  ctx.save();
+  const coinFace = (y: number) => {
+    const g = ctx.createLinearGradient(cx - s * 0.5, y, cx + s * 0.5, y);
+    g.addColorStop(0, '#f7c948'); g.addColorStop(0.5, '#ffe27a'); g.addColorStop(1, '#e0a92b');
+    // lateral
+    ctx.fillStyle = '#d99b22';
+    ctx.beginPath(); ctx.ellipse(cx, y + s * 0.14, s * 0.5, s * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(cx - s * 0.5, y, s, s * 0.14);
+    // topo
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(cx, y, s * 0.5, s * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+  };
+  coinFace(cy + s * 0.34); coinFace(cy + s * 0.08); coinFace(cy - s * 0.18);
+  // R$ na moeda de cima
+  ctx.fillStyle = '#b9811c'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `bold ${s * 0.28}px sans-serif`; ctx.fillText('R$', cx, cy - s * 0.18);
+  ctx.textBaseline = 'top'; ctx.restore();
+}
+
 export interface ShareImageOptions { includeCosts: boolean }
 
 // Desenha o encontro e devolve o PNG (Blob) + a URL de dados (para a prévia).
@@ -156,7 +254,7 @@ export async function renderCoupleDateImage(date: CoupleDate, opts: ShareImageOp
     sections.push({
       heading: 'A ideia',
       icon: (ctx, cx, cy) => bulb(ctx, cx, cy, 34, accent),
-      bg: (ctx, cx, cy, cw, ch) => bulb(ctx, cx + cw - 110, cy + ch - 120, 200, accent),
+      bg: (ctx, cx, cy, cw, ch) => imgBulb(ctx, cx + cw - 150, cy + ch - 120, 150),
       measure: () => { m.font = '30px sans-serif'; return wrapLines(m, date.how_to!, cardInnerW).length * lineH; },
       draw: (ctx, ix, iy, iw) => {
         ctx.font = '30px sans-serif'; ctx.fillStyle = '#3f3f46'; ctx.textAlign = 'left';
@@ -177,7 +275,7 @@ export async function renderCoupleDateImage(date: CoupleDate, opts: ShareImageOp
     sections.push({
       heading: 'Cronograma',
       icon: (ctx, cx, cy) => calendar(ctx, cx - 20, cy - 20, 40, 42, accent),
-      bg: (ctx, cx, cy, cw, ch) => calendar(ctx, cx + cw - 300, cy + ch - 300, 280, 290, accent, true),
+      bg: (ctx, cx, cy, cw, ch) => imgCalendar(ctx, cx + cw - 300, cy + ch - 300, 270, 285),
       measure: () => date.schedule.reduce((h, s) => h + measureRow(s.activity, cardInnerW), 0) - rowGap,
       draw: (ctx, ix, iy, iw) => {
         let cy = iy;
@@ -204,7 +302,7 @@ export async function renderCoupleDateImage(date: CoupleDate, opts: ShareImageOp
     sections.push({
       heading: 'O que levar',
       icon: (ctx, cx, cy) => clipboard(ctx, cx - 17, cy - 20, 34, 42, accent),
-      bg: (ctx, cx, cy, cw, ch) => clipboard(ctx, cx + cw - 250, cy + ch - 290, 210, 270, accent),
+      bg: (ctx, cx, cy, cw, ch) => imgClipboard(ctx, cx + cw - 270, cy + ch - 300, 230, 275),
       measure: () => date.items.reduce((h, it) => { m.font = '29px sans-serif'; return h + Math.max(1, wrapLines(m, it.text, cardInnerW - 56).length) * lineH; }, 0),
       draw: (ctx, ix, iy, iw) => {
         let cy = iy;
@@ -228,7 +326,7 @@ export async function renderCoupleDateImage(date: CoupleDate, opts: ShareImageOp
     sections.push({
       heading: 'Custos',
       icon: (ctx, cx, cy) => coin(ctx, cx, cy, 36, accent),
-      bg: (ctx, cx, cy, cw, ch) => coin(ctx, cx + cw - 130, cy + ch - 140, 190, accent),
+      bg: (ctx, cx, cy, cw, ch) => imgCoins(ctx, cx + cw - 150, cy + ch - 150, 150),
       measure: () => (validCosts.length + 1) * lineH + 14,
       draw: (ctx, ix, iy, iw) => {
         let cy = iy;
@@ -339,7 +437,7 @@ export async function renderCoupleDateImage(date: CoupleDate, opts: ShareImageOp
     // marca d'água temática (recortada no cartão, bem suave)
     ctx.save();
     roundRect(ctx, P, topY, CW, boxH, 36); ctx.clip();
-    ctx.globalAlpha = 0.07;
+    ctx.globalAlpha = 0.32;
     s.bg(ctx, P, topY, CW, boxH);
     ctx.globalAlpha = 1;
     ctx.restore();
