@@ -119,12 +119,15 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
   // A meta é um valor fixo a aportar por mês ou por ano?
   const isMonthlyOrYearlyFixed = investment.target_mode === 'fixed_monthly' || investment.target_mode === 'fixed_yearly';
 
-  // Capital operacional: dinheiro usado para operar (base do cálculo de %)
+  // Capital operacional: o principal aportado (dinheiro que você colocou).
   const operatingCap = Number(investment.operating_capital) || 0;
-  // Valor atual: lucro/rendimento acumulado até agora
+  // Rendimento acumulado: o lucro em cima do principal.
   const currentVal = Number(investment.current_value);
+  // Valor atual (total do bloco) = principal + rendimento. É o que o patrimônio
+  // conta por este investimento; cresce quando um aporte é pago no Fluxo.
+  const totalValue = operatingCap + currentVal;
 
-  // Para metas em %: rendimento alcançado = (valor atual / capital operacional) x 100
+  // Para metas em %: rendimento alcançado = (rendimento / capital operacional) x 100
   const achievedPct = isPercentageTarget && operatingCap > 0
     ? (currentVal / operatingCap) * 100
     : 0;
@@ -133,9 +136,12 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
     ? Math.min(100, (achievedPct / Number(investment.target_value)) * 100)
     : 0;
 
+  // Valor mostrado em metas de valor: no modo "total" usa o valor atual total
+  // (principal + rendimento); nos modos fixos por mês/ano, mantém o rendimento.
+  const displayValue = isMonthlyOrYearlyFixed ? currentVal : totalValue;
   // Progresso para metas em valor (R$): quanto do valor-alvo já foi atingido (máx. 100%)
   const progress = investment.target_value > 0 && !isPercentageTarget
-    ? Math.min(100, (currentVal / Number(investment.target_value)) * 100)
+    ? Math.min(100, (displayValue / Number(investment.target_value)) * 100)
     : 0;
 
   // Cor de fundo/texto do selo de cada tipo de investimento
@@ -270,7 +276,7 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
                         {isMonthlyOrYearlyFixed ? 'Progresso da meta' : 'Valor atual'}
                       </p>
                       <p className="text-xl font-bold text-[hsl(var(--finance))] tabular-nums">
-                        {formatCurrency(currentVal)}
+                        {formatCurrency(displayValue)}
                       </p>
                     </div>
                     {investment.target_value > 0 && (
