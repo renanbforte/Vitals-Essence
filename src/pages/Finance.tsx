@@ -168,9 +168,13 @@ export default function Finance() {
     await togglePaid(id, currentPaid);
     const tx = transactions.find(t => t.id === id);
     if (!tx || tx.type !== 'expense' || !user) return;
-    // Série recorrente: pai = ele mesmo; filho = o seu parent_transaction_id.
+    // Só aportes recorrentes entram aqui (o aporte inicial, "Investimento - ...",
+    // já é principal desde a criação). Casa pelo NOME ("Aporte - {nome}") e, como
+    // reforço, pela cadeia pai/filho — assim funciona mesmo se o vínculo de
+    // transações tiver se quebrado (ex.: a 1ª parcela foi apagada no Fluxo).
     const rtx = tx.parent_transaction_id || tx.id;
-    const inv = investments.find(i => i.recurring_tx_id === rtx);
+    const inv = investments.find(i =>
+      tx.description === `Aporte - ${i.name}` || i.recurring_tx_id === rtx);
     if (!inv || inv.is_simulated) return;
     // Pagando → soma o aporte ao principal; desmarcando (já estava pago) → subtrai.
     const delta = (currentPaid ? -1 : 1) * (Number(tx.amount) || 0);
