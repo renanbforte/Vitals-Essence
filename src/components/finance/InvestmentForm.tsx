@@ -6,10 +6,20 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Wallet, Target, RefreshCw, Globe, RotateCw } from 'lucide-react';
+import { Wallet, Target, RefreshCw, Globe, RotateCw, Landmark, ShieldCheck } from 'lucide-react';
 import { fetchExchangeRate, FOREIGN_CURRENCIES, currencySymbol } from '@/lib/exchange';
 import { formatCurrency } from '@/lib/finance';
+import { INDEXERS, type Indexer, type MarketRates } from '@/lib/fixedIncome';
+import { FixedIncomeRates } from './FixedIncomeRates';
+import type { TaxType } from '@/lib/projection';
 import type { InvestmentInput } from '@/hooks/useInvestments';
+
+// Tipos de IR oferecidos no cadastro (rótulos amigáveis).
+const IR_TYPES: { value: TaxType; label: string }[] = [
+  { value: 'renda_fixa', label: 'Renda fixa (IR regressivo 22,5%→15%)' },
+  { value: 'isento', label: 'Isento (LCI, LCA, poupança, debênture incentivada)' },
+  { value: 'acoes_fii', label: 'Ações / FII (15%)' },
+];
 
 interface InvestmentFormProps {
   open: boolean;
@@ -17,6 +27,8 @@ interface InvestmentFormProps {
   onSubmit: (input: InvestmentInput) => Promise<void>;
   investmentTypes: string[];
   objectives: string[];
+  // Taxas de mercado (CDI/IPCA) para mostrar o rendimento calculado ao vivo.
+  marketRates?: MarketRates;
 }
 
 const TARGET_MODES = [
@@ -27,10 +39,20 @@ const TARGET_MODES = [
   { value: 'pct_yearly', label: '% ao ano', description: 'Rendimento anual esperado', unit: '%' },
 ];
 
-export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, objectives }: InvestmentFormProps) {
+export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, objectives, marketRates }: InvestmentFormProps) {
   const [name, setName] = useState('');
   const [investmentType, setInvestmentType] = useState('');
   const [objective, setObjective] = useState('');
+  // Renda fixa detalhada (ficha do ativo + como rende e é tributado).
+  const [isFixedIncome, setIsFixedIncome] = useState(false);
+  const [institution, setInstitution] = useState('');
+  const [assetClass, setAssetClass] = useState('');
+  const [indexer, setIndexer] = useState<Indexer>('cdi_percent');
+  const [indexerValue, setIndexerValue] = useState('100');
+  const [liquidity, setLiquidity] = useState('');
+  const [maturityDate, setMaturityDate] = useState('');
+  const [fgc, setFgc] = useState(false);
+  const [irType, setIrType] = useState<TaxType>('renda_fixa');
   const [currentValue, setCurrentValue] = useState('');
   const [operatingCapital, setOperatingCapital] = useState('');
   const [targetValue, setTargetValue] = useState('');
@@ -100,6 +122,15 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
     setBrlInput('');
     setForeignInputMode('foreign');
     setExchangeRate('');
+    setIsFixedIncome(false);
+    setInstitution('');
+    setAssetClass('');
+    setIndexer('cdi_percent');
+    setIndexerValue('100');
+    setLiquidity('');
+    setMaturityDate('');
+    setFgc(false);
+    setIrType('renda_fixa');
   };
 
   const handleSubmit = async () => {
@@ -128,6 +159,15 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
       currency: isForeign ? currencyCode : 'BRL',
       foreign_amount: isForeign ? convertedForeign : null,
       exchange_rate: isForeign ? rate : null,
+      // Renda fixa detalhada (só quando o modo está ligado).
+      institution: isFixedIncome ? (institution.trim() || null) : null,
+      asset_class: isFixedIncome ? (assetClass.trim() || null) : null,
+      indexer: isFixedIncome ? indexer : 'none',
+      indexer_value: isFixedIncome ? (parseFloat(indexerValue) || 0) : 0,
+      liquidity: isFixedIncome ? (liquidity.trim() || null) : null,
+      maturity_date: isFixedIncome && maturityDate ? maturityDate : null,
+      fgc: isFixedIncome ? fgc : false,
+      ir_type: isFixedIncome ? irType : 'renda_fixa',
     });
     reset();
     setSubmitting(false);
@@ -270,6 +310,97 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
                 <p className="text-[10px] text-muted-foreground">
                   A saída registrada no fluxo será em reais ({formatCurrency(convertedBRL)}), pela cotação informada.
                 </p>
+              </>
+            )}
+          </div>
+
+          {/* Renda fixa detalhada */}
+          <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-600">
+                <Landmark className="w-4 h-4" />
+                Renda fixa detalhada
+              </div>
+              <Switch checked={isFixedIncome} onCheckedChange={setIsFixedIncome} />
+            </div>
+            {isFixedIncome && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Instituição / Banco</Label>
+                    <Input value={institution} onChange={e => setInstitution(e.target.value)} placeholder="Ex: Itaú Unibanco" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Classe de ativo</Label>
+                    <Input value={assetClass} onChange={e => setAssetClass(e.target.value)} placeholder="Ex: Renda Fixa Pós-Fixada" />
+                  </div>
+                </div>
+
+                {/* Indexador + valor */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Indexador</Label>
+                    <Select value={indexer} onValueChange={v => setIndexer(v as Indexer)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {INDEXERS.map(i => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">
+                      {INDEXERS.find(i => i.value === indexer)?.unit || 'valor'}
+                    </Label>
+                    <Input
+                      type="number" step="0.01" value={indexerValue}
+                      onChange={e => setIndexerValue(e.target.value)}
+                      disabled={!INDEXERS.find(i => i.value === indexer)?.needsValue}
+                      placeholder="Ex: 100"
+                    />
+                  </div>
+                </div>
+
+                {/* Tributação */}
+                <div>
+                  <Label className="text-xs">Tributação (IR)</Label>
+                  <Select value={irType} onValueChange={v => setIrType(v as TaxType)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {IR_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Liquidez + vencimento */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Liquidez / Resgate</Label>
+                    <Input value={liquidity} onChange={e => setLiquidity(e.target.value)} placeholder="Ex: Diária" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Vencimento</Label>
+                    <Input type="date" value={maturityDate} onChange={e => setMaturityDate(e.target.value)} />
+                  </div>
+                </div>
+
+                {/* Garantia FGC */}
+                <div className="flex items-center justify-between rounded-lg bg-amber-500/10 p-2.5">
+                  <span className="text-xs font-medium flex items-center gap-1.5 text-amber-700">
+                    <ShieldCheck className="w-4 h-4" /> Garantia FGC (até R$ 250 mil)
+                  </span>
+                  <Switch checked={fgc} onCheckedChange={setFgc} />
+                </div>
+
+                {/* Preview das taxas calculadas */}
+                {marketRates && (
+                  <FixedIncomeRates
+                    indexer={indexer}
+                    indexerValue={parseFloat(indexerValue) || 0}
+                    irType={irType}
+                    rates={marketRates}
+                    maturityDate={maturityDate || null}
+                  />
+                )}
               </>
             )}
           </div>

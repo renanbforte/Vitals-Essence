@@ -12,8 +12,18 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Wallet, Target, RefreshCw } from 'lucide-react';
+import { Wallet, Target, RefreshCw, Landmark, ShieldCheck } from 'lucide-react';
+import { INDEXERS, type Indexer, type MarketRates } from '@/lib/fixedIncome';
+import { FixedIncomeRates } from './FixedIncomeRates';
+import type { TaxType } from '@/lib/projection';
 import type { Investment, InvestmentInput } from '@/hooks/useInvestments';
+
+// Tipos de IR oferecidos (rótulos amigáveis).
+const IR_TYPES: { value: TaxType; label: string }[] = [
+  { value: 'renda_fixa', label: 'Renda fixa (IR regressivo 22,5%→15%)' },
+  { value: 'isento', label: 'Isento (LCI, LCA, poupança, debênture incentivada)' },
+  { value: 'acoes_fii', label: 'Ações / FII (15%)' },
+];
 
 interface EditInvestmentDialogProps {
   open: boolean;
@@ -22,6 +32,8 @@ interface EditInvestmentDialogProps {
   onSubmit: (id: string, updates: Partial<InvestmentInput>) => Promise<void>;
   investmentTypes: string[];
   objectives: string[];
+  // Taxas de mercado (CDI/IPCA) para o preview do rendimento calculado.
+  marketRates?: MarketRates;
 }
 
 // Tipos de meta que o usuario pode escolher para o investimento. Cada opcao tem
@@ -34,7 +46,7 @@ const TARGET_MODES = [
   { value: 'pct_yearly', label: '% ao ano', description: 'Rendimento anual esperado', unit: '%' },
 ];
 
-export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit, investmentTypes, objectives }: EditInvestmentDialogProps) {
+export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit, investmentTypes, objectives, marketRates }: EditInvestmentDialogProps) {
   // Cada estado abaixo guarda o valor atual de um campo do formulario:
   const [name, setName] = useState(''); // Nome do investimento
   const [investmentType, setInvestmentType] = useState(''); // Tipo (ex: renda fixa)
@@ -48,6 +60,16 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
   const [recurringAmount, setRecurringAmount] = useState(''); // Valor do aporte recorrente
   const [recurrenceType, setRecurrenceType] = useState('months'); // Frequencia do aporte
   const [submitting, setSubmitting] = useState(false); // Se esta salvando no momento
+  // Renda fixa detalhada.
+  const [isFixedIncome, setIsFixedIncome] = useState(false);
+  const [institution, setInstitution] = useState('');
+  const [assetClass, setAssetClass] = useState('');
+  const [indexer, setIndexer] = useState<Indexer>('cdi_percent');
+  const [indexerValue, setIndexerValue] = useState('100');
+  const [liquidity, setLiquidity] = useState('');
+  const [maturityDate, setMaturityDate] = useState('');
+  const [fgc, setFgc] = useState(false);
+  const [irType, setIrType] = useState<TaxType>('renda_fixa');
 
   // Quando a janela abre, preenche todos os campos com os dados atuais do
   // investimento recebido (para o usuario editar a partir do que ja existe).
@@ -64,6 +86,16 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
       setIsRecurring(investment.is_recurring_contribution || false);
       setRecurringAmount(investment.recurring_amount ? String(investment.recurring_amount) : '');
       setRecurrenceType(investment.recurrence_type || 'months');
+      // Renda fixa: liga o modo se já há indexador definido.
+      setIsFixedIncome(!!investment.indexer && investment.indexer !== 'none');
+      setInstitution(investment.institution || '');
+      setAssetClass(investment.asset_class || '');
+      setIndexer(((investment.indexer && investment.indexer !== 'none') ? investment.indexer : 'cdi_percent') as Indexer);
+      setIndexerValue(String(investment.indexer_value || 100));
+      setLiquidity(investment.liquidity || '');
+      setMaturityDate(investment.maturity_date || '');
+      setFgc(investment.fgc || false);
+      setIrType((investment.ir_type || 'renda_fixa') as TaxType);
     }
   }, [open, investment]);
 
@@ -87,6 +119,15 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
       is_recurring_contribution: isRecurring,
       recurring_amount: recurringAmount ? parseFloat(recurringAmount) : null,
       recurrence_type: isRecurring ? recurrenceType : null,
+      // Renda fixa detalhada (desliga para 'none' quando o modo está off).
+      institution: isFixedIncome ? (institution.trim() || null) : null,
+      asset_class: isFixedIncome ? (assetClass.trim() || null) : null,
+      indexer: isFixedIncome ? indexer : 'none',
+      indexer_value: isFixedIncome ? (parseFloat(indexerValue) || 0) : 0,
+      liquidity: isFixedIncome ? (liquidity.trim() || null) : null,
+      maturity_date: isFixedIncome && maturityDate ? maturityDate : null,
+      fgc: isFixedIncome ? fgc : false,
+      ir_type: isFixedIncome ? irType : 'renda_fixa',
     });
     setSubmitting(false);
     onOpenChange(false);
@@ -139,6 +180,85 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
               <Label className="text-xs text-muted-foreground">Lucro/rendimento acumulado</Label>
               <Input type="number" min="0" step="0.01" value={currentValue} onChange={e => setCurrentValue(e.target.value)} placeholder="0,00" />
             </div>
+          </div>
+
+          {/* Renda fixa detalhada */}
+          <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-600">
+                <Landmark className="w-4 h-4" />
+                Renda fixa detalhada
+              </div>
+              <Switch checked={isFixedIncome} onCheckedChange={setIsFixedIncome} />
+            </div>
+            {isFixedIncome && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Instituição / Banco</Label>
+                    <Input value={institution} onChange={e => setInstitution(e.target.value)} placeholder="Ex: Itaú Unibanco" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Classe de ativo</Label>
+                    <Input value={assetClass} onChange={e => setAssetClass(e.target.value)} placeholder="Ex: Renda Fixa Pós-Fixada" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Indexador</Label>
+                    <Select value={indexer} onValueChange={v => setIndexer(v as Indexer)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {INDEXERS.map(i => <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">{INDEXERS.find(i => i.value === indexer)?.unit || 'valor'}</Label>
+                    <Input
+                      type="number" step="0.01" value={indexerValue}
+                      onChange={e => setIndexerValue(e.target.value)}
+                      disabled={!INDEXERS.find(i => i.value === indexer)?.needsValue}
+                      placeholder="Ex: 100"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Tributação (IR)</Label>
+                  <Select value={irType} onValueChange={v => setIrType(v as TaxType)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {IR_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Liquidez / Resgate</Label>
+                    <Input value={liquidity} onChange={e => setLiquidity(e.target.value)} placeholder="Ex: Diária" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Vencimento</Label>
+                    <Input type="date" value={maturityDate} onChange={e => setMaturityDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between rounded-lg bg-amber-500/10 p-2.5">
+                  <span className="text-xs font-medium flex items-center gap-1.5 text-amber-700">
+                    <ShieldCheck className="w-4 h-4" /> Garantia FGC (até R$ 250 mil)
+                  </span>
+                  <Switch checked={fgc} onCheckedChange={setFgc} />
+                </div>
+                {marketRates && (
+                  <FixedIncomeRates
+                    indexer={indexer}
+                    indexerValue={parseFloat(indexerValue) || 0}
+                    irType={irType}
+                    rates={marketRates}
+                    maturityDate={maturityDate || null}
+                  />
+                )}
+              </>
+            )}
           </div>
 
           <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">

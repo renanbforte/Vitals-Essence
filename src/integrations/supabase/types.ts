@@ -1924,17 +1924,25 @@ export type Database = {
       }
       investments: {
         Row: {
+          asset_class: string | null
           category_id: string | null
           created_at: string
           currency: string
           current_value: number
           entry_tx_id: string | null
           exchange_rate: number | null
+          fgc: boolean
           foreign_amount: number | null
           id: string
+          indexer: string
+          indexer_value: number
+          institution: string | null
           investment_type: string | null
+          ir_type: string
           is_recurring_contribution: boolean
           is_simulated: boolean
+          liquidity: string | null
+          maturity_date: string | null
           name: string
           notes: string | null
           objective: string | null
@@ -1951,17 +1959,25 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          asset_class?: string | null
           category_id?: string | null
           created_at?: string
           currency?: string
           current_value?: number
           entry_tx_id?: string | null
           exchange_rate?: number | null
+          fgc?: boolean
           foreign_amount?: number | null
           id?: string
+          indexer?: string
+          indexer_value?: number
+          institution?: string | null
           investment_type?: string | null
+          ir_type?: string
           is_recurring_contribution?: boolean
           is_simulated?: boolean
+          liquidity?: string | null
+          maturity_date?: string | null
           name: string
           notes?: string | null
           objective?: string | null
@@ -1978,17 +1994,25 @@ export type Database = {
           user_id: string
         }
         Update: {
+          asset_class?: string | null
           category_id?: string | null
           created_at?: string
           currency?: string
           current_value?: number
           entry_tx_id?: string | null
           exchange_rate?: number | null
+          fgc?: boolean
           foreign_amount?: number | null
           id?: string
+          indexer?: string
+          indexer_value?: number
+          institution?: string | null
           investment_type?: string | null
+          ir_type?: string
           is_recurring_contribution?: boolean
           is_simulated?: boolean
+          liquidity?: string | null
+          maturity_date?: string | null
           name?: string
           notes?: string | null
           objective?: string | null
@@ -2013,6 +2037,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_market_rates: {
+        Row: {
+          cdi_annual: number
+          ipca_annual: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cdi_annual?: number
+          ipca_annual?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cdi_annual?: number
+          ipca_annual?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       liberation_challenges: {
         Row: {

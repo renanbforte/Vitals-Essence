@@ -13,11 +13,13 @@ import { Progress } from '@/components/ui/progress';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Trash2, GripVertical, Target, RefreshCw, Pencil, Sparkles, CheckCircle2, Globe, LineChart } from 'lucide-react';
+import { Plus, Trash2, GripVertical, Target, RefreshCw, Pencil, Sparkles, CheckCircle2, Globe, LineChart, Landmark, ShieldCheck, Percent } from 'lucide-react';
 import { AddValueDialog } from './AddValueDialog';
 import { EditInvestmentDialog } from './EditInvestmentDialog';
 import { ProjectionSimulator } from './ProjectionSimulator';
+import { FixedIncomeRates } from './FixedIncomeRates';
 import { currencySymbol } from '@/lib/exchange';
+import { grossAnnualRate, netAtHorizon, monthsUntil, type Indexer, type MarketRates } from '@/lib/fixedIncome';
 import type { TaxType } from '@/lib/projection';
 import type { Investment, InvestmentInput } from '@/hooks/useInvestments';
 
@@ -58,6 +60,8 @@ interface InvestmentCardProps {
   onMakeReal?: (inv: Investment, startDate: string) => Promise<void>;
   investmentTypes: string[];
   objectives: string[];
+  // Taxas de mercado (CDI/IPCA) para calcular o rendimento da renda fixa.
+  marketRates?: MarketRates;
 }
 
 // Formata um número como dinheiro em Real brasileiro (ex: R$ 1.234,56)
@@ -65,7 +69,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpdate, onMakeReal, investmentTypes, objectives }: InvestmentCardProps) {
+export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpdate, onMakeReal, investmentTypes, objectives, marketRates }: InvestmentCardProps) {
   // Controla se a janela de "adicionar valor/aporte" está aberta
   const [addOpen, setAddOpen] = useState(false);
   // Controla se a janela de "editar investimento" está aberta
@@ -78,8 +82,37 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
   const [makingReal, setMakingReal] = useState(false);
   // Janela de projeção (juros compostos) deste investimento.
   const [projOpen, setProjOpen] = useState(false);
+  // Janela de rendimento/ficha (renda fixa).
+  const [ratesOpen, setRatesOpen] = useState(false);
 
   const isSimulated = investment.is_simulated;
+
+  // Renda fixa: tem indexador definido? Então calculamos o rendimento.
+  const indexer = (investment.indexer || 'none') as Indexer;
+  const isFixedIncome = indexer !== 'none';
+  const irType = (investment.ir_type || 'renda_fixa') as TaxType;
+  // Resumo compacto: taxa líquida a.m. no prazo do vencimento (ou 1 ano).
+  const rfSummary = isFixedIncome && marketRates
+    ? (() => {
+        const gross = grossAnnualRate(indexer, Number(investment.indexer_value) || 0, marketRates);
+        const months = monthsUntil(investment.maturity_date) ?? 12;
+        const net = netAtHorizon(gross, irType, months);
+        return { gross, netMonthly: net.netMonthly, months };
+      })()
+    : null;
+  const fmtPct = (v: number) => `${v.toFixed(2).replace('.', ',')}%`;
+  const indexerShort = (() => {
+    const v = Number(investment.indexer_value) || 0;
+    switch (indexer) {
+      case 'cdi_percent': return `${v}% CDI`;
+      case 'cdi_plus': return `CDI+${v}%`;
+      case 'ipca_plus': return `IPCA+${v}%`;
+      case 'prefixado': return `Pré ${v}%`;
+      case 'selic': return 'Selic';
+      case 'poupanca': return 'Poupança';
+      default: return `${v}% a.a.`;
+    }
+  })();
 
   // A meta é definida em porcentagem de rendimento (% ao mês ou % ao ano)?
   const isPercentageTarget = investment.target_mode === 'pct_monthly' || investment.target_mode === 'pct_yearly';
@@ -165,6 +198,24 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
                   </div>
                 </div>
               </div>
+
+              {/* Renda fixa: indexador + taxa líquida a.m. (clica e abre a ficha completa) */}
+              {isFixedIncome && (
+                <button
+                  onClick={() => setRatesOpen(true)}
+                  className="w-full flex items-center justify-between p-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+                >
+                  <span className="text-xs font-semibold text-amber-700 flex items-center gap-1.5">
+                    <Landmark className="w-3.5 h-3.5" /> {indexerShort}
+                    {investment.fgc && <ShieldCheck className="w-3 h-3 text-emerald-600" title="FGC" />}
+                  </span>
+                  {rfSummary && (
+                    <span className="text-xs tabular-nums text-amber-700 font-bold">
+                      ~{fmtPct(rfSummary.netMonthly)} a.m. líq.
+                    </span>
+                  )}
+                </button>
+              )}
 
               {/* Capital operacional (só aparece se houver esse valor informado) */}
               {operatingCap > 0 && (
@@ -301,6 +352,7 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
         onSubmit={onUpdate}
         investmentTypes={investmentTypes}
         objectives={objectives}
+        marketRates={marketRates}
       />
 
       {/* Projeção de juros compostos deste investimento (igual ao Simulador de Projeção) */}
@@ -314,6 +366,43 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
             title={`Projeção: ${investment.name}`}
             subtitle="Juros compostos com o aporte mês a mês, já descontando o IR no resgate. Ajuste e veja o lucro real."
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Rendimento + ficha do ativo (renda fixa) */}
+      <Dialog open={ratesOpen} onOpenChange={setRatesOpen}>
+        <DialogContent className="rounded-2xl max-w-md max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Percent className="w-5 h-5 text-[hsl(var(--finance))]" />
+              Rendimento — {investment.name}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Ficha do ativo */}
+            <div className="rounded-xl border border-border divide-y divide-border/60">
+              <FichaRow icon={Landmark} label="Instituição" value={investment.institution} />
+              <FichaRow label="Classe" value={investment.asset_class} />
+              <FichaRow label="Indexador" value={indexerShort} />
+              <FichaRow label="Liquidez" value={investment.liquidity} />
+              <FichaRow label="Vencimento" value={investment.maturity_date ? new Date(investment.maturity_date + 'T00:00:00').toLocaleDateString('pt-BR') : null} />
+              <FichaRow icon={ShieldCheck} label="Garantia FGC" value={investment.fgc ? 'Sim (até R$ 250 mil)' : 'Não'} />
+              <FichaRow icon={Target} label="Objetivo" value={investment.objective} />
+            </div>
+
+            {/* Taxas calculadas */}
+            {marketRates ? (
+              <FixedIncomeRates
+                indexer={indexer}
+                indexerValue={Number(investment.indexer_value) || 0}
+                irType={irType}
+                rates={marketRates}
+                maturityDate={investment.maturity_date}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">Defina as taxas de mercado (CDI/IPCA) para ver o rendimento calculado.</p>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -354,5 +443,18 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// Uma linha da ficha do ativo (rótulo + valor). Não aparece se não houver valor.
+function FichaRow({ icon: Icon, label, value }: { icon?: React.ElementType; label: string; value?: string | null }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 p-2.5">
+      <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+        {Icon && <Icon className="w-3.5 h-3.5" />}{label}
+      </span>
+      <span className="text-xs font-medium text-right">{value}</span>
+    </div>
   );
 }

@@ -43,6 +43,15 @@ export interface Investment {
   currency: string;
   foreign_amount: number | null;
   exchange_rate: number | null;
+  // Renda fixa detalhada: ficha do ativo + como ele rende e é tributado.
+  institution: string | null;      // banco/corretora
+  asset_class: string | null;      // ex.: Renda Fixa Pós-Fixada
+  indexer: string;                 // cdi_percent | cdi_plus | ipca_plus | prefixado | selic | poupanca | none
+  indexer_value: number;           // o "x" do indexador
+  liquidity: string | null;        // ex.: Diária, No vencimento
+  maturity_date: string | null;    // vencimento
+  fgc: boolean;                    // coberto pelo FGC
+  ir_type: string;                 // renda_fixa | isento | acoes_fii | custom
   created_at: string;
   updated_at: string;
 }
@@ -68,6 +77,14 @@ export interface InvestmentInput {
   currency?: string;
   foreign_amount?: number | null;
   exchange_rate?: number | null;
+  institution?: string | null;
+  asset_class?: string | null;
+  indexer?: string;
+  indexer_value?: number;
+  liquidity?: string | null;
+  maturity_date?: string | null;
+  fgc?: boolean;
+  ir_type?: string;
 }
 
 // Categoria opcional para agrupar investimentos (com icone e cor).
@@ -174,6 +191,14 @@ export function useInvestments() {
       currency: input.currency || 'BRL',
       foreign_amount: input.foreign_amount ?? null,
       exchange_rate: input.exchange_rate ?? null,
+      institution: input.institution || null,
+      asset_class: input.asset_class || null,
+      indexer: input.indexer || 'none',
+      indexer_value: input.indexer_value || 0,
+      liquidity: input.liquidity || null,
+      maturity_date: input.maturity_date || null,
+      fgc: input.fgc || false,
+      ir_type: input.ir_type || 'renda_fixa',
     };
     // Grava no banco; avisa em caso de erro ou recarrega a lista em caso de sucesso.
     const { error } = await supabase.from('investments').insert(row);

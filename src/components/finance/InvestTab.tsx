@@ -10,9 +10,11 @@ import { Plus, TrendingUp, ArrowUpRight, Check, ChevronDown, ChevronUp, Sparkles
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useInvestments } from '@/hooks/useInvestments';
+import { useMarketRates } from '@/hooks/useMarketRates';
 import { InvestmentCard } from './InvestmentCard';
 import { InvestmentForm } from './InvestmentForm';
 import { InvestmentCapacity } from './InvestmentCapacity';
+import { MarketRatesCard } from './MarketRatesCard';
 import { MetasTab } from './MetasTab';
 import { FlowSummary } from './FlowSummary';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -67,6 +69,7 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
     INVESTMENT_TYPES,
     OBJECTIVES,
   } = useInvestments();
+  const marketApi = useMarketRates();
 
   const [formOpen, setFormOpen] = useState(false);
   const [showPaidInvest, setShowPaidInvest] = useState(false);
@@ -203,6 +206,11 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
               />
             </motion.div>
 
+            {/* Taxas de mercado (CDI/IPCA) — base dos cálculos de renda fixa */}
+            <motion.div variants={fadeUp}>
+              <MarketRatesCard api={marketApi} />
+            </motion.div>
+
             {/* Fluxo de aportes — transações com centro de custo "Investimentos" */}
             {investTransactions.length > 0 && (
               <motion.div variants={fadeUp} className="space-y-2">
@@ -271,6 +279,7 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
                     onMakeReal={handleMakeReal}
                     investmentTypes={INVESTMENT_TYPES}
                     objectives={OBJECTIVES}
+                    marketRates={marketApi.rates}
                   />
                 </motion.div>
               ))
@@ -296,6 +305,7 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
                       onMakeReal={handleMakeReal}
                       investmentTypes={INVESTMENT_TYPES}
                       objectives={OBJECTIVES}
+                      marketRates={marketApi.rates}
                     />
                   </motion.div>
                 ))}
@@ -312,6 +322,7 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
         onSubmit={handleCreateInvestment}
         investmentTypes={INVESTMENT_TYPES}
         objectives={OBJECTIVES}
+        marketRates={marketApi.rates}
       />
     </div>
   );
