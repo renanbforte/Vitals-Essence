@@ -11,8 +11,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { addMonths, format, startOfMonth } from 'date-fns';
+import { addMonths, endOfMonth, format, startOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { extendContinuousRecurrences } from '@/lib/recurrence';
 
 // Uma linha (um mês) da tabela/gráfico de desempenho.
 export interface PerfRow {
@@ -43,6 +44,11 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
   const build = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+
+    // Garante que as recorrências contínuas existam até o fim do período escolhido
+    // (assim o gráfico/tabela projetam sem limite, criando sob demanda).
+    const windowEndISO = format(endOfMonth(addMonths(startOfMonth(new Date()), forwardMonths)), 'yyyy-MM-dd');
+    await extendContinuousRecurrences(user.id, windowEndISO);
 
     // Lançamentos e categorias do usuário. As simulações entram como lançamentos
     // planejados (criados ao cadastrar a simulação), então não precisam de projeção

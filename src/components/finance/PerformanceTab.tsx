@@ -26,10 +26,14 @@ type Mode = 'real' | 'planejado' | 'ambos';
 type Metric = 'total' | 'acumuladoConta' | 'acumuladoInvest' | 'fluxo' | 'investido' | 'saldoLivre';
 
 // Períodos: quantos meses para trás e para frente (futuro = projeção).
+// Você escolhe — a projeção é ilimitada (as recorrências são criadas sob demanda).
 const PERIODS: Record<string, { back: number; forward: number; label: string }> = {
   '6': { back: 3, forward: 3, label: '6 meses' },
-  '12': { back: 6, forward: 6, label: '12 meses' },
-  '24': { back: 12, forward: 12, label: '24 meses' },
+  '12': { back: 6, forward: 6, label: '1 ano' },
+  '24': { back: 12, forward: 12, label: '2 anos' },
+  '36': { back: 12, forward: 24, label: '3 anos' },
+  '60': { back: 12, forward: 48, label: '5 anos' },
+  '120': { back: 12, forward: 108, label: '10 anos' },
 };
 
 const METRICS: { value: Metric; label: string; kind: 'line' | 'bar' | 'flow' }[] = [

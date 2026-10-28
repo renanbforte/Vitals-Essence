@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { startOfMonth, endOfMonth, format, addDays, addWeeks, addMonths, addYears, parseISO } from 'date-fns';
+import { stepDate, extendContinuousRecurrences } from '@/lib/recurrence';
 
 // Centro de custo = categoria de gasto/receita (ex.: Moradia, Saúde), com ícone e cor.
 export interface CostCenter {
@@ -147,44 +148,15 @@ export function useFinancialFlow(selectedMonth: Date) {
     if (error) {
       console.error('Error fetching transactions:', error);
     } else if (data) {
-      // Junta os IDs "pai" dos lançamentos recorrentes para depois montar o rótulo de parcela.
-      const parentIds = new Set<string>();
-      data.forEach(t => {
-        if (t.is_recurring || t.parent_transaction_id) {
-          parentIds.add(t.parent_transaction_id || t.id);
-        }
-      });
-
-      // Para cada grupo de parcelas, busca todas as "irmãs" e calcula a posição "X de Y".
-      const installmentMap = new Map<string, { index: number; total: number }>();
-      if (parentIds.size > 0) {
-        for (const pid of parentIds) {
-          const { data: siblings } = await supabase
-            .from('financial_transactions')
-            .select('id, date')
-            .or(`id.eq.${pid},parent_transaction_id.eq.${pid}`)
-            .eq('user_id', user.id)
-            .order('date', { ascending: true });
-          if (siblings) {
-            siblings.forEach((s, idx) => {
-              installmentMap.set(s.id, { index: idx + 1, total: siblings.length });
-            });
-          }
-        }
-      }
-
-      // Enriquece cada lançamento com sua categoria completa e o rótulo de parcela.
-      // Usa a numeração salva no lançamento (fixa, não quebra ao apagar uma parcela);
-      // se não houver (dados antigos), cai no cálculo por contagem das irmãs.
+      // Rótulo de parcela ("2/12") só para séries parceladas (têm total salvo).
+      // Recorrência contínua (sem prazo) não mostra fração.
       const enriched = data.map(t => ({
         ...t,
         type: t.type as 'income' | 'expense',
         cost_center: costCenters.find(cc => cc.id === t.cost_center_id),
         installment_label: (t.installment_total && t.installment_total > 1)
           ? `${t.installment_index}/${t.installment_total}`
-          : (installmentMap.has(t.id)
-              ? `${installmentMap.get(t.id)!.index}/${installmentMap.get(t.id)!.total}`
-              : undefined),
+          : undefined,
       }));
       setTransactions(enriched);
     }
@@ -219,13 +191,23 @@ export function useFinancialFlow(selectedMonth: Date) {
     }
   }, [fetchTransactions, costCenters]);
 
+  // Ao navegar para um mês, garante que as recorrências contínuas existam até ele
+  // (+ 2 meses de folga). Assim dá para ver sem limite, criando sob demanda.
+  useEffect(() => {
+    if (!user) return;
+    const uptoISO = format(addMonths(endOfMonth(selectedMonth), 2), 'yyyy-MM-dd');
+    extendContinuousRecurrences(user.id, uptoISO).then(created => { if (created) fetchTransactions(); });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, monthEnd]);
+
   // Cria um novo lançamento. Se for recorrente, gera automaticamente as parcelas futuras.
   const addTransaction = async (input: TransactionInput): Promise<string | null> => {
     if (!user) return null;
 
-    // Quantas parcelas terá a série (quando recorrente). Fixa o total para que o
-    // rótulo "X/Y" não mude se uma parcela for apagada depois.
-    const seriesTotal = input.is_recurring ? (input.installments ? input.installments : 60) : null;
+    // Contínua = mensal sem prazo (não tem número de parcelas). Parcelada = 2-12x.
+    const isContinuous = input.recurrence_mode === 'continuous';
+    // Total de parcelas só existe quando é parcelada (fixa o "X/Y").
+    const seriesTotal = (input.is_recurring && !isContinuous) ? (input.installments || null) : null;
 
     // Build the base transaction
     const base = {
@@ -243,7 +225,7 @@ export function useFinancialFlow(selectedMonth: Date) {
       payment_method: input.payment_method || null,
       card_bank: input.card_bank || null,
       recurrence_mode: input.recurrence_mode || null,
-      installment_index: input.is_recurring ? 1 : null,
+      installment_index: (input.is_recurring && !isContinuous) ? 1 : null,
       installment_total: seriesTotal,
       is_planned: input.is_planned || false,
     };
@@ -260,45 +242,34 @@ export function useFinancialFlow(selectedMonth: Date) {
       return null;
     }
 
-    // Se for recorrente, cria as próximas ocorrências (parcelas) apontando para o pai.
+    // Se for recorrente, cria as próximas ocorrências apontando para o pai.
     if (input.is_recurring && parentData) {
       const parentId = parentData.id;
       const futureInserts = [];
       const baseDate = parseISO(input.date);
       const interval = input.recurrence_interval || 1;   // de quantos em quantos (ex.: a cada 1 mês)
       const type = input.recurrence_type || 'months';    // unidade: dias/semanas/meses/anos
-      // Sem número de parcelas definido = recorrência contínua (projeta até 60 ocorrências).
-      const totalInstallments = seriesTotal || 60;
 
-      // Calcula a data de cada parcela futura conforme a unidade e o intervalo.
-      for (let i = 1; i < totalInstallments; i++) {
-        let nextDate: Date;
-        switch (type) {
-          case 'days':
-            nextDate = addDays(baseDate, interval * i);
-            break;
-          case 'weeks':
-            nextDate = addWeeks(baseDate, interval * i);
-            break;
-          case 'years':
-            nextDate = addYears(baseDate, interval * i);
-            break;
-          case 'months':
-          default:
-            nextDate = addMonths(baseDate, interval * i);
-            break;
+      if (isContinuous) {
+        // Contínua: materializa um buffer inicial (até ~2 anos à frente); o resto
+        // é criado sob demanda ao navegar para meses futuros. Sem número de parcela.
+        const bufferEnd = addMonths(new Date(), 24);
+        let d = baseDate;
+        for (let i = 0; i < 300; i++) {
+          d = stepDate(d, type, interval);
+          if (d > bufferEnd) break;
+          futureInserts.push({ ...base, date: format(d, 'yyyy-MM-dd'), parent_transaction_id: parentId, installment_index: null, installment_total: null });
         }
-
-        futureInserts.push({
-          ...base,
-          date: format(nextDate, 'yyyy-MM-dd'),
-          parent_transaction_id: parentId,
-          installment_index: i + 1,       // 2ª, 3ª... parcela (a 1ª é o lançamento pai)
-          installment_total: totalInstallments,
-        });
+      } else {
+        // Parcelada: cria exatamente as parcelas restantes, numeradas (2/N, 3/N...).
+        const totalInstallments = seriesTotal || 1;
+        for (let i = 1; i < totalInstallments; i++) {
+          const nextDate = stepDate(baseDate, type, interval * i);
+          futureInserts.push({ ...base, date: format(nextDate, 'yyyy-MM-dd'), parent_transaction_id: parentId, installment_index: i + 1, installment_total: totalInstallments });
+        }
       }
 
-      // Grava todas as parcelas futuras de uma vez só.
+      // Grava todas as ocorrências futuras de uma vez só.
       if (futureInserts.length > 0) {
         await supabase.from('financial_transactions').insert(futureInserts);
       }
@@ -390,7 +361,8 @@ export function useFinancialFlow(selectedMonth: Date) {
         const baseDate = parseISO(input.date || existingTxn?.date || format(new Date(), 'yyyy-MM-dd'));
         const interval = input.recurrence_interval || 1;
         const type = input.recurrence_type || 'months';
-        const totalInstallments = _inst ? _inst : 60;
+        const isContinuous = newMode === 'continuous';
+        const totalInstallments = isContinuous ? 0 : (_inst || 1);
         const base = {
           user_id: user.id,
           type: input.type || existingTxn?.type || 'expense',
@@ -405,26 +377,31 @@ export function useFinancialFlow(selectedMonth: Date) {
           payment_method: input.payment_method !== undefined ? input.payment_method : (existingTxn?.payment_method || null),
           card_bank: input.card_bank !== undefined ? input.card_bank : (existingTxn?.card_bank || null),
           parent_transaction_id: anchorId,
-          installment_total: totalInstallments,
+          installment_total: isContinuous ? null : totalInstallments,
         };
 
-        // O lançamento âncora (pai) é a 1ª parcela da série.
+        // O lançamento âncora (pai): 1ª parcela (parcelada) ou sem número (contínua).
         await supabase
           .from('financial_transactions')
-          .update({ installment_index: 1, installment_total: totalInstallments })
+          .update({ installment_index: isContinuous ? null : 1, installment_total: isContinuous ? null : totalInstallments })
           .eq('id', anchorId)
           .eq('user_id', user.id);
 
         const futureInserts = [];
-        for (let i = 1; i < totalInstallments; i++) {
-          let nextDate: Date;
-          switch (type) {
-            case 'days': nextDate = addDays(baseDate, interval * i); break;
-            case 'weeks': nextDate = addWeeks(baseDate, interval * i); break;
-            case 'years': nextDate = addYears(baseDate, interval * i); break;
-            case 'months': default: nextDate = addMonths(baseDate, interval * i); break;
+        if (isContinuous) {
+          // Contínua: buffer de ~2 anos; o resto nasce sob demanda ao navegar.
+          const bufferEnd = addMonths(new Date(), 24);
+          let d = baseDate;
+          for (let i = 0; i < 300; i++) {
+            d = stepDate(d, type, interval);
+            if (d > bufferEnd) break;
+            futureInserts.push({ ...base, date: format(d, 'yyyy-MM-dd'), installment_index: null, installment_total: null });
           }
-          futureInserts.push({ ...base, date: format(nextDate, 'yyyy-MM-dd'), installment_index: i + 1 });
+        } else {
+          for (let i = 1; i < totalInstallments; i++) {
+            const nextDate = stepDate(baseDate, type, interval * i);
+            futureInserts.push({ ...base, date: format(nextDate, 'yyyy-MM-dd'), installment_index: i + 1 });
+          }
         }
         if (futureInserts.length > 0) {
           await supabase.from('financial_transactions').insert(futureInserts);
