@@ -53,8 +53,28 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
     // Lançamentos e categorias do usuário. As simulações entram como lançamentos
     // planejados (criados ao cadastrar a simulação), então não precisam de projeção
     // separada aqui.
-    const [{ data: txns }, { data: ccs }] = await Promise.all([
-      supabase.from('financial_transactions').select('date, type, amount, is_planned, cost_center_id').eq('user_id', user.id),
+    // IMPORTANTE: o Supabase devolve no máximo 1000 linhas por consulta. Quem tem
+    // muitos lançamentos (recorrências materializadas) passa disso, e sem paginar
+    // os aportes ficavam de fora — "Investido"/"Acumulado investimentos" zerava.
+    // Então buscamos em páginas até trazer tudo.
+    const fetchAllTx = async (): Promise<TxRow[]> => {
+      const pageSize = 1000;
+      const all: TxRow[] = [];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from('financial_transactions')
+          .select('date, type, amount, is_planned, cost_center_id')
+          .eq('user_id', user.id)
+          .order('date', { ascending: true })
+          .range(from, from + pageSize - 1);
+        if (error || !data || data.length === 0) break;
+        all.push(...(data as TxRow[]));
+        if (data.length < pageSize) break;
+      }
+      return all;
+    };
+    const [txns, { data: ccs }] = await Promise.all([
+      fetchAllTx(),
       supabase.from('cost_centers').select('id, name').eq('user_id', user.id),
     ]);
 
@@ -71,8 +91,7 @@ export function useFinancialPerformance(backMonths: number, forwardMonths: numbe
     // Monta uma série (Real ou Planejado) a partir dos lançamentos filtrados.
     // excludePlanned = true -> só os reais; false -> tudo (reais + planejados).
     const buildSeries = (excludePlanned: boolean): PerfRow[] => {
-      const rows = (txns || []) as TxRow[];
-      const selected = excludePlanned ? rows.filter(t => !t.is_planned) : rows;
+      const selected = excludePlanned ? txns.filter(t => !t.is_planned) : txns;
 
       // Saldo de abertura: tudo que é anterior à janela entra como ponto de partida.
       let openConta = 0;      // acumulado na conta antes da janela
