@@ -58,12 +58,13 @@ export default function Finance() {
   const [costCenterManagerOpen, setCostCenterManagerOpen] = useState(false);  // se o gerenciador de centros de custo está aberto
   const [editingTransaction, setEditingTransaction] = useState<import('@/hooks/useFinancialFlow').FinancialTransaction | null>(null); // lançamento em edição (ou nenhum)
   const [addBankSignal, setAddBankSignal] = useState(0); // incrementa para pedir ao card de contas que abra "adicionar banco"
+  const [invRefresh, setInvRefresh] = useState(0); // incrementa para a aba Investir recarregar a carteira após um aporte pago
 
   // --- DADOS (vindos do Supabase, através dos "hooks") ---
   const { user } = useAuth(); // usuário logado
   // Fluxo financeiro do mês: lista de lançamentos, centros de custo, bancos salvos e as funções para criar/editar/apagar.
   const { transactions, costCenters, savedBanks, loading, addTransaction, updateTransaction, deleteTransaction, togglePaid, togglePlanned, addCostCenter, updateCostCenter, deleteCostCenter, uploadAttachment, searchAllTransactions, refetch: refetchTransactions } = useFinancialFlow(selectedMonth);
-  const { totalInvested } = useInvestments();               // total investido (patrimônio)
+  const { totalInvested, investments, refetch: refetchInvestments } = useInvestments(); // patrimônio + carteira p/ sincronizar aportes pagos
   const { bankBalances, upsertBankBalance } = useBankBalances(); // saldos por banco
   const { manualReserve, autoReserve, totalReserve, reservaCenterIds, updateManualReserve } = useFinancialReserve(transactions, costCenters); // reserva de emergência
 
@@ -155,6 +156,35 @@ export default function Finance() {
     setFormType(t.type);
     setFormOpen(true);
   };
+
+  // Marca/desmarca um lançamento como pago E, se ele for um aporte RECORRENTE de
+  // um investimento, reflete isso na carteira: o aporte pago vira principal (soma
+  // no Capital operacional); desmarcar reverte. Assim o Fluxo e "Meus investimentos"
+  // ficam sincronizados — o dinheiro que de fato saiu entra no investimento.
+  // O aporte INICIAL (entry_tx_id) não entra aqui: ele já foi somado ao Capital
+  // operacional na criação do investimento, então pagá-lo é só confirmar o caixa.
+  // Simulações não entram no patrimônio, então são ignoradas.
+  const handleTogglePaid = useCallback(async (id: string, currentPaid: boolean) => {
+    await togglePaid(id, currentPaid);
+    const tx = transactions.find(t => t.id === id);
+    if (!tx || tx.type !== 'expense' || !user) return;
+    // Série recorrente: pai = ele mesmo; filho = o seu parent_transaction_id.
+    const rtx = tx.parent_transaction_id || tx.id;
+    const inv = investments.find(i => i.recurring_tx_id === rtx);
+    if (!inv || inv.is_simulated) return;
+    // Pagando → soma o aporte ao principal; desmarcando (já estava pago) → subtrai.
+    const delta = (currentPaid ? -1 : 1) * (Number(tx.amount) || 0);
+    const next = Math.max(0, (Number(inv.operating_capital) || 0) + delta);
+    const { error } = await supabase
+      .from('investments')
+      .update({ operating_capital: next })
+      .eq('id', inv.id)
+      .eq('user_id', user.id);
+    if (!error) {
+      refetchInvestments();      // atualiza o patrimônio no hero (instância desta tela)
+      setInvRefresh(x => x + 1); // pede à aba Investir que recarregue a carteira
+    }
+  }, [togglePaid, transactions, investments, user, refetchInvestments]);
 
   // Agenda um aporte mensal recorrente no fluxo, na categoria "Investimentos".
   // O "prazo" define a série: months=N → parcelado (N aportes); sem months →
@@ -402,7 +432,7 @@ export default function Finance() {
                       <Skeleton className="h-20 rounded-2xl" />
                     </div>
                   ) : (
-                    <TransactionList transactions={displayedFlow} onDelete={deleteTransaction} onEdit={handleEdit} onTogglePaid={togglePaid} onTogglePlanned={togglePlanned} onSearchAll={searchAllTransactions} allCostCenters={costCenters} />
+                    <TransactionList transactions={displayedFlow} onDelete={deleteTransaction} onEdit={handleEdit} onTogglePaid={handleTogglePaid} onTogglePlanned={togglePlanned} onSearchAll={searchAllTransactions} allCostCenters={costCenters} />
                   )}
                 </motion.div>
               </motion.div>
@@ -410,7 +440,7 @@ export default function Finance() {
 
             {/* CONTEÚDO DA ABA "INVESTIR": investimentos, metas e simulador (unificados) */}
             <TabsContent value="invest" className="mt-6" key="invest">
-              <InvestTab monthlyIncome={realSummary.income} monthlyExpenses={realSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} onConvertInvestmentTxToReal={convertInvestmentTxToReal} onDeleteAporteSeries={deleteAporteSeries} />
+              <InvestTab monthlyIncome={realSummary.income} monthlyExpenses={realSummary.expense} investTransactions={investTransactions} refreshSignal={invRefresh} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={handleTogglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} onConvertInvestmentTxToReal={convertInvestmentTxToReal} onDeleteAporteSeries={deleteAporteSeries} />
             </TabsContent>
 
             {/* CONTEÚDO DA ABA "DESEMPENHO": tabela e gráfico mês a mês (Real/Planejado) */}

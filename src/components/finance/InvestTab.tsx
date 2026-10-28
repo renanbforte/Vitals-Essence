@@ -4,7 +4,7 @@
 // Cripto. Na Carteira mostra o patrimonio investido, a capacidade de investir,
 // os aportes do mes e a lista de investimentos cadastrados (com opcao de criar).
 // ============================================================================
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, TrendingUp, ArrowUpRight, Check, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,6 +38,9 @@ interface InvestTabProps {
   monthlyIncome: number;
   monthlyExpenses: number;
   investTransactions?: FinancialTransaction[];
+  // Muda de valor quando um aporte é marcado/desmarcado como pago no Fluxo:
+  // serve de gatilho para recarregar a carteira e refletir o novo Capital operacional.
+  refreshSignal?: number;
   onDeleteTransaction?: (id: string, deleteRelated?: boolean) => void;
   onEditTransaction?: (t: FinancialTransaction) => void;
   onTogglePaid?: (id: string, currentPaid: boolean) => void;
@@ -57,7 +60,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions = [], onDeleteTransaction, onEditTransaction, onTogglePaid, onScheduleAporte, onRecordInvestmentEntry, onConvertInvestmentTxToReal, onDeleteAporteSeries }: InvestTabProps) {
+export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions = [], refreshSignal = 0, onDeleteTransaction, onEditTransaction, onTogglePaid, onScheduleAporte, onRecordInvestmentEntry, onConvertInvestmentTxToReal, onDeleteAporteSeries }: InvestTabProps) {
   // Busca no banco a lista de investimentos, o total investido e as funcoes
   // para adicionar, atualizar, excluir e aportar valor, alem das listas de
   // tipos e objetivos disponiveis.
@@ -69,10 +72,20 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
     updateInvestment,
     deleteInvestment,
     addValue,
+    refetch: refetchInvestments,
     INVESTMENT_TYPES,
     OBJECTIVES,
   } = useInvestments();
   const marketApi = useMarketRates();
+
+  // Quando um aporte é pago/desmarcado no Fluxo, o pai (Finance) altera o
+  // Capital operacional no banco e incrementa refreshSignal; aqui recarregamos
+  // a carteira para o card mostrar o novo valor na hora (sem trocar de aba).
+  const firstRefresh = useRef(true);
+  useEffect(() => {
+    if (firstRefresh.current) { firstRefresh.current = false; return; }
+    refetchInvestments();
+  }, [refreshSignal, refetchInvestments]);
 
   const [formOpen, setFormOpen] = useState(false);
   const [showPaidInvest, setShowPaidInvest] = useState(false);

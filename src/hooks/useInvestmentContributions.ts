@@ -29,12 +29,15 @@ export function useInvestmentContributions(investments: Investment[], months: nu
     let cancelled = false;
     (async () => {
       const monthStart = startOfMonth(new Date());
-      // Lançamentos da série (o pai ou os filhos) a partir deste mês.
+      // Lançamentos da série (o pai ou os filhos) a partir deste mês, AINDA NÃO
+      // pagos: o aporte já pago virou principal (Capital operacional), então
+      // projetá-lo de novo como aporte futuro o contaria duas vezes.
       const { data } = await supabase
         .from('financial_transactions')
         .select('amount, date, id, parent_transaction_id')
         .eq('user_id', user.id)
         .eq('type', 'expense')
+        .eq('paid', false)
         .or(`id.in.(${key}),parent_transaction_id.in.(${key})`)
         .gte('date', format(monthStart, 'yyyy-MM-dd'));
       if (cancelled) return;
