@@ -61,14 +61,26 @@ export function projectPortfolio(
   const moedaSeries: number[][] = [];
 
   for (const inv of reais) {
-    const principal = (Number(inv.current_value) || 0) + (Number(inv.operating_capital) || 0);
+    // Valor em R$ já guardado (capital + rendimento).
+    const brlHolding = (Number(inv.current_value) || 0) + (Number(inv.operating_capital) || 0);
+
     if (isForeignCurrency(inv)) {
-      // Plana: mesmo valor em todos os meses.
-      moedaSeries.push(Array.from({ length: months + 1 }, () => principal));
+      // Valor em R$ da moeda hoje é o capital em BRL (fonte de verdade do app).
+      // NÃO converte foreign_amount × cotação aqui: o número na moeda é só exibição,
+      // e multiplicá-lo pela cotação faria tratar, p.ex., R$ como se fossem euros.
+      // Moeda não rende juros (taxa 0), mas acumula com novas compras (aporte).
+      const series = projectCompound({
+        principal: brlHolding,
+        monthlyContribution: monthlyContributionFor(inv),
+        monthlyRate: 0,
+        months,
+      });
+      moedaSeries.push(series.map(p => p.total));
       continue;
     }
+
     const series = projectCompound({
-      principal,
+      principal: brlHolding,
       monthlyContribution: monthlyContributionFor(inv),
       monthlyRate: monthlyRateFor(inv, defaultAnnualRate),
       months,

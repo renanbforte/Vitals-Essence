@@ -1,10 +1,10 @@
 // ============================================================================
-// InvestmentProjectionCard — PROJEÇÃO DA CARTEIRA (JUROS COMPOSTOS) NO DESEMPENHO
+// InvestmentProjectionCard — PROJEÇÃO DA CARTEIRA QUE RENDE (JUROS COMPOSTOS)
 // ----------------------------------------------------------------------------
-// Mostra para onde a carteira caminha aplicando juros compostos em cada
-// investimento (taxa vinda da meta % de cada um; quem não tem usa um padrão
-// ajustável aqui). As moedas estrangeiras aparecem à parte, planas. Exibe o
-// lucro de juros separado do que foi aportado, e o total.
+// Projeta a carteira de investimentos que RENDE juros, mês a mês, com juros
+// compostos usando a taxa da meta % de cada investimento (quem não tem usa um
+// padrão ajustável aqui). Mostra o aportado (do bolso) separado do com juros
+// (lucro) e o total. As moedas estrangeiras ficam no card próprio "Minhas moedas".
 // ============================================================================
 import { useMemo, useState } from 'react';
 import {
@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { TrendingUp, Sparkles, Coins } from 'lucide-react';
+import { TrendingUp, Sparkles } from 'lucide-react';
 import { addMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { projectPortfolio } from '@/lib/portfolioProjection';
@@ -28,30 +28,30 @@ export function InvestmentProjectionCard({ investments, months }: Props) {
   // Taxa padrão (% ao ano) para os investimentos que não têm meta em %.
   const [defaultRatePct, setDefaultRatePct] = useState('10.5');
 
-  // Só investimentos reais entram na carteira (simulações ficam de fora).
-  const reais = useMemo(() => investments.filter(i => !i.is_simulated), [investments]);
-  const hasMoedas = useMemo(() => reais.some(i => i.currency && i.currency !== 'BRL'), [reais]);
+  // Só investimentos reais que RENDEM (exclui simulações e moedas estrangeiras).
+  const rende = useMemo(
+    () => investments.filter(i => !i.is_simulated && (!i.currency || i.currency === 'BRL')),
+    [investments],
+  );
 
-  // Série projetada mês a mês.
-  const series = useMemo(() => projectPortfolio(reais, {
+  // Série projetada mês a mês (a projeção já separa o que rende das moedas).
+  const series = useMemo(() => projectPortfolio(rende, {
     months,
     defaultAnnualRate: (Number(defaultRatePct.replace(',', '.')) || 0) / 100,
-  }), [reais, months, defaultRatePct]);
+  }), [rende, months, defaultRatePct]);
 
   // Dados do gráfico: um ponto por mês, com rótulo de data.
   const chartData = useMemo(() => series.map(p => ({
     label: format(addMonths(new Date(), p.month), 'MMM/yy', { locale: ptBR }),
     aportado: p.aportado,
     rende: p.rende,
-    moedas: p.moedas,
-    total: p.total,
   })), [series]);
 
   const hoje = series[0];
   const fim = series[series.length - 1];
 
-  // Sem investimentos reais: mensagem simpática.
-  if (reais.length === 0) {
+  // Sem investimentos que rendem: mensagem simpática.
+  if (rende.length === 0) {
     return (
       <Card>
         <CardContent className="p-4">
@@ -60,7 +60,7 @@ export function InvestmentProjectionCard({ investments, months }: Props) {
             <p className="text-sm font-bold">Projeção da carteira · juros compostos</p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cadastre um investimento real para ver a projeção com juros compostos.
+            Cadastre um investimento em renda (fora moeda estrangeira) para ver a projeção com juros compostos.
           </p>
         </CardContent>
       </Card>
@@ -94,18 +94,12 @@ export function InvestmentProjectionCard({ investments, months }: Props) {
 
         {/* Números: hoje × fim do horizonte */}
         <div className="grid grid-cols-3 gap-2">
-          <Mini label="Hoje" value={hoje.total} tone="muted" />
-          <Mini label={`Em ${months} meses`} value={fim.total} tone="finance" icon={TrendingUp} />
+          <Mini label="Hoje" value={hoje.rende} tone="muted" />
+          <Mini label={`Em ${months} meses`} value={fim.rende} tone="finance" icon={TrendingUp} />
           <Mini label="Lucro de juros" value={fim.juros} tone="emerald" />
         </div>
-        {hasMoedas && (
-          <div className="grid grid-cols-2 gap-2">
-            <Mini label="Carteira que rende" value={fim.rende} tone="finance" />
-            <Mini label="Moedas (sem render)" value={fim.moedas} tone="sky" icon={Coins} />
-          </div>
-        )}
 
-        {/* Gráfico: aportado × com juros (× moedas) */}
+        {/* Gráfico: aportado × com juros */}
         <div className="h-56">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
@@ -116,12 +110,11 @@ export function InvestmentProjectionCard({ investments, months }: Props) {
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="aportado" name="Aportado" stroke="hsl(var(--muted-foreground))" strokeWidth={2} strokeDasharray="5 4" dot={false} />
               <Line type="monotone" dataKey="rende" name="Com juros" stroke="hsl(var(--finance))" strokeWidth={2.5} dot={false} />
-              {hasMoedas && <Line type="monotone" dataKey="moedas" name="Moedas" stroke="#0ea5e9" strokeWidth={2} dot={false} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
         <p className="text-[10px] text-muted-foreground text-center">
-          Projeção estimada a partir do valor de hoje. Moedas estrangeiras entram à parte, pelo valor em R$, sem juros.
+          Projeção estimada a partir do valor de hoje. Moedas estrangeiras não rendem juros — veja-as em "Minhas moedas".
         </p>
       </CardContent>
     </Card>
@@ -130,13 +123,12 @@ export function InvestmentProjectionCard({ investments, months }: Props) {
 
 // Mini-cartão de um número.
 function Mini({ label, value, tone, icon: Icon }: {
-  label: string; value: number; tone: 'muted' | 'finance' | 'emerald' | 'sky'; icon?: React.ElementType;
+  label: string; value: number; tone: 'muted' | 'finance' | 'emerald'; icon?: React.ElementType;
 }) {
   const toneClass: Record<string, string> = {
     muted: 'text-foreground',
     finance: 'text-[hsl(var(--finance))]',
     emerald: 'text-emerald-600',
-    sky: 'text-sky-600',
   };
   return (
     <div className="rounded-xl bg-muted/40 p-2.5">

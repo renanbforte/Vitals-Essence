@@ -417,7 +417,17 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
             )}
           </div>
 
-          <Button onClick={handleSubmit} disabled={!name.trim() || submitting} className="w-full gradient-finance text-white">
+          {/* Em moeda estrangeira, exige a cotação carregada para não salvar conversão quebrada */}
+          {isForeign && rate <= 0 && (
+            <p className="text-[11px] text-amber-600 text-center">
+              Informe a cotação do dia para converter o valor antes de criar.
+            </p>
+          )}
+          <Button
+            onClick={handleSubmit}
+            disabled={!name.trim() || submitting || (isForeign && rate <= 0)}
+            className="w-full gradient-finance text-white"
+          >
             {submitting ? 'Salvando...' : 'Criar Investimento'}
           </Button>
         </div>

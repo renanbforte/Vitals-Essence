@@ -23,6 +23,7 @@ import { formatCurrency, formatCurrencyCompact } from '@/lib/finance';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInvestments } from '@/hooks/useInvestments';
 import { InvestmentProjectionCard } from './InvestmentProjectionCard';
+import { CurrencyHoldingsCard } from './CurrencyHoldingsCard';
 
 type Mode = 'real' | 'planejado' | 'ambos';
 type Metric = 'total' | 'acumuladoConta' | 'acumuladoInvest' | 'fluxo' | 'investido' | 'saldoLivre';
@@ -216,8 +217,11 @@ export function PerformanceTab() {
         </Card>
       )}
 
-      {/* Projeção da carteira com juros compostos (horizonte = meses à frente do período) */}
+      {/* Projeção da carteira que rende, com juros compostos (horizonte = meses à frente do período) */}
       <InvestmentProjectionCard investments={investments} months={forward} />
+
+      {/* Minhas moedas: quanto há em cada moeda estrangeira (separado, não rende juros) */}
+      <CurrencyHoldingsCard investments={investments} />
 
       {/* Tabela */}
       {view === 'table' && (
