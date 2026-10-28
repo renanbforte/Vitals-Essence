@@ -21,6 +21,8 @@ import { BarChart3, Table as TableIcon, TrendingUp, TrendingDown, PiggyBank, Wal
 import { useFinancialPerformance, type PerfRow } from '@/hooks/useFinancialPerformance';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/finance';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useInvestments } from '@/hooks/useInvestments';
+import { InvestmentProjectionCard } from './InvestmentProjectionCard';
 
 type Mode = 'real' | 'planejado' | 'ambos';
 type Metric = 'total' | 'acumuladoConta' | 'acumuladoInvest' | 'fluxo' | 'investido' | 'saldoLivre';
@@ -63,6 +65,7 @@ export function PerformanceTab() {
 
   const { back, forward } = PERIODS[period];
   const { real, planejado, loading } = useFinancialPerformance(back, forward);
+  const { investments } = useInvestments();
 
   const showReal = mode === 'real' || mode === 'ambos';
   const showPlan = mode === 'planejado' || mode === 'ambos';
@@ -212,6 +215,9 @@ export function PerformanceTab() {
           </CardContent>
         </Card>
       )}
+
+      {/* Projeção da carteira com juros compostos (horizonte = meses à frente do período) */}
+      <InvestmentProjectionCard investments={investments} months={forward} />
 
       {/* Tabela */}
       {view === 'table' && (
