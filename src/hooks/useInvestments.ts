@@ -32,6 +32,7 @@ export interface Investment {
   is_recurring_contribution: boolean;
   recurring_amount: number | null;
   recurrence_type: string | null;
+  recurring_months: number | null; // prazo do aporte: null = sem prazo (até vencimento), N = por N meses
   notes: string | null;
   category_id: string | null;
   // Real x simulação (planejamento), data de início do real e aporte recorrente ligado.
@@ -69,6 +70,7 @@ export interface InvestmentInput {
   is_recurring_contribution?: boolean;
   recurring_amount?: number | null;
   recurrence_type?: string | null;
+  recurring_months?: number | null;
   notes?: string | null;
   is_simulated?: boolean;
   start_date?: string | null;
@@ -180,6 +182,7 @@ export function useInvestments() {
       is_recurring_contribution: input.is_recurring_contribution || false,
       recurring_amount: input.recurring_amount || null,
       recurrence_type: input.recurrence_type || null,
+      recurring_months: input.recurring_months ?? null,
       notes: input.notes || null,
       priority: maxPriority,
       current_value: input.current_value || 0,
@@ -213,6 +216,7 @@ export function useInvestments() {
   // Atualiza campos de um investimento existente (edicao pelo formulario).
   const updateInvestment = async (id: string, updates: Partial<InvestmentInput>) => {
     if (!user) return;
+    const prev = investments.find(i => i.id === id);
     const { error } = await supabase
       .from('investments')
       .update(updates)
@@ -220,9 +224,24 @@ export function useInvestments() {
       .eq('user_id', user.id);
     if (error) {
       toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
-    } else {
-      fetchInvestments();
+      return;
     }
+    // Sincroniza o nome no Fluxo: se o nome mudou, renomeia os lançamentos ligados
+    // (aporte inicial e a série de aportes recorrentes) para bater com Investir.
+    if (prev && updates.name && updates.name !== prev.name) {
+      if (prev.entry_tx_id) {
+        await supabase.from('financial_transactions')
+          .update({ description: `Investimento - ${updates.name}` })
+          .eq('id', prev.entry_tx_id).eq('user_id', user.id);
+      }
+      if (prev.recurring_tx_id) {
+        await supabase.from('financial_transactions')
+          .update({ description: `Aporte - ${updates.name}` })
+          .or(`id.eq.${prev.recurring_tx_id},parent_transaction_id.eq.${prev.recurring_tx_id}`)
+          .eq('user_id', user.id);
+      }
+    }
+    fetchInvestments();
   };
 
   // Exclui um investimento e todo o seu historico de aportes.

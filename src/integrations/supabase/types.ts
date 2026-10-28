@@ -1950,6 +1950,7 @@ export type Database = {
           priority: number
           recurrence_type: string | null
           recurring_amount: number | null
+          recurring_months: number | null
           recurring_tx_id: string | null
           start_date: string | null
           target_mode: string
@@ -1985,6 +1986,7 @@ export type Database = {
           priority?: number
           recurrence_type?: string | null
           recurring_amount?: number | null
+          recurring_months?: number | null
           recurring_tx_id?: string | null
           start_date?: string | null
           target_mode?: string
@@ -2020,6 +2022,7 @@ export type Database = {
           priority?: number
           recurrence_type?: string | null
           recurring_amount?: number | null
+          recurring_months?: number | null
           recurring_tx_id?: string | null
           start_date?: string | null
           target_mode?: string

@@ -59,6 +59,8 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
   const [isRecurring, setIsRecurring] = useState(false); // Se ha aporte recorrente
   const [recurringAmount, setRecurringAmount] = useState(''); // Valor do aporte recorrente
   const [recurrenceType, setRecurrenceType] = useState('months'); // Frequencia do aporte
+  const [recurringTermMode, setRecurringTermMode] = useState<'open' | 'fixed'>('open'); // prazo do aporte
+  const [recurringMonths, setRecurringMonths] = useState('12');
   const [submitting, setSubmitting] = useState(false); // Se esta salvando no momento
   // Renda fixa detalhada.
   const [isFixedIncome, setIsFixedIncome] = useState(false);
@@ -86,6 +88,8 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
       setIsRecurring(investment.is_recurring_contribution || false);
       setRecurringAmount(investment.recurring_amount ? String(investment.recurring_amount) : '');
       setRecurrenceType(investment.recurrence_type || 'months');
+      setRecurringTermMode(investment.recurring_months != null ? 'fixed' : 'open');
+      setRecurringMonths(investment.recurring_months != null ? String(investment.recurring_months) : '12');
       // Renda fixa: liga o modo se já há indexador definido.
       setIsFixedIncome(!!investment.indexer && investment.indexer !== 'none');
       setInstitution(investment.institution || '');
@@ -119,6 +123,7 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
       is_recurring_contribution: isRecurring,
       recurring_amount: recurringAmount ? parseFloat(recurringAmount) : null,
       recurrence_type: isRecurring ? recurrenceType : null,
+      recurring_months: isRecurring && recurringTermMode === 'fixed' ? (parseInt(recurringMonths) || null) : null,
       // Renda fixa detalhada (desliga para 'none' quando o modo está off).
       institution: isFixedIncome ? (institution.trim() || null) : null,
       asset_class: isFixedIncome ? (assetClass.trim() || null) : null,
@@ -339,6 +344,36 @@ export function EditInvestmentDialog({ open, onOpenChange, investment, onSubmit,
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            )}
+            {isRecurring && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Por quanto tempo vou aportar?</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRecurringTermMode('open')}
+                    className={`rounded-lg border p-2 text-xs font-semibold transition-all ${recurringTermMode === 'open' ? 'border-[hsl(var(--finance))] bg-[hsl(var(--finance))]/10 text-[hsl(var(--finance))]' : 'border-border text-muted-foreground'}`}
+                  >
+                    Até o vencimento / sem prazo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecurringTermMode('fixed')}
+                    className={`rounded-lg border p-2 text-xs font-semibold transition-all ${recurringTermMode === 'fixed' ? 'border-[hsl(var(--finance))] bg-[hsl(var(--finance))]/10 text-[hsl(var(--finance))]' : 'border-border text-muted-foreground'}`}
+                  >
+                    Por um nº de meses
+                  </button>
+                </div>
+                {recurringTermMode === 'fixed' && (
+                  <div className="relative">
+                    <Input type="number" min="1" step="1" value={recurringMonths} onChange={e => setRecurringMonths(e.target.value)} placeholder="Ex: 12" className="pr-14" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">meses</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  Alterar aqui recria os aportes no Fluxo para bater com o novo prazo/valor.
+                </p>
               </div>
             )}
           </div>

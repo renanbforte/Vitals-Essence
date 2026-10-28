@@ -61,6 +61,9 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurringAmount, setRecurringAmount] = useState('');
   const [recurrenceType, setRecurrenceType] = useState('months');
+  // Prazo do aporte: 'open' = sem prazo (até o vencimento); 'fixed' = por N meses.
+  const [recurringTermMode, setRecurringTermMode] = useState<'open' | 'fixed'>('open');
+  const [recurringMonths, setRecurringMonths] = useState('12');
   const [isSimulated, setIsSimulated] = useState(false); // true = simulação (planejamento)
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]); // data de início (quando real)
   // Moeda estrangeira: se está ativo, qual moeda, o valor nela e a cotação do dia.
@@ -114,6 +117,8 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
     setIsRecurring(false);
     setRecurringAmount('');
     setRecurrenceType('months');
+    setRecurringTermMode('open');
+    setRecurringMonths('12');
     setIsSimulated(false);
     setStartDate(new Date().toISOString().split('T')[0]);
     setIsForeign(false);
@@ -152,6 +157,7 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
       is_recurring_contribution: isRecurring,
       recurring_amount: recurringAmount ? parseFloat(recurringAmount) : null,
       recurrence_type: isRecurring ? recurrenceType : null,
+      recurring_months: isRecurring && recurringTermMode === 'fixed' ? (parseInt(recurringMonths) || null) : null,
       is_simulated: isSimulated,
       // Data de início só faz sentido para investimento real (não simulação).
       start_date: isSimulated ? null : startDate,
@@ -533,6 +539,45 @@ export function InvestmentForm({ open, onOpenChange, onSubmit, investmentTypes, 
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+            )}
+
+            {/* Prazo do aporte: sem prazo (até o vencimento) ou por N meses */}
+            {isRecurring && (
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Por quanto tempo vou aportar?</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRecurringTermMode('open')}
+                    className={`rounded-lg border p-2 text-xs font-semibold transition-all ${recurringTermMode === 'open' ? 'border-[hsl(var(--finance))] bg-[hsl(var(--finance))]/10 text-[hsl(var(--finance))]' : 'border-border text-muted-foreground'}`}
+                  >
+                    Até o vencimento / sem prazo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecurringTermMode('fixed')}
+                    className={`rounded-lg border p-2 text-xs font-semibold transition-all ${recurringTermMode === 'fixed' ? 'border-[hsl(var(--finance))] bg-[hsl(var(--finance))]/10 text-[hsl(var(--finance))]' : 'border-border text-muted-foreground'}`}
+                  >
+                    Por um nº de meses
+                  </button>
+                </div>
+                {recurringTermMode === 'fixed' && (
+                  <div className="relative">
+                    <Input
+                      type="number" min="1" step="1" value={recurringMonths}
+                      onChange={e => setRecurringMonths(e.target.value)}
+                      placeholder="Ex: 12"
+                      className="pr-14"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">meses</span>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground">
+                  {recurringTermMode === 'open'
+                    ? 'Aporta até a data de vencimento do ativo (ou sem fim, se não houver vencimento). Você pode parar depois apagando os aportes no Fluxo.'
+                    : 'Cria exatamente esse número de aportes no Fluxo; depois eles param.'}
+                </p>
               </div>
             )}
 

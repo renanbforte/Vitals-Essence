@@ -186,6 +186,11 @@ export function InvestmentCard({ investment, index, onAddValue, onDelete, onUpda
                       <span className="text-[10px] text-[hsl(var(--finance))] flex items-center gap-1">
                         <RefreshCw className="w-3 h-3" />
                         {formatCurrency(Number(investment.recurring_amount))}/mês
+                        <span className="text-muted-foreground">
+                          · {investment.recurring_months != null
+                            ? `por ${investment.recurring_months} ${investment.recurring_months === 1 ? 'mês' : 'meses'}`
+                            : (investment.maturity_date ? 'até venc.' : 'sem prazo')}
+                        </span>
                       </span>
                     )}
                     {investment.currency && investment.currency !== 'BRL' && investment.foreign_amount ? (

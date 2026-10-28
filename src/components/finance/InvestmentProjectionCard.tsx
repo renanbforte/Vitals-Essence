@@ -16,6 +16,7 @@ import { TrendingUp, Sparkles } from 'lucide-react';
 import { addMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { projectPortfolio } from '@/lib/portfolioProjection';
+import { useInvestmentContributions } from '@/hooks/useInvestmentContributions';
 import { formatCurrency, formatCurrencyCompact } from '@/lib/finance';
 import type { Investment } from '@/hooks/useInvestments';
 
@@ -34,11 +35,15 @@ export function InvestmentProjectionCard({ investments, months }: Props) {
     [investments],
   );
 
+  // Aportes reais do Fluxo (para a projeção refletir o que está agendado).
+  const contributions = useInvestmentContributions(rende, months);
+
   // Série projetada mês a mês (a projeção já separa o que rende das moedas).
   const series = useMemo(() => projectPortfolio(rende, {
     months,
     defaultAnnualRate: (Number(defaultRatePct.replace(',', '.')) || 0) / 100,
-  }), [rende, months, defaultRatePct]);
+    contributions,
+  }), [rende, months, defaultRatePct, contributions]);
 
   // Dados do gráfico: um ponto por mês, com rótulo de data.
   const chartData = useMemo(() => series.map(p => ({

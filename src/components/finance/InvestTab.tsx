@@ -42,11 +42,14 @@ interface InvestTabProps {
   onEditTransaction?: (t: FinancialTransaction) => void;
   onTogglePaid?: (id: string, currentPaid: boolean) => void;
   // Agenda um aporte mensal recorrente no fluxo; planned=true marca como planejado.
-  onScheduleAporte?: (name: string, amount: number, startDate: string, planned?: boolean) => Promise<string | null>;
+  // term define o prazo: months=N (parcelado) ou sem fim até endDate (vencimento).
+  onScheduleAporte?: (name: string, amount: number, startDate: string, planned?: boolean, term?: { months?: number | null; endDate?: string | null }) => Promise<string | null>;
   // Registra a saída do aporte inicial no fluxo; planned=true marca como planejado.
   onRecordInvestmentEntry?: (name: string, amount: number, date: string, planned?: boolean) => Promise<string | null>;
   // Converte os lançamentos planejados de uma simulação em reais (ao torná-la real).
   onConvertInvestmentTxToReal?: (entryTxId: string | null, recurringTxId: string | null) => Promise<void>;
+  // Apaga a série de aportes recorrentes no Fluxo (ao reconfigurar o aporte na edição).
+  onDeleteAporteSeries?: (recurringTxId: string) => Promise<void>;
 }
 
 // Formata um numero como valor em real brasileiro (ex: "R$ 1.234,56").
@@ -54,7 +57,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 }
 
-export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions = [], onDeleteTransaction, onEditTransaction, onTogglePaid, onScheduleAporte, onRecordInvestmentEntry, onConvertInvestmentTxToReal }: InvestTabProps) {
+export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions = [], onDeleteTransaction, onEditTransaction, onTogglePaid, onScheduleAporte, onRecordInvestmentEntry, onConvertInvestmentTxToReal, onDeleteAporteSeries }: InvestTabProps) {
   // Busca no banco a lista de investimentos, o total investido e as funcoes
   // para adicionar, atualizar, excluir e aportar valor, alem das listas de
   // tipos e objetivos disponiveis.
@@ -92,7 +95,10 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
       entryTxId = await onRecordInvestmentEntry(input.name, entryAmount, dateRef, planned);
     }
     if (input.is_recurring_contribution && input.recurring_amount && onScheduleAporte) {
-      recurringTxId = await onScheduleAporte(input.name, Number(input.recurring_amount), dateRef, planned);
+      recurringTxId = await onScheduleAporte(input.name, Number(input.recurring_amount), dateRef, planned, {
+        months: input.recurring_months ?? null,
+        endDate: input.maturity_date ?? null,
+      });
     }
     await addInvestment({ ...input, recurring_tx_id: recurringTxId, entry_tx_id: entryTxId });
   };
@@ -112,7 +118,10 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
       entryTxId = await onRecordInvestmentEntry(inv.name, entryAmount, startDate, false);
     }
     if (inv.is_recurring_contribution && inv.recurring_amount && onScheduleAporte) {
-      recurringTxId = await onScheduleAporte(inv.name, Number(inv.recurring_amount), startDate, false);
+      recurringTxId = await onScheduleAporte(inv.name, Number(inv.recurring_amount), startDate, false, {
+        months: inv.recurring_months ?? null,
+        endDate: inv.maturity_date ?? null,
+      });
     }
     await updateInvestment(inv.id, {
       is_simulated: false,
@@ -120,6 +129,39 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
       recurring_tx_id: recurringTxId,
       entry_tx_id: entryTxId,
     });
+  };
+
+  // Atualiza um investimento e, se o aporte recorrente mudou (valor/prazo/ligar/
+  // desligar), RECRIA a série no Fluxo para os dois lados ficarem iguais.
+  const handleUpdateInvestment = async (id: string, updates: Parameters<typeof updateInvestment>[1]) => {
+    const prev = investments.find(i => i.id === id);
+    await updateInvestment(id, updates);
+    if (!prev) return;
+
+    const willRecur = updates.is_recurring_contribution ?? prev.is_recurring_contribution;
+    const amount = updates.recurring_amount ?? prev.recurring_amount;
+    const months = ('recurring_months' in updates ? updates.recurring_months : prev.recurring_months) ?? null;
+    const maturity = updates.maturity_date ?? prev.maturity_date ?? null;
+    const name = updates.name ?? prev.name;
+
+    // Mudou algo que afeta os aportes agendados?
+    const recurringChanged =
+      (updates.is_recurring_contribution !== undefined && updates.is_recurring_contribution !== prev.is_recurring_contribution) ||
+      (updates.recurring_amount !== undefined && (Number(updates.recurring_amount) || 0) !== (Number(prev.recurring_amount) || 0)) ||
+      ('recurring_months' in updates && (updates.recurring_months ?? null) !== (prev.recurring_months ?? null)) ||
+      (updates.recurrence_type !== undefined && updates.recurrence_type !== prev.recurrence_type) ||
+      // No modo "sem prazo", o vencimento define o fim da série.
+      ((prev.recurring_months == null) && updates.maturity_date !== undefined && updates.maturity_date !== prev.maturity_date);
+    if (!recurringChanged || prev.is_simulated) return;
+
+    // Apaga a série antiga e, se ainda houver aporte, cria a nova no Fluxo.
+    if (prev.recurring_tx_id && onDeleteAporteSeries) await onDeleteAporteSeries(prev.recurring_tx_id);
+    let newRecurringTxId: string | null = null;
+    if (willRecur && amount && onScheduleAporte) {
+      const startDate = prev.start_date || new Date().toISOString().split('T')[0];
+      newRecurringTxId = await onScheduleAporte(name, Number(amount), startDate, false, { months, endDate: maturity });
+    }
+    await updateInvestment(id, { recurring_tx_id: newRecurringTxId });
   };
 
   const investSummary = useMemo(() => {
@@ -275,7 +317,7 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
                     index={idx}
                     onAddValue={addValue}
                     onDelete={deleteInvestment}
-                    onUpdate={updateInvestment}
+                    onUpdate={handleUpdateInvestment}
                     onMakeReal={handleMakeReal}
                     investmentTypes={INVESTMENT_TYPES}
                     objectives={OBJECTIVES}
@@ -301,7 +343,7 @@ export function InvestTab({ monthlyIncome, monthlyExpenses, investTransactions =
                       index={idx}
                       onAddValue={addValue}
                       onDelete={deleteInvestment}
-                      onUpdate={updateInvestment}
+                      onUpdate={handleUpdateInvestment}
                       onMakeReal={handleMakeReal}
                       investmentTypes={INVESTMENT_TYPES}
                       objectives={OBJECTIVES}

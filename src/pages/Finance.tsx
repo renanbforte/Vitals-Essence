@@ -157,9 +157,19 @@ export default function Finance() {
   };
 
   // Agenda um aporte mensal recorrente no fluxo, na categoria "Investimentos".
-  // planned=true marca como planejado (usado nas simulações). Retorna o id do pai.
-  const scheduleAporte = useCallback(async (name: string, amount: number, startDate: string, planned = false) => {
+  // O "prazo" define a série: months=N → parcelado (N aportes); sem months →
+  // contínuo (sem fim, materializado sob demanda), parando na data endDate quando
+  // houver (ex.: vencimento do ativo). planned=true marca como planejado.
+  const scheduleAporte = useCallback(async (
+    name: string,
+    amount: number,
+    startDate: string,
+    planned = false,
+    term?: { months?: number | null; endDate?: string | null },
+  ) => {
     const investCC = costCenters.find(cc => cc.name === 'Investimentos');
+    const months = term?.months ?? null;
+    const isFixed = months != null && months > 0;
     return await addTransaction({
       type: 'expense',
       description: `Aporte - ${name}`,
@@ -169,6 +179,9 @@ export default function Finance() {
       is_recurring: true,
       recurrence_type: 'months',
       recurrence_interval: 1,
+      recurrence_mode: isFixed ? 'installments' : 'continuous',
+      installments: isFixed ? months : undefined,
+      recurrence_end_date: !isFixed ? (term?.endDate ?? undefined) : undefined,
       is_planned: planned,
     });
   }, [costCenters, addTransaction]);
@@ -188,6 +201,15 @@ export default function Finance() {
     });
     return txId;
   }, [costCenters, addTransaction]);
+
+  // Apaga toda a série de aportes recorrentes (o pai e os filhos) de um
+  // investimento no Fluxo. Usado ao reconfigurar o aporte na edição.
+  const deleteAporteSeries = useCallback(async (recurringTxId: string) => {
+    if (!user) return;
+    await supabase.from('financial_transactions').delete().eq('parent_transaction_id', recurringTxId).eq('user_id', user.id);
+    await supabase.from('financial_transactions').delete().eq('id', recurringTxId).eq('user_id', user.id);
+    refetchTransactions();
+  }, [user, refetchTransactions]);
 
   // Converte os lançamentos planejados de uma simulação em reais (ao torná-la real):
   // a saída inicial e a série de aportes deixam de ser planejadas (ficam no Fluxo real).
@@ -388,7 +410,7 @@ export default function Finance() {
 
             {/* CONTEÚDO DA ABA "INVESTIR": investimentos, metas e simulador (unificados) */}
             <TabsContent value="invest" className="mt-6" key="invest">
-              <InvestTab monthlyIncome={realSummary.income} monthlyExpenses={realSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} onConvertInvestmentTxToReal={convertInvestmentTxToReal} />
+              <InvestTab monthlyIncome={realSummary.income} monthlyExpenses={realSummary.expense} investTransactions={investTransactions} onDeleteTransaction={deleteTransaction} onEditTransaction={handleEdit} onTogglePaid={togglePaid} onScheduleAporte={scheduleAporte} onRecordInvestmentEntry={recordInvestmentEntry} onConvertInvestmentTxToReal={convertInvestmentTxToReal} onDeleteAporteSeries={deleteAporteSeries} />
             </TabsContent>
 
             {/* CONTEÚDO DA ABA "DESEMPENHO": tabela e gráfico mês a mês (Real/Planejado) */}
