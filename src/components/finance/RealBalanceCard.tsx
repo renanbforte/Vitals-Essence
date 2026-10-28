@@ -37,6 +37,10 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
   const [editingValue, setEditingValue] = useState('');
   const [newBankName, setNewBankName] = useState('');
   const [saving, setSaving] = useState(false);
+  // Entradas/saídas já pagas do banco em edição: usadas para recalcular o saldo
+  // inicial a partir do saldo real que o usuário digita (inicial = real - entradas + saídas).
+  const [editingIncome, setEditingIncome] = useState(0);
+  const [editingExpense, setEditingExpense] = useState(0);
 
   // Considera apenas transações já pagas/recebidas, ignorando as da categoria "Reserva"
   const paidTransactions = useMemo(() =>
@@ -80,11 +84,15 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
   // Soma o saldo real de todos os bancos para exibir o total no topo do cartão
   const totalReal = useMemo(() => bankData.reduce((s, b) => s + b.real, 0), [bankData]);
 
-  // Abre a janela para editar o saldo inicial de um banco já existente
+  // Abre a janela para ajustar o saldo real de um banco já existente. O campo
+  // começa com o saldo real atual (não o inicial); guardamos as entradas/saídas
+  // pagas para, ao salvar, recalcular o saldo inicial que faz bater o real.
   const openEditDialog = (bank: string) => {
     setEditingBank(bank);
-    const current = bankBalances.find(b => b.bank_name === bank);
-    setEditingValue(current ? String(current.initial_balance) : '0');
+    const row = bankData.find(b => b.bank === bank);
+    setEditingIncome(row?.paidIncome || 0);
+    setEditingExpense(row?.paidExpense || 0);
+    setEditingValue(row ? String(row.real) : '0');
     setNewBankName('');
     setDialogOpen(true);
   };
@@ -92,6 +100,8 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
   // Abre a janela para cadastrar um banco novo (campo de nome fica em branco)
   const openAddDialog = () => {
     setEditingBank('');
+    setEditingIncome(0);
+    setEditingExpense(0);
     setEditingValue('0');
     setNewBankName('');
     setDialogOpen(true);
@@ -103,16 +113,23 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
     if (requestAddBank > 0) openAddDialog();
   }, [requestAddBank]);
 
-  // Salva o saldo inicial (do banco editado ou do novo banco) e fecha a janela
+  // Salva o ajuste e fecha a janela. O usuário digita o SALDO REAL desejado;
+  // o saldo inicial é recalculado para que "inicial + entradas - saídas" dê esse
+  // valor. Em banco novo não há entradas/saídas, então inicial = real digitado.
   const handleSave = async () => {
     setSaving(true);
     const bankName = editingBank || newBankName.trim();
     if (bankName) {
-      await onUpsertBalance(bankName, Number(editingValue) || 0);
+      const targetReal = Number(editingValue) || 0;
+      const initial = editingBank ? targetReal - editingIncome + editingExpense : targetReal;
+      await onUpsertBalance(bankName, initial);
     }
     setSaving(false);
     setDialogOpen(false);
   };
+
+  // Saldo inicial que será gravado com base no real digitado (prévia na janela).
+  const impliedInitial = (Number(editingValue) || 0) - editingIncome + editingExpense;
 
   // Converte o código interno "__sem_banco__" em um texto amigável na tela
   const displayBankName = (bank: string) => bank === '__sem_banco__' ? 'Sem banco' : bank;
@@ -202,7 +219,7 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
         <DialogContent className="rounded-2xl max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {editingBank ? `Saldo inicial — ${displayBankName(editingBank)}` : 'Novo banco'}
+              {editingBank ? `Ajustar saldo — ${displayBankName(editingBank)}` : 'Novo banco'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -219,7 +236,9 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
               </div>
             )}
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Valor inicial (R$)</label>
+              <label className="text-xs text-muted-foreground mb-1 block">
+                {editingBank ? 'Saldo real da conta (R$)' : 'Valor inicial (R$)'}
+              </label>
               <Input
                 type="number"
                 step="0.01"
@@ -227,7 +246,35 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
                 onChange={e => setEditingValue(e.target.value)}
                 className="rounded-xl"
               />
+              {editingBank && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Digite quanto a conta tem de verdade. O app ajusta o saldo inicial para bater.
+                </p>
+              )}
             </div>
+
+            {/* Detalhamento: mostra como as entradas/saídas pagas compõem o saldo,
+                para o usuário entender por que o número muda ao registrar lançamentos. */}
+            {editingBank && (editingIncome > 0 || editingExpense > 0) && (
+              <div className="rounded-xl bg-muted/40 p-3 space-y-1">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-muted-foreground">Saldo inicial</span>
+                  <span className="tabular-nums font-medium">{formatCurrency(impliedInitial)}</span>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-muted-foreground">+ Entradas pagas</span>
+                  <span className="tabular-nums text-[hsl(var(--finance))]">{formatCurrency(editingIncome)}</span>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-muted-foreground">− Saídas pagas</span>
+                  <span className="tabular-nums text-destructive">{formatCurrency(editingExpense)}</span>
+                </div>
+                <div className="flex justify-between text-xs font-bold pt-1 border-t border-border/50">
+                  <span>Saldo real</span>
+                  <span className="tabular-nums">{formatCurrency(Number(editingValue) || 0)}</span>
+                </div>
+              </div>
+            )}
             <Button
               onClick={handleSave}
               disabled={saving || (!editingBank && !newBankName.trim())}
