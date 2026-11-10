@@ -48,11 +48,14 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
     [transactions, excludeCostCenterIds]
   );
 
-  // Junta todos os bancos conhecidos (os salvos + os que já têm saldo cadastrado), sem repetir
+  // Junta todos os bancos conhecidos (os salvos + os que já têm saldo cadastrado), sem repetir.
+  // '__sem_banco__' é um marcador interno (contas sem banco), não um banco real: ele é
+  // tratado à parte no bloco abaixo, então fica de fora daqui — senão a linha "sem banco"
+  // apareceria duas vezes (mesma key → loop de reconciliação do React).
   const allBanks = useMemo(() => {
     const set = new Set<string>();
-    savedBanks.forEach(b => set.add(b));
-    bankBalances.forEach(b => set.add(b.bank_name));
+    savedBanks.forEach(b => { if (b !== '__sem_banco__') set.add(b); });
+    bankBalances.forEach(b => { if (b.bank_name !== '__sem_banco__') set.add(b.bank_name); });
     return Array.from(set).sort();
   }, [savedBanks, bankBalances]);
 
@@ -69,10 +72,12 @@ export function RealBalanceCard({ transactions, bankBalances, savedBanks, onUpse
       result.push({ bank, initial, paidIncome, paidExpense, real: initial + paidIncome - paidExpense });
     }
 
-    // Transações que não foram atribuídas a nenhum banco entram em um grupo "sem banco"
+    // Transações que não foram atribuídas a nenhum banco entram em um grupo "sem banco".
+    // Também aparece se já houver um saldo inicial salvo para esse grupo (mesmo sem
+    // transações), para não sumir com o valor que o usuário ajustou.
     const noBankTxns = paidTransactions.filter(t => !t.card_bank);
-    if (noBankTxns.length > 0) {
-      const noBankInitial = bankBalances.find(b => b.bank_name === '__sem_banco__')?.initial_balance || 0;
+    const noBankInitial = bankBalances.find(b => b.bank_name === '__sem_banco__')?.initial_balance || 0;
+    if (noBankTxns.length > 0 || noBankInitial !== 0) {
       const paidIncome = noBankTxns.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
       const paidExpense = noBankTxns.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
       result.push({ bank: '__sem_banco__', initial: noBankInitial, paidIncome, paidExpense, real: noBankInitial + paidIncome - paidExpense });
