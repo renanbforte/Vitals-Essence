@@ -26,6 +26,7 @@ import { ExportDataCard } from '@/components/ExportDataCard';
 import { SummaryCards } from '@/components/SummaryCards';
 import { ExamUploadCard } from '@/components/ExamUploadCard';
 import { ExamDocumentsCard } from '@/components/ExamDocumentsCard';
+import { ExamEvolutionCard } from '@/components/ExamEvolutionCard';
 import { useDailyTracking } from '@/hooks/useDailyTracking';
 import { useWeightHistory } from '@/hooks/useWeightHistory';
 
@@ -301,6 +302,10 @@ export default function Dashboard() {
                   {/* Cartão para enviar um novo exame */}
                   <motion.div variants={fadeUp}>
                     <ExamUploadCard uploads={uploads} uploading={uploading} onUpload={uploadExam} />
+                  </motion.div>
+                  {/* Analisador de evolução: lê todos os exames e avalia os resultados */}
+                  <motion.div variants={fadeUp}>
+                    <ExamEvolutionCard uploadsCount={uploads.length} />
                   </motion.div>
                   {/* Lista dos exames já enviados (com opção de editar/apagar) */}
                   <motion.div variants={fadeUp}>
