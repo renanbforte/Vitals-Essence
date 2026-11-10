@@ -16,7 +16,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";    // habilita as dic
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // ---- Roteamento: controla a navegação entre páginas pela URL ----
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // ---- Provedores globais próprios do projeto ----
 import { AuthProvider } from "@/contexts/AuthContext";               // sabe QUEM está logado
@@ -26,7 +26,6 @@ import { useAndroidBackButton } from "@/hooks/useAndroidBackButton";   // botão
 
 // ---- As TELAS (cada import é uma página da pasta src/pages) ----
 import Index from "./pages/Index";               // página inicial ("/")
-import Plans from "./pages/Plans";               // planos/assinaturas
 import Auth from "./pages/Auth";                 // login e cadastro
 import Onboarding from "./pages/Onboarding";     // primeiros passos do novo usuário
 import Install from "./pages/Install";           // instruções para instalar o PWA
@@ -109,7 +108,8 @@ const App = () => (
               <Route path="/astral" element={<Astral />} />
               <Route path="/profissional" element={<Professional />} />
               <Route path="/conta" element={<Account />} />
-              <Route path="/planos" element={<Plans />} />
+              {/* Preços ocultos: tudo liberado para todos. /planos redireciona para a home. */}
+              <Route path="/planos" element={<Navigate to="/" replace />} />
               <Route path="/termos" element={<Terms />} />
               <Route path="/privacidade" element={<Privacy />} />
               <Route path="/reset-password" element={<ResetPassword />} />

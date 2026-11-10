@@ -7,12 +7,11 @@
 // ============================================================================
 
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Mail, Lock, User, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -34,9 +33,6 @@ export default function Auth() {
   // Valores digitados nos campos do formulário.
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  // Se o usuário marcou o aceite dos Termos de Uso (obrigatório no cadastro).
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
   // Indica que uma ação de login/cadastro está em andamento (mostra spinner).
   const [loading, setLoading] = useState(false);
   // Controla se a senha aparece como texto ou como "••••••••".
@@ -60,19 +56,10 @@ export default function Auth() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // No cadastro, só prossegue se os Termos de Uso estiverem aceitos.
-    if (!isLogin && !acceptedTerms) {
-      toast.error('Você deve aceitar os Termos de Uso para criar sua conta.');
-      return;
-    }
-
     // Valida os campos antes de chamar o servidor; se houver erro, avisa e para.
+    // Cadastro e login pedem apenas e-mail e senha.
     try {
-      const validationData = isLogin
-        ? { email, password }
-        : { email, password, name };
-
-      authSchema.parse(validationData);
+      authSchema.parse({ email, password });
     } catch (err) {
       if (err instanceof z.ZodError) {
         toast.error(err.errors[0].message);
@@ -97,7 +84,10 @@ export default function Auth() {
       }
     } else {
       // Fluxo de CADASTRO: cria a conta e trata o caso de email já existente.
-      const { error } = await signUp(email, password, name);
+      // Sem campo de nome: usamos a parte antes do "@" do e-mail como nome inicial
+      // (o usuário pode ajustar depois no perfil).
+      const derivedName = (email.split('@')[0] || 'Usuário').trim();
+      const { error } = await signUp(email, password, derivedName);
       if (error) {
         if (error.message.includes('already registered')) {
           toast.error('Este email já está cadastrado');
@@ -213,25 +203,6 @@ export default function Auth() {
             /* MODO LOGIN/CADASTRO: formulário principal com email, senha etc. */
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Campo "Nome Completo" aparece apenas no cadastro */}
-                {!isLogin && (
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nome Completo</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                      <Input
-                        id="name"
-                        type="text"
-                        placeholder="Seu nome"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        className="pl-10"
-                        required={!isLogin}
-                      />
-                    </div>
-                  </div>
-                )}
-
                 {/* Campo de email (sempre presente) */}
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
@@ -288,29 +259,10 @@ export default function Auth() {
                   </div>
                 )}
 
-                {/* Caixa de aceite dos Termos/LGPD, exigida só no cadastro */}
-                {!isLogin && (
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/30 border border-border/40">
-                    <Checkbox
-                      id="terms"
-                      checked={acceptedTerms}
-                      onCheckedChange={(checked) => setAcceptedTerms(checked === true)}
-                      className="mt-0.5"
-                    />
-                    <label htmlFor="terms" className="text-xs text-muted-foreground leading-relaxed cursor-pointer">
-                      Li e aceito os{' '}
-                      <Link to="/termos" target="_blank" className="text-primary font-semibold underline underline-offset-2 hover:text-primary/80">
-                        Termos de Uso e Política de Privacidade
-                      </Link>
-                      , incluindo o tratamento de dados pessoais sensíveis conforme a LGPD.
-                    </label>
-                  </div>
-                )}
-
                 {/* Botão principal: "Entrar" ou "Criar Conta" conforme o modo */}
                 <Button
                   type="submit"
-                  disabled={loading || (!isLogin && !acceptedTerms)}
+                  disabled={loading}
                   className="w-full gradient-water text-white border-0 gap-2"
                 >
                   {loading ? (
@@ -328,7 +280,7 @@ export default function Auth() {
               <div className="mt-6 text-center">
                 <button
                   type="button"
-                  onClick={() => { setIsLogin(!isLogin); setAcceptedTerms(false); }}
+                  onClick={() => setIsLogin(!isLogin)}
                   className="text-sm text-muted-foreground hover:text-primary transition-colors"
                 >
                   {isLogin ? (

@@ -342,15 +342,6 @@ export default function Hub() {
           >
             <SlidersHorizontal className="w-4 h-4" />
           </Button>
-          {/* Botão coroa: abre a tela de planos/assinatura */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/planos')}
-            className="text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xl w-9 h-9"
-          >
-            <Crown className="w-4 h-4" />
-          </Button>
           {/* Botão amigos: abre a tela de Amigos */}
           <Button
             variant="ghost"

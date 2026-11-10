@@ -219,17 +219,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   }, [checkSubscription]);
 
   // Responde "sim/não" se o usuário pode usar um módulo. É a regra central de acesso.
-  // Libera se: for gratuito, vitalício, pacote completo, trio que inclui o módulo,
-  // módulo comprado avulso ou em período de teste. Caso contrário, bloqueia.
-  const hasModuleAccess = useCallback((moduleKey: string) => {
-    if (FREE_MODULES.includes(moduleKey)) return true;
-    if (state.is_lifetime) return true;
-    if (state.is_package) return true;
-    if (state.is_trio && state.trio_modules.includes(moduleKey)) return true;
-    if (state.modules.includes(moduleKey)) return true;
-    if (state.trial_modules.includes(moduleKey)) return true;
-    return false;
-  }, [state.is_lifetime, state.is_package, state.is_trio, state.trio_modules, state.modules, state.trial_modules]);
+  // ACESSO LIBERADO PARA TODOS: todos os módulos ficam desbloqueados para qualquer
+  // pessoa, sem assinatura. (Para voltar a cobrar, basta restaurar a regra antiga
+  // que checava gratuito/vitalício/pacote/trio/avulso/teste.)
+  const hasModuleAccess = useCallback((_moduleKey: string) => {
+    return true;
+  }, []);
 
   // Diz se o módulo está atualmente em período de teste gratuito.
   const hasTrial = useCallback((moduleKey: string) => {
