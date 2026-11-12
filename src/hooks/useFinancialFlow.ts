@@ -539,27 +539,41 @@ export function useFinancialFlow(selectedMonth: Date) {
     if (!user) return;
 
     if (deleteRelated) {
-      // Descobre a qual série (pai) o lançamento pertence para apagar tudo.
+      // Descobre a qual série o lançamento pertence para apagar tudo.
       const { data: txn } = await supabase
         .from('financial_transactions')
-        .select('id, parent_transaction_id')
+        .select('id, parent_transaction_id, type, description, cost_center_id, recurrence_mode')
         .eq('id', id)
         .single();
 
       if (txn) {
         const parentId = txn.parent_transaction_id || txn.id;
-        // Apaga todas as parcelas filhas.
+        // 1) Apaga pelo vínculo de pai (parcelas filhas + o pai).
         await supabase
           .from('financial_transactions')
           .delete()
           .eq('parent_transaction_id', parentId)
           .eq('user_id', user.id);
-        // Apaga o lançamento pai.
         await supabase
           .from('financial_transactions')
           .delete()
           .eq('id', parentId)
           .eq('user_id', user.id);
+        // 2) Recorrência contínua: apaga também qualquer ocorrência ÓRFÃ da mesma
+        // série lógica (quando um pai foi apagado no passado, o banco zerou o
+        // parent_transaction_id dos filhos). Sem isso, sobravam duplicatas nos
+        // meses futuros que o "excluir todas" não alcançava.
+        if (txn.recurrence_mode === 'continuous') {
+          let q = supabase
+            .from('financial_transactions')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('recurrence_mode', 'continuous')
+            .eq('type', txn.type)
+            .eq('description', txn.description);
+          q = txn.cost_center_id == null ? q.is('cost_center_id', null) : q.eq('cost_center_id', txn.cost_center_id);
+          await q;
+        }
       }
     } else {
       await supabase
